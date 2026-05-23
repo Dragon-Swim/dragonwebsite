@@ -44,35 +44,64 @@ let isInitialized = false;
 function initApp() {
   const app = document.getElementById('app');
 
+  // Show loading state immediately
+  app.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 20px; font-family: sans-serif;">
+      <div style="width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #f5c518; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <p style="color: #666;">Loading your Dragon dashboard...</p>
+      <style>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      </style>
+    </div>
+  `;
+
+  console.log("Dashboard: Initializing auth listener...");
+
   // Add auth check before rendering content
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
+      console.log("Dashboard: No user authenticated, redirecting to signin...");
       window.location.href = import.meta.env.BASE_URL + 'signin.html';
       return;
     }
 
     currentUser = user;
+    console.log("Dashboard: User authenticated:", user.email);
 
     try {
+      console.log("Dashboard: Fetching user document...");
       const userDoc = await getDoc(doc(db, "users", user.uid));
-      userRole = (user.email === 'dragonswim@outlook.com') ? 'coach' : (userDoc.exists() ? userDoc.data().role : 'swimmer');
+
+      // Case-insensitive email check for coach account
+      const isCoachEmail = user.email && user.email.toLowerCase() === 'dragonswim@outlook.com';
+      userRole = isCoachEmail ? 'coach' : (userDoc.exists() ? userDoc.data().role : 'swimmer');
+      console.log("Dashboard: Detected role:", userRole);
 
       // Initialize Real-time Listeners ONLY ONCE
       if (!isInitialized) {
+        console.log("Dashboard: Initializing data listeners...");
         initDataListeners();
         isInitialized = true;
       } else {
+        console.log("Dashboard: Refreshing UI...");
         refreshUI();
       }
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      console.error("Dashboard Critical Error:", error);
+
+      // Display error to user
+      app.innerHTML = `
+        <div style="padding: 40px; text-align: center; font-family: sans-serif; max-width: 500px; margin: 100px auto; border: 1px solid #fee2e2; background: #fef2f2; border-radius: 12px; color: #991b1b;">
+          <h2 style="margin-bottom: 16px;">Failed to load dashboard</h2>
+          <p style="margin-bottom: 24px;">Something went wrong while setting up your workspace. This might be due to a connection issue or a configuration error.</p>
+          <code style="display: block; padding: 12px; background: #fee2e2; border-radius: 6px; font-size: 13px; text-align: left; overflow-x: auto; margin-bottom: 24px;">
+            ${error.message || 'Unknown error'}
+          </code>
+          <button onclick="window.location.reload()" style="padding: 10px 20px; background: #991b1b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Retry Loading</button>
+        </div>
+      `;
+
       userRole = 'swimmer';
-      if (!isInitialized) {
-        initDataListeners();
-        isInitialized = true;
-      } else {
-        refreshUI();
-      }
     }
   });
 }
@@ -83,6 +112,8 @@ function initDataListeners() {
   onSnapshot(qMeets, (snapshot) => {
     swimMeets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     refreshUI();
+  }, (error) => {
+    console.error("Error listening to meets:", error);
   });
 
   // Listen to Schedules
@@ -90,6 +121,8 @@ function initDataListeners() {
   onSnapshot(qSchedules, (snapshot) => {
     practiceSchedules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     refreshUI();
+  }, (error) => {
+    console.error("Error listening to schedules:", error);
   });
 }
 

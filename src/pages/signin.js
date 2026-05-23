@@ -162,8 +162,15 @@ function bindEvents() {
         window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
       } else {
         // Sign In
-        await signInWithEmailAndPassword(auth, email, password);
-        window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+          window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+        } catch (error) {
+          if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            throw new Error('Wrong password. Please try again.');
+          }
+          throw error;
+        }
       }
     } catch (error) {
       console.error(error);
@@ -174,6 +181,7 @@ function bindEvents() {
 
   // Google sign-in
   document.getElementById('google-signin')?.addEventListener('click', async () => {
+    errorEl.style.display = 'none';
     try {
       const result = await signInWithPopup(auth, googleProvider);
 
@@ -188,7 +196,13 @@ function bindEvents() {
       window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
     } catch (error) {
       console.error(error);
-      showError(error.message || 'Google sign in failed');
+      if (error.code === 'auth/popup-closed-by-user') {
+        showError('Sign-in popup closed before completion.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // Do nothing, another popup was opened
+      } else {
+        showError(error.message || 'Google sign in failed');
+      }
     }
   });
 }
