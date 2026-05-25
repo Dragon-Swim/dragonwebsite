@@ -1,4 +1,4 @@
-import{i as r}from"./theme-toggle-CI3g1rpd.js";import{r as c,t as e,a as n}from"./footer-BQePl1TG.js";r();c();const d=document.getElementById("app");d.innerHTML=`
+import{i as r}from"./theme-toggle-CI3g1rpd.js";import{a as c,t as e,r as n}from"./footer-DF3ari8b.js";r();c();const d=document.getElementById("app");d.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -117,6 +117,7 @@ import{i as r}from"./theme-toggle-CI3g1rpd.js";import{r as c,t as e,a as n}from"
       </div>
     </div>
   </section>
+
 `;n();const l={root:null,rootMargin:"0px",threshold:.15},v=new IntersectionObserver((a,t)=>{a.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},l);document.querySelectorAll(".animate-on-scroll").forEach(a=>{v.observe(a)});function i(a,t,s){return`
     <a href="/dragonwebsite/registration.html?season=${a}" class="card season-card" style="--season-accent: ${s}">
       <div class="season-emoji">${t}</div>
