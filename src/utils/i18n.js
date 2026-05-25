@@ -45,20 +45,44 @@ const translations = {
 
         // Registration Page
         reg_title: 'Season Registration',
-        reg_subtitle: 'Choose your season and sign up to start training with Dragon Swim.',
+        reg_subtitle: 'Register your family to start training with Dragon Swim.',
         reg_select_season: 'Select a Season',
-        reg_form_title: 'Registration Form',
-        reg_name: 'Full Name',
-        reg_email: 'Email Address',
+
+        // Parent / Guardian
+        reg_parent_title: 'Parent / Guardian',
+        reg_first: 'First Name',
+        reg_last: 'Last Name',
+        reg_middle: 'Middle Name',
+        reg_middle_optional: 'Middle Name (Optional)',
+        reg_gender: 'Gender',
+        reg_gender_male: 'Male',
+        reg_gender_female: 'Female',
         reg_phone: 'Phone Number',
-        reg_dob: 'Date of Birth',
-        reg_experience: 'Experience Level',
-        reg_exp_beginner: 'Beginner',
-        reg_exp_intermediate: 'Intermediate',
-        reg_exp_advanced: 'Advanced',
-        reg_exp_competitive: 'Competitive',
-        reg_emergency_name: 'Emergency Contact Name',
-        reg_emergency_phone: 'Emergency Contact Phone',
+        reg_email: 'Email Address',
+        reg_address: 'Home Address',
+        reg_parent_add_spouse: 'Add spouse / partner information',
+
+        // Spouse
+        reg_spouse_title: 'Spouse / Partner',
+
+        // Swimmers (children)
+        reg_swimmers_title: 'Swimmers',
+        reg_swimmer_first: 'First Name',
+        reg_swimmer_last: 'Last Name',
+        reg_swimmer_middle: 'Middle Name (Optional)',
+        reg_swimmer_gender: 'Gender',
+        reg_swimmer_dob: 'Date of Birth',
+        reg_swimmer_usa_id: 'USA Swimming ID (Optional)',
+        reg_swimmer_join_date: 'Join Date (Optional)',
+        reg_swimmer_add: '+ Add Another Swimmer',
+        reg_swimmer_remove: 'Remove',
+
+        // Emergency Contact
+        reg_emergency_title: 'Emergency Contact',
+        reg_emergency_name: 'Contact Name',
+        reg_emergency_phone: 'Contact Phone',
+
+        // Notes & Submit
         reg_notes: 'Additional Notes',
         reg_submit: 'Submit Registration',
         reg_success: 'Registration submitted successfully! We\'ll be in touch soon.',

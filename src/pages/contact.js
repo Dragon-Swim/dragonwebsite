@@ -12,6 +12,7 @@ import './contact.css';
 import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
+import { db, collection, addDoc } from '../utils/firebase.js';
 
 initTheme();
 renderNavbar();
@@ -74,10 +75,29 @@ app.innerHTML = `
 renderFooter();
 
 // Form submit
-document.getElementById('contact-form').addEventListener('submit', (e) => {
+document.getElementById('contact-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  document.getElementById('contact-form').style.display = 'none';
-  document.getElementById('contact-success').style.display = 'block';
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+
+  try {
+    await addDoc(collection(db, 'contacts'), {
+      name: document.getElementById('contact-name').value.trim(),
+      email: document.getElementById('contact-email').value.trim(),
+      phone: document.getElementById('contact-phone').value.trim() || null,
+      reason: document.getElementById('contact-reason').value,
+      preferredDate: document.getElementById('contact-date').value || null,
+      message: document.getElementById('contact-message').value.trim(),
+      createdAt: new Date()
+    });
+
+    document.getElementById('contact-form').style.display = 'none';
+    document.getElementById('contact-success').style.display = 'block';
+  } catch (err) {
+    console.error('Failed to submit contact form:', err);
+    alert('Failed to send message. Please try again.');
+    btn.disabled = false;
+  }
 });
 
 // ── Intersection Observer for Animations ──
