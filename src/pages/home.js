@@ -138,6 +138,7 @@ app.innerHTML = `
       </div>
     </div>
   </section>
+
 `;
 
 renderFooter();

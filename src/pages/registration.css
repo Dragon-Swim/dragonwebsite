@@ -10,6 +10,14 @@
     margin-bottom: var(--space-lg);
 }
 
+.subsection-subtitle {
+    font-family: var(--font-display);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-primary);
+    margin-bottom: var(--space-md);
+}
+
 /* Season Selector */
 .season-selector {
     margin-bottom: var(--space-2xl);
@@ -61,7 +69,7 @@
     color: var(--text-muted);
 }
 
-/* Form */
+/* Form wrapper */
 .reg-form-wrapper {
     max-width: 700px;
     margin: 0 auto;
@@ -77,6 +85,98 @@
     gap: var(--space-md);
 }
 
+/* Form sections */
+.form-section {
+    margin-bottom: var(--space-2xl);
+}
+
+.form-section:last-of-type {
+    margin-bottom: var(--space-xl);
+}
+
+.section-divider {
+    border-top: 1px solid var(--border-color);
+    margin: var(--space-lg) 0;
+}
+
+/* Spouse */
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    user-select: none;
+    margin-top: var(--space-md);
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--brand-primary, #e63946);
+}
+
+.spouse-section {
+    animation: fadeIn var(--transition-base);
+}
+
+/* Swimmer cards */
+.swimmer-card {
+    background: var(--bg-page, #f8f9fa);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-md);
+}
+
+.swimmer-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.swimmer-label {
+    font-weight: var(--fw-semibold);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
+}
+
+.btn-remove-swimmer {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 12px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.btn-remove-swimmer:hover {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.btn-add-swimmer {
+    width: 100%;
+    background: none;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.btn-add-swimmer:hover {
+    border-color: var(--brand-primary, #e63946);
+    color: var(--brand-primary, #e63946);
+}
+
+/* Submit */
 .reg-submit {
     width: 100%;
     margin-top: var(--space-md);
@@ -101,6 +201,7 @@
     color: var(--text-secondary);
 }
 
+/* Responsive */
 @media (max-width: 768px) {
     .season-select-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -113,4 +214,9 @@
     .reg-form-wrapper {
         padding: var(--space-lg);
     }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
