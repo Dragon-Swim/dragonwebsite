@@ -166,13 +166,12 @@ document.querySelectorAll('.animate-on-scroll').forEach(el => {
 // ── Helpers ──
 function seasonCard(season, emoji, accentColor) {
   return `
-    <a href="${import.meta.env.BASE_URL}registration.html?season=${season}" class="card season-card" style="--season-accent: ${accentColor}">
+    <div class="card season-card" style="--season-accent: ${accentColor}">
       <div class="season-emoji">${emoji}</div>
       <h3 class="season-name">${t('season_' + season)}</h3>
       <p class="season-dates">${t('season_' + season + '_dates')}</p>
       <p class="season-desc">${t('season_' + season + '_desc')}</p>
-      <span class="season-cta">Register →</span>
-    </a>
+    </div>
   `;
 }
 

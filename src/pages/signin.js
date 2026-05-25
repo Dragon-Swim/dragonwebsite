@@ -17,7 +17,6 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   googleProvider,
-  updateProfile,
   doc,
   setDoc
 } from '../utils/firebase.js';
@@ -30,7 +29,8 @@ import { t } from '../utils/i18n.js';
 initTheme();
 renderNavbar();
 
-let isSignUp = false;
+const urlParams = new URLSearchParams(window.location.search);
+let isSignUp = urlParams.get('mode') === 'signup';
 
 const app = document.getElementById('app');
 
@@ -51,28 +51,6 @@ function render() {
 
             <form class="signin-form" id="auth-form">
               ${isSignUp ? `
-                <div class="form-group">
-                  <label class="form-label" for="auth-name">${t('signup_name')}</label>
-                  <input class="form-input" type="text" id="auth-name" placeholder="Username" required />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="auth-phone">${t('reg_phone')}</label>
-                  <input class="form-input" type="tel" id="auth-phone" placeholder="(555) 123-4567" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="auth-dob">${t('reg_dob')}</label>
-                  <input class="form-input" type="date" id="auth-dob" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="auth-experience">${t('reg_experience')}</label>
-                  <select class="form-select" id="auth-experience">
-                    <option value="" disabled selected>Select your experience level...</option>
-                    <option value="beginner">${t('reg_exp_beginner')}</option>
-                    <option value="intermediate">${t('reg_exp_intermediate')}</option>
-                    <option value="advanced">${t('reg_exp_advanced')}</option>
-                    <option value="competitive">${t('reg_exp_competitive')}</option>
-                  </select>
-                </div>
               ` : ''}
               <div class="form-group">
                 <label class="form-label" for="auth-email">${isSignUp ? t('signup_email') : t('signin_email')}</label>
@@ -156,34 +134,21 @@ function bindEvents() {
 
     try {
       if (isSignUp) {
-        const name = document.getElementById('auth-name').value;
         const confirm = document.getElementById('auth-confirm').value;
-        const phone = document.getElementById('auth-phone')?.value.trim() || null;
-        const dob = document.getElementById('auth-dob')?.value || null;
-        const experience = document.getElementById('auth-experience')?.value || null;
         if (password !== confirm) {
           throw new Error('Passwords do not match.');
         }
 
-        // 1. Create account auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // 2. Set display name
-        await updateProfile(user, { displayName: name });
-
-        // 3. Save to firestore user collection
         await setDoc(doc(db, "users", user.uid), {
-          username: name,
           email: email,
-          phone: phone,
-          dob: dob,
-          experience: experience,
-          role: "swimmer", // default role
+          role: "swimmer",
           createdAt: new Date()
         });
 
-        window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+        window.location.href = import.meta.env.BASE_URL + 'registration.html';
       } else {
         // Sign In
         try {

@@ -13,13 +13,14 @@ import './registration.css';
 import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
-import { db, collection, addDoc } from '../utils/firebase.js';
+import { auth, db, collection, addDoc, onAuthStateChanged } from '../utils/firebase.js';
 import { t } from '../utils/i18n.js';
 
 initTheme();
 renderNavbar();
 
-let swimmerCount = 1; // start with one child form
+let swimmerCount = 1;
+let currentUser = null;
 
 const app = document.getElementById('app');
 
@@ -313,6 +314,7 @@ function bindEvents() {
 
     try {
       await addDoc(collection(db, 'registrations'), {
+        uid: currentUser.uid,
         parent,
         spouse,
         swimmers,
@@ -353,5 +355,12 @@ function renumberSwimmers() {
   if (firstRemove) firstRemove.style.display = cards.length > 1 ? '' : 'none';
 }
 
-render();
-renderFooter();
+onAuthStateChanged(auth, (user) => {
+  if (!user) {
+    window.location.href = import.meta.env.BASE_URL + 'signin.html?mode=signup';
+    return;
+  }
+  currentUser = user;
+  render();
+  renderFooter();
+});
