@@ -16,12 +16,16 @@ import {
     doc,
     setDoc,
     getDoc,
+    updateDoc,
     collection,
     addDoc,
     deleteDoc,
     onSnapshot,
     query,
-    orderBy
+    where,
+    orderBy,
+    limit,
+    getDocs
 } from "firebase/firestore";
 
 // ============================================================
@@ -101,10 +105,14 @@ export {
     doc,
     setDoc,
     getDoc,
+    updateDoc,
     collection,
     addDoc,
     deleteDoc,
     onSnapshot,
     query,
+    where,
     orderBy,
+    limit,
+    getDocs,
 };

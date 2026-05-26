@@ -660,6 +660,223 @@
     padding: var(--space-sm) 0;
 }
 
+/* ── User Dropdown ── */
+.dash-user-menu {
+    position: relative;
+}
+
+.dash-user-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 4px 12px 4px 4px;
+    cursor: pointer;
+    transition: border-color var(--transition-base);
+}
+
+.dash-user-trigger:hover {
+    border-color: var(--season-accent, #f5c518);
+}
+
+.dash-dropdown-arrow {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.dash-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 180px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    overflow: hidden;
+}
+
+.dash-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--transition-base);
+}
+
+.dash-dropdown-item:hover {
+    background: rgba(245, 197, 24, 0.08);
+}
+
+/* ── Profile Grid ── */
+.profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-xl);
+}
+
+.profile-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.dash-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+}
+
+.dash-panel-header h3 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--text-primary);
+}
+
+.profile-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.profile-label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.profile-value {
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+}
+
+.profile-input {
+    margin-top: 2px;
+}
+
+.profile-edit-field {
+    display: none;
+}
+
+.profile-edit-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+/* ── Swimmer Profile Card ── */
+.swimmer-profile-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+}
+
+.swimmer-profile-info strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+}
+
+.swimmer-profile-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+.swimmer-profile-meta span:not(:last-child)::after {
+    content: "·";
+    margin-left: var(--space-sm);
+}
+
+/* ── Confirmation Modal ── */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    animation: confirmFadeIn 0.15s ease-out;
+}
+
+.confirm-modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2xl);
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.confirm-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    margin-bottom: var(--space-md);
+    color: var(--text-primary);
+}
+
+.confirm-body {
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+    line-height: 1.6;
+}
+
+.confirm-warning {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-bold);
+    color: var(--color-accent, #dc3545);
+    margin-bottom: var(--space-xl);
+}
+
+.confirm-actions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+}
+
+@keyframes confirmFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .profile-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
     .dash-cards-grid {
