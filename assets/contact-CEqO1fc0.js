@@ -1,4 +1,4 @@
-import{i as o}from"./theme-toggle-CI3g1rpd.js";import{a as s,r as l}from"./footer-Ca1bpEjX.js";import{a as r,c,e as n}from"./firebase-8tDQLGnT.js";o();s();const i=document.getElementById("app");i.innerHTML=`
+import{i as o}from"./theme-toggle-CI3g1rpd.js";import{a as s,r as l}from"./footer-Ca1bpEjX.js";import{a as r,c,e as n}from"./firebase-DS2n7X8_.js";o();s();const i=document.getElementById("app");i.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center;">
     <div class="container" style="max-width: 800px;">
       <div class="text-center" style="margin-bottom: var(--space-2xl);">

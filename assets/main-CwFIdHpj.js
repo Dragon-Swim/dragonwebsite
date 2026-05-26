@@ -1,4 +1,4 @@
-import{i as r}from"./theme-toggle-CI3g1rpd.js";import{a as c,t as e,r as n}from"./footer-Ca1bpEjX.js";r();c();const d=document.getElementById("app");d.innerHTML=`
+import{i as r}from"./theme-toggle-CI3g1rpd.js";import{a as c,t as a,r as n}from"./footer-Ca1bpEjX.js";r();c();const d=document.getElementById("app");d.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -6,10 +6,10 @@ import{i as r}from"./theme-toggle-CI3g1rpd.js";import{a as c,t as e,r as n}from"
       <div class="hero-left animate-on-scroll">
         <div class="hero-badge badge badge-primary">🏊 Year-Round Competitive Swimming</div>
         <h1 class="hero-title">Train, Compete &amp; Grow with <span class="text-gradient">Dragon Swim</span></h1>
-        <p class="hero-subtitle">${e("hero_subtitle")}</p>
+        <p class="hero-subtitle">${a("hero_subtitle")}</p>
         <div class="hero-actions">
           <a href="/dragonwebsite/registration.html" class="btn btn-gradient btn-lg">
-            ${e("hero_cta")} <span class="btn-arrow">→</span>
+            ${a("hero_cta")} <span class="btn-arrow">→</span>
           </a>
           <a href="/dragonwebsite/signin.html" class="btn btn-outline btn-lg">Sign In</a>
         </div>
@@ -93,9 +93,9 @@ import{i as r}from"./theme-toggle-CI3g1rpd.js";import{a as c,t as e,r as n}from"
     <div class="container">
       <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
         <span class="badge badge-primary">Seasons</span>
-        <h2 class="section-title" style="margin-top: var(--space-md);">${e("seasons_title")}</h2>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${a("seasons_title")}</h2>
         <div class="divider" style="margin: var(--space-md) auto;"></div>
-        <p class="section-subtitle" style="margin: 0 auto;">${e("seasons_subtitle")}</p>
+        <p class="section-subtitle" style="margin: 0 auto;">${a("seasons_subtitle")}</p>
       </div>
       <div class="seasons-grid">
         ${i("spring","🌸","#22C55E")}
@@ -112,26 +112,25 @@ import{i as r}from"./theme-toggle-CI3g1rpd.js";import{a as c,t as e,r as n}from"
       <h2 class="cta-title">Ready to Dive In?</h2>
       <p class="cta-subtitle">Join Dragon Swim Team today and start your competitive journey.</p>
       <div class="cta-actions">
-        <a href="/dragonwebsite/registration.html" class="btn btn-primary btn-lg">${e("hero_cta")} →</a>
+        <a href="/dragonwebsite/registration.html" class="btn btn-primary btn-lg">${a("hero_cta")} →</a>
         <a href="/dragonwebsite/contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">Talk to a Coach</a>
       </div>
     </div>
   </section>
 
-`;n();const l={root:null,rootMargin:"0px",threshold:.15},v=new IntersectionObserver((a,t)=>{a.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},l);document.querySelectorAll(".animate-on-scroll").forEach(a=>{v.observe(a)});function i(a,t,s){return`
-    <a href="/dragonwebsite/registration.html?season=${a}" class="card season-card" style="--season-accent: ${s}">
+`;n();const l={root:null,rootMargin:"0px",threshold:.15},v=new IntersectionObserver((e,t)=>{e.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},l);document.querySelectorAll(".animate-on-scroll").forEach(e=>{v.observe(e)});function i(e,t,s){return`
+    <div class="card season-card" style="--season-accent: ${s}">
       <div class="season-emoji">${t}</div>
-      <h3 class="season-name">${e("season_"+a)}</h3>
-      <p class="season-dates">${e("season_"+a+"_dates")}</p>
-      <p class="season-desc">${e("season_"+a+"_desc")}</p>
-      <span class="season-cta">Register →</span>
-    </a>
-  `}function o(a,t,s){return`
+      <h3 class="season-name">${a("season_"+e)}</h3>
+      <p class="season-dates">${a("season_"+e+"_dates")}</p>
+      <p class="season-desc">${a("season_"+e+"_desc")}</p>
+    </div>
+  `}function o(e,t,s){return`
     <div class="card team-card text-center">
       <div class="team-img-placeholder" style="width: 120px; height: 120px; border-radius: 50%; background: var(--border-color); margin: 0 auto var(--space-md); overflow: hidden; border: 3px solid var(--color-primary);">
-        <img src="/dragonwebsite/placeholder-coach.jpg" alt="${a}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
+        <img src="/dragonwebsite/placeholder-coach.jpg" alt="${e}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
       </div>
-      <h3 class="team-name" style="font-family: var(--font-display); font-size: var(--fs-lg); margin-bottom: var(--space-xs);">${a}</h3>
+      <h3 class="team-name" style="font-family: var(--font-display); font-size: var(--fs-lg); margin-bottom: var(--space-xs);">${e}</h3>
       <p class="team-role" style="font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--color-accent); margin-bottom: var(--space-sm);">${t}</p>
       <p class="team-desc" style="font-size: var(--fs-sm); color: var(--text-secondary);">${s}</p>
     </div>

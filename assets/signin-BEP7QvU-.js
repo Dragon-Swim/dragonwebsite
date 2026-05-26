@@ -1,4 +1,4 @@
-import{i as b}from"./theme-toggle-CI3g1rpd.js";import{a as v,t as e,r as y}from"./footer-Ca1bpEjX.js";import{d as E,b as l,s as m,g as p,e as h,l as _,m as $,i as B}from"./firebase-8tDQLGnT.js";b();v();const I=new URLSearchParams(window.location.search);let s=I.get("mode")==="signup";const x=document.getElementById("app");function f(){x.innerHTML=`
+import{i as b}from"./theme-toggle-CI3g1rpd.js";import{a as v,t as e,r as y}from"./footer-Ca1bpEjX.js";import{d as E,b as l,s as m,g as p,e as h,n as _,p as $,j as B}from"./firebase-DS2n7X8_.js";b();v();const I=new URLSearchParams(window.location.search);let s=I.get("mode")==="signup";const x=document.getElementById("app");function f(){x.innerHTML=`
     <section class="section signin-section">
       <div class="container">
         <div class="signin-wrapper">
