@@ -84,6 +84,7 @@ function initApp() {
         console.log("Dashboard: Initializing data listeners...");
         initDataListeners();
         isInitialized = true;
+        refreshUI();
       } else {
         console.log("Dashboard: Refreshing UI...");
         refreshUI();
@@ -149,12 +150,19 @@ async function fetchFamilyData() {
 function refreshUI() {
   if (!currentUser) return;
   fetchFamilyData().then(() => {
-    if (userRole === 'coach') {
-      renderCoachDashboard(currentUser);
-    } else {
-      renderDashboard(currentUser);
-    }
+    renderCurrentView();
+  }).catch(err => {
+    console.error("Error fetching family data:", err);
+    renderCurrentView();
   });
+}
+
+function renderCurrentView() {
+  if (userRole === 'coach') {
+    renderCoachDashboard(currentUser);
+  } else {
+    renderDashboard(currentUser);
+  }
 }
 
 function renderDashboard(user) {
