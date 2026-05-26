@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme, updateToggleIcon } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, getDocs, onAuthStateChanged, signOut } from '../utils/firebase.js';
 
 initTheme();
 
@@ -27,6 +27,8 @@ let swimMeets = [];
 let practiceSchedules = [];
 let currentUser = null;
 let userRole = 'swimmer';
+let familyData = null;
+let familyDataId = null;
 
 const coachRoster = [
   { id: 101, name: 'Alice Thompson', group: 'Competitive', age: 14, rank: 'Regional' },
@@ -124,15 +126,35 @@ function initDataListeners() {
   }, (error) => {
     console.error("Error listening to schedules:", error);
   });
+
+  // Fetch family registration data
+  fetchFamilyData();
+}
+
+async function fetchFamilyData() {
+  if (!currentUser) return;
+  const qReg = query(
+    collection(db, "registrations"),
+    where("uid", "==", currentUser.uid),
+    orderBy("createdAt", "desc"),
+    limit(1)
+  );
+  const snapshot = await getDocs(qReg);
+  if (!snapshot.empty) {
+    familyDataId = snapshot.docs[0].id;
+    familyData = snapshot.docs[0].data();
+  }
 }
 
 function refreshUI() {
   if (!currentUser) return;
-  if (userRole === 'coach') {
-    renderCoachDashboard(currentUser);
-  } else {
-    renderDashboard(currentUser);
-  }
+  fetchFamilyData().then(() => {
+    if (userRole === 'coach') {
+      renderCoachDashboard(currentUser);
+    } else {
+      renderDashboard(currentUser);
+    }
+  });
 }
 
 function renderDashboard(user) {
@@ -152,6 +174,9 @@ function renderDashboard(user) {
             <span class="dash-nav-label">Menu</span>
             <button class="dash-nav-item ${currentTab === 'overview' ? 'active' : ''}" data-tab="overview">
               <span class="dash-nav-icon">📊</span> Overview
+            </button>
+            <button class="dash-nav-item ${currentTab === 'profile' ? 'active' : ''}" data-tab="profile">
+              <span class="dash-nav-icon">👤</span> Profile
             </button>
             <button class="dash-nav-item ${currentTab === 'plans' ? 'active' : ''}" data-tab="plans">
               <span class="dash-nav-icon">📋</span> Swim Plans
@@ -192,13 +217,16 @@ function renderDashboard(user) {
             </div>
           </div>
           <div class="dash-topbar-right">
-            <div class="dash-search">
-              <span class="dash-search-icon">🔍</span>
-              <input type="text" class="dash-search-input" placeholder="Search...">
-            </div>
-            <div class="dash-user">
-              <div class="dash-avatar" id="dash-user-initial">${(user.displayName || user.email || 'D').charAt(0).toUpperCase()}</div>
-              <div class="dash-user-name" id="dash-user-name-display">${user.displayName || user.email || 'Swimmer'}</div>
+            <div class="dash-user-menu" id="user-menu">
+              <button class="dash-user-trigger" id="user-trigger">
+                <div class="dash-avatar">${(getParentName() || user.email || 'D').charAt(0).toUpperCase()}</div>
+                <span class="dash-user-name">${getParentName() || user.email || 'Swimmer'}</span>
+                <span class="dash-dropdown-arrow">▾</span>
+              </button>
+              <div class="dash-dropdown" id="user-dropdown" style="display: none;">
+                <button class="dash-dropdown-item" id="menu-profile">👤 Profile</button>
+                <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">🚪 Sign Out</button>
+              </div>
             </div>
           </div>
         </header>
@@ -270,10 +298,16 @@ function renderCoachDashboard(user) {
             </div>
           </div>
           <div class="dash-topbar-right">
-             <div class="badge badge-primary" style="margin-right: 1rem;">Coach Mode</div>
-            <div class="dash-user">
-              <div class="dash-avatar" style="background: var(--color-accent); color: white;">${(user.displayName || user.email || 'C').charAt(0).toUpperCase()}</div>
-              <div class="dash-user-name">${user.displayName || user.email || 'Coach'}</div>
+            <div class="badge badge-primary" style="margin-right: 1rem;">Coach Mode</div>
+            <div class="dash-user-menu" id="user-menu">
+              <button class="dash-user-trigger" id="user-trigger">
+                <div class="dash-avatar" style="background: var(--color-accent); color: white;">${(user.displayName || user.email || 'C').charAt(0).toUpperCase()}</div>
+                <span class="dash-user-name">${user.displayName || user.email || 'Coach'}</span>
+                <span class="dash-dropdown-arrow">▾</span>
+              </button>
+              <div class="dash-dropdown" id="user-dropdown" style="display: none;">
+                <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">🚪 Sign Out</button>
+              </div>
             </div>
           </div>
         </header>
@@ -291,6 +325,12 @@ function renderCoachDashboard(user) {
   updateSidebarThemeIcon();
 }
 
+function getParentName() {
+  if (!familyData || !familyData.parent) return null;
+  const p = familyData.parent;
+  return [p.firstName, p.lastName].filter(Boolean).join(' ') || null;
+}
+
 function getTabTitle(tab, role = 'swimmer') {
   if (role === 'coach') {
     const titles = {
@@ -303,6 +343,7 @@ function getTabTitle(tab, role = 'swimmer') {
   }
   const titles = {
     'overview': 'Dashboard',
+    'profile': 'Family Profile',
     'plans': 'Swim Plans',
     'meets': 'Swim Meets',
     'schedule': 'Practice Schedule',
@@ -313,6 +354,7 @@ function getTabTitle(tab, role = 'swimmer') {
 function getTabSubtitle(tab) {
   const subs = {
     'overview': 'Overview of your swim season at a glance',
+    'profile': 'Manage your family information and swimmers',
     'plans': 'Track and manage your training plans',
     'meets': 'View registered and upcoming competitions',
     'schedule': 'Your weekly practice timetable',
@@ -332,6 +374,7 @@ function renderTabContent(tab, role = 'swimmer') {
   }
   switch (tab) {
     case 'overview': return renderOverview();
+    case 'profile': return renderProfile();
     case 'plans': return renderSwimPlans();
     case 'meets': return renderSwimMeets();
     case 'schedule': return renderSchedule();
@@ -531,6 +574,171 @@ function renderTodayPractice() {
   `).join('');
 }
 
+// ── Profile Tab ──
+function renderProfile() {
+  if (!familyData) {
+    return `<div class="dash-panel" style="text-align: center; padding: 3rem;">
+      <p class="dash-empty">No family registration found.</p>
+      <p style="margin-top: 1rem;"><a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-primary">Complete Registration</a></p>
+    </div>`;
+  }
+
+  const p = familyData.parent || {};
+  const spouse = familyData.spouse;
+  const swimmers = familyData.swimmers || [];
+  const ec = familyData.emergencyContact || {};
+
+  return `
+    <div class="profile-grid">
+      <!-- Left Column -->
+      <div class="profile-col">
+        <div class="dash-panel">
+          <div class="dash-panel-header">
+            <h3>Parent / Guardian</h3>
+            <button class="btn btn-outline btn-sm" id="edit-contact-btn">Edit</button>
+          </div>
+          <div class="profile-fields">
+            <div class="profile-field">
+              <span class="profile-label">Name</span>
+              <span class="profile-value">${[p.firstName, p.middleName, p.lastName].filter(Boolean).join(' ') || '—'}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Gender</span>
+              <span class="profile-value">${p.gender || '—'}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Email</span>
+              <span class="profile-value">${p.email || '—'}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Phone</span>
+              <span class="profile-value profile-display" id="display-parent-phone">${p.phone || '—'}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-parent-phone" value="${p.phone || ''}" />
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Address</span>
+              <span class="profile-value profile-display" id="display-parent-address">${p.address || '—'}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-parent-address" value="${p.address || ''}" />
+            </div>
+          </div>
+        </div>
+
+        ${spouse ? `
+        <div class="dash-panel">
+          <h3>Spouse / Partner</h3>
+          <div class="profile-fields">
+            <div class="profile-field">
+              <span class="profile-label">Name</span>
+              <span class="profile-value">${[spouse.firstName, spouse.middleName, spouse.lastName].filter(Boolean).join(' ') || '—'}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Gender</span>
+              <span class="profile-value">${spouse.gender || '—'}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Phone</span>
+              <span class="profile-value profile-display" id="display-spouse-phone">${spouse.phone || '—'}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-spouse-phone" value="${spouse.phone || ''}" />
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Email</span>
+              <span class="profile-value profile-display" id="display-spouse-email">${spouse.email || '—'}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-spouse-email" value="${spouse.email || ''}" />
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
+        <div class="dash-panel">
+          <h3>Emergency Contact</h3>
+          <div class="profile-fields">
+            <div class="profile-field">
+              <span class="profile-label">Name</span>
+              <span class="profile-value profile-display" id="display-emergency-name">${ec.name || '—'}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-emergency-name" value="${ec.name || ''}" />
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Phone</span>
+              <span class="profile-value profile-display" id="display-emergency-phone">${ec.phone || '—'}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-emergency-phone" value="${ec.phone || ''}" />
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-edit-actions" id="edit-actions" style="display: none;">
+          <button class="btn btn-primary btn-sm" id="save-contact-btn">Save</button>
+          <button class="btn btn-outline btn-sm" id="cancel-contact-btn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Right Column -->
+      <div class="profile-col">
+        <div class="dash-panel">
+          <div class="dash-panel-header">
+            <h3>Swimmers (${swimmers.length})</h3>
+            <button class="btn btn-outline btn-sm" id="add-swimmer-toggle-btn">+ Add</button>
+          </div>
+          <div id="add-swimmer-form" style="display: none; margin-bottom: var(--space-md); padding: var(--space-md); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">First Name</label>
+                <input class="form-input" id="new-swimmer-first" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Last Name</label>
+                <input class="form-input" id="new-swimmer-last" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Middle Name</label>
+                <input class="form-input" id="new-swimmer-middle" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Gender</label>
+                <select class="form-select" id="new-swimmer-gender">
+                  <option value="" disabled selected>Select...</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Date of Birth</label>
+                <input class="form-input" type="date" id="new-swimmer-dob" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">USA Swimming ID</label>
+                <input class="form-input" id="new-swimmer-usaId" />
+              </div>
+            </div>
+            <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-md);">
+              <button class="btn btn-primary btn-sm" id="save-swimmer-btn">Save Swimmer</button>
+              <button class="btn btn-outline btn-sm" id="cancel-swimmer-btn">Cancel</button>
+            </div>
+          </div>
+          ${swimmers.filter(s => !s.deleted).length === 0 ? '<p class="dash-empty">No swimmers registered.</p>' : swimmers.map((s, i) => s.deleted ? '' : `
+
+            <div class="swimmer-profile-card">
+              <div class="swimmer-profile-info">
+                <strong>${[s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ')}</strong>
+                <div class="swimmer-profile-meta">
+                  <span>${s.gender || '—'}</span>
+                  <span>DOB: ${s.dob || '—'}</span>
+                  ${s.usaSwimmingId ? `<span>USA ID: ${s.usaSwimmingId}</span>` : ''}
+                  ${s.joinDate ? `<span>Joined: ${s.joinDate}</span>` : ''}
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm delete-swimmer-btn" data-index="${i}" style="color: var(--color-accent); border-color: var(--color-accent);">Remove</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // ── Swim Plans Tab ──
 function renderSwimPlans() {
   return `
@@ -680,6 +888,44 @@ function renderSchedule() {
 }
 
 // ── Events ──
+function showDeleteConfirm(swimmerName, swimmerIndex) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal">
+      <h3 class="confirm-title">Remove Swimmer</h3>
+      <p class="confirm-body">You are about to remove <strong style="color: var(--color-accent, #dc3545);">${swimmerName}</strong> from your family registration.</p>
+      <p class="confirm-warning">This swimmer will be marked as inactive. Contact a coach if you need to restore this record.</p>
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="confirm-cancel">Cancel</button>
+        <button class="btn btn-sm" id="confirm-delete" style="background: var(--color-accent, #dc3545); color: white; border: none;">Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#confirm-cancel').addEventListener('click', () => overlay.remove());
+
+  overlay.querySelector('#confirm-delete').addEventListener('click', async () => {
+    overlay.remove();
+    const swimmers = [...familyData.swimmers];
+    swimmers[swimmerIndex] = { ...swimmers[swimmerIndex], deleted: true, deletedAt: new Date().toISOString() };
+    try {
+      await updateDoc(doc(db, "registrations", familyDataId), { swimmers });
+      familyData.swimmers = swimmers;
+      currentTab = 'profile';
+      refreshUI();
+    } catch (err) {
+      console.error("Error marking swimmer deleted:", err);
+      alert("Failed. Please try again.");
+    }
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
 function bindEvents() {
   // Sidebar nav
   document.querySelectorAll('.dash-nav-item[data-tab]').forEach(btn => {
@@ -717,6 +963,132 @@ function bindEvents() {
     } catch (error) {
       console.error('Error signing out:', error);
     }
+  });
+
+  // ── User Dropdown ──
+  const userTrigger = document.getElementById('user-trigger');
+  const userDropdown = document.getElementById('user-dropdown');
+
+  userTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    userDropdown.style.display = userDropdown.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.addEventListener('click', () => {
+    if (userDropdown) userDropdown.style.display = 'none';
+  });
+
+  // Profile menu item
+  document.getElementById('menu-profile')?.addEventListener('click', () => {
+    currentTab = 'profile';
+    userDropdown.style.display = 'none';
+    refreshUI();
+  });
+
+  // Signout menu item
+  document.getElementById('menu-signout')?.addEventListener('click', async () => {
+    try {
+      await signOut(auth);
+      window.location.href = import.meta.env.BASE_URL + 'signin.html';
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  });
+
+  // ── Profile Edit ──
+  document.getElementById('edit-contact-btn')?.addEventListener('click', () => {
+    document.querySelectorAll('.profile-display').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.profile-edit-field').forEach(el => el.style.display = 'block');
+    document.getElementById('edit-actions').style.display = 'flex';
+    document.getElementById('edit-contact-btn').style.display = 'none';
+  });
+
+  document.getElementById('cancel-contact-btn')?.addEventListener('click', () => {
+    document.querySelectorAll('.profile-display').forEach(el => el.style.display = '');
+    document.querySelectorAll('.profile-edit-field').forEach(el => el.style.display = 'none');
+    document.getElementById('edit-actions').style.display = 'none';
+    document.getElementById('edit-contact-btn').style.display = '';
+  });
+
+  document.getElementById('save-contact-btn')?.addEventListener('click', async () => {
+    const updateData = {
+      "parent.phone": document.getElementById('edit-parent-phone')?.value.trim() || '',
+      "parent.address": document.getElementById('edit-parent-address')?.value.trim() || '',
+    };
+
+    if (familyData.spouse) {
+      updateData["spouse.phone"] = document.getElementById('edit-spouse-phone')?.value.trim() || '';
+      updateData["spouse.email"] = document.getElementById('edit-spouse-email')?.value.trim() || '';
+    }
+
+    updateData["emergencyContact.name"] = document.getElementById('edit-emergency-name')?.value.trim() || '';
+    updateData["emergencyContact.phone"] = document.getElementById('edit-emergency-phone')?.value.trim() || '';
+
+    try {
+      await updateDoc(doc(db, "registrations", familyDataId), updateData);
+      familyData.parent.phone = updateData["parent.phone"];
+      familyData.parent.address = updateData["parent.address"];
+      if (familyData.spouse) {
+        familyData.spouse.phone = updateData["spouse.phone"];
+        familyData.spouse.email = updateData["spouse.email"];
+      }
+      familyData.emergencyContact.name = updateData["emergencyContact.name"];
+      familyData.emergencyContact.phone = updateData["emergencyContact.phone"];
+      currentTab = 'profile';
+      refreshUI();
+    } catch (err) {
+      console.error("Error updating contact:", err);
+      alert("Failed to save. Please try again.");
+    }
+  });
+
+  // ── Add Swimmer ──
+  document.getElementById('add-swimmer-toggle-btn')?.addEventListener('click', () => {
+    document.getElementById('add-swimmer-form').style.display = 'block';
+    document.getElementById('add-swimmer-toggle-btn').style.display = 'none';
+  });
+
+  document.getElementById('cancel-swimmer-btn')?.addEventListener('click', () => {
+    document.getElementById('add-swimmer-form').style.display = 'none';
+    document.getElementById('add-swimmer-toggle-btn').style.display = '';
+  });
+
+  document.getElementById('save-swimmer-btn')?.addEventListener('click', async () => {
+    const firstName = document.getElementById('new-swimmer-first').value.trim();
+    const lastName = document.getElementById('new-swimmer-last').value.trim();
+    if (!firstName || !lastName) {
+      alert('First name and last name are required.');
+      return;
+    }
+    const newSwimmer = {
+      firstName,
+      lastName,
+      middleName: document.getElementById('new-swimmer-middle').value.trim() || null,
+      gender: document.getElementById('new-swimmer-gender').value || null,
+      dob: document.getElementById('new-swimmer-dob').value || null,
+      usaSwimmingId: document.getElementById('new-swimmer-usaId').value.trim() || null,
+      joinDate: null,
+    };
+    const newSwimmers = [...familyData.swimmers, newSwimmer];
+    try {
+      await updateDoc(doc(db, "registrations", familyDataId), { swimmers: newSwimmers });
+      familyData.swimmers = newSwimmers;
+      currentTab = 'profile';
+      refreshUI();
+    } catch (err) {
+      console.error("Error adding swimmer:", err);
+      alert("Failed to add swimmer. Please try again.");
+    }
+  });
+
+  // ── Delete Swimmer ──
+  document.querySelectorAll('.delete-swimmer-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index);
+      const swimmer = familyData.swimmers[idx];
+      const name = [swimmer.firstName, swimmer.lastName].filter(Boolean).join(' ');
+      showDeleteConfirm(name, idx);
+    });
   });
 
   // ── Coach Management Events ──

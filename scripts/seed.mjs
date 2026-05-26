@@ -1,12 +1,12 @@
 /**
- * Seed script — populates local Firebase emulators with 10 fake swim team members.
+ * Seed script — creates 2 family accounts with full registration data
+ * in the local Firebase emulators.
  *
  * Usage:
  *   node scripts/seed.mjs
  *
  * Prerequisites:
  *   - Firebase emulators running (firebase emulators:start)
- *   - npm install (firebase + @faker-js/faker already in project)
  */
 
 import { initializeApp } from "firebase/app";
@@ -14,15 +14,13 @@ import {
   getAuth,
   connectAuthEmulator,
   createUserWithEmailAndPassword,
-  updateProfile,
 } from "firebase/auth";
 import {
   getFirestore,
   connectFirestoreEmulator,
-  collection,
-  addDoc,
+  doc,
+  setDoc,
 } from "firebase/firestore";
-import { faker } from "@faker-js/faker";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -32,7 +30,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = resolve(__dirname, "..", ".env.local");
 const envRaw = readFileSync(envPath, "utf-8");
 
-/** @type {Record<string, string>} */
 const env = {};
 for (const line of envRaw.split("\n")) {
   const trimmed = line.trim();
@@ -63,88 +60,126 @@ const db = getFirestore(app);
 connectAuthEmulator(auth, "http://127.0.0.1:9099");
 connectFirestoreEmulator(db, "127.0.0.1", 8080);
 
-console.log(" Connected to local emulators (Auth :9099, Firestore :8080)");
+console.log(" Connected to local emulators\n");
 
-// ── Generate swimmers ────────────────────────────────────────────
-const STROKES = ["Freestyle", "Backstroke", "Breaststroke", "Butterfly", "Individual Medley"];
-const EXPERIENCE_LEVELS = ["beginner", "intermediate", "advanced", "competitive"];
-const GROUPS = ["Junior Dolphins", "Development", "Senior Squad", "Elite"];
+// ── Seed data ────────────────────────────────────────────────────
+const PASSWORD = "test1234";
 
-function randomPick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function makeSwimmer() {
-  const firstName = faker.person.firstName();
-  const lastName = faker.person.lastName();
-  const age = faker.number.int({ min: 7, max: 18 });
-  const experience = randomPick(EXPERIENCE_LEVELS);
-
-  let group;
-  if (age <= 9) group = GROUPS[0];       // Junior Dolphins
-  else if (age <= 12) group = GROUPS[1]; // Development
-  else if (experience === "competitive") group = GROUPS[3]; // Elite
-  else group = GROUPS[2];                // Senior Squad
-
-  const email = faker.internet.email({ firstName, lastName }).toLowerCase();
-  const phone = faker.phone.number();
-
-  return {
-    name: `${firstName} ${lastName}`,
-    age,
-    gender: faker.person.sex(),
-    email,
-    phone,
-    stroke: randomPick(STROKES),
-    secondaryStroke: randomPick(STROKES.filter(s => s !== randomPick(STROKES))), // won't be 100% accurate but good enough
-    experience,
-    group,
-    emergencyContact: {
-      name: faker.person.fullName(),
-      phone: faker.phone.number(),
+const families = [
+  {
+    email: "john.chen@example.com",
+    password: PASSWORD,
+    parent: {
+      firstName: "John",
+      lastName: "Chen",
+      middleName: null,
+      gender: "male",
+      phone: "503-555-1001",
+      email: "john.chen@example.com",
+      address: "1420 SW Park Ave, Portland, OR 97201",
     },
-    notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.4 }) ?? "",
-    joinedAt: faker.date.between({ from: "2024-01-01", to: "2026-05-01" }),
-    status: "active",
-  };
+    spouse: {
+      firstName: "Mei",
+      lastName: "Lin",
+      middleName: null,
+      gender: "female",
+      phone: "503-555-1002",
+      email: "mei.lin@example.com",
+    },
+    swimmers: [
+      {
+        firstName: "Jason",
+        lastName: "Chen",
+        middleName: null,
+        gender: "male",
+        dob: "2013-05-12",
+        usaSwimmingId: "USA-2024-08123",
+        joinDate: "2024-09-01",
+      },
+      {
+        firstName: "Emily",
+        lastName: "Chen",
+        middleName: "Wei",
+        gender: "female",
+        dob: "2015-11-03",
+        usaSwimmingId: "USA-2025-01456",
+        joinDate: "2025-01-15",
+      },
+    ],
+    emergencyContact: {
+      name: "Grandma Li",
+      phone: "503-555-1003",
+    },
+    notes: "Jason needs goggles with prescription lenses.",
+  },
+  {
+    email: "sarah.martinez@example.com",
+    password: PASSWORD,
+    parent: {
+      firstName: "Sarah",
+      lastName: "Martinez",
+      middleName: null,
+      gender: "female",
+      phone: "971-555-2001",
+      email: "sarah.martinez@example.com",
+      address: "2850 NW Westover Rd, Portland, OR 97210",
+    },
+    spouse: null,
+    swimmers: [
+      {
+        firstName: "Sofia",
+        lastName: "Martinez",
+        middleName: "Elena",
+        gender: "female",
+        dob: "2012-08-19",
+        usaSwimmingId: "USA-2023-09765",
+        joinDate: "2023-06-01",
+      },
+    ],
+    emergencyContact: {
+      name: "Carlos Martinez",
+      phone: "971-555-2002",
+    },
+    notes: "",
+  },
+];
+
+// ── Run ──────────────────────────────────────────────────────────
+for (const [i, fam] of families.entries()) {
+  // 1. Create Auth account
+  const userCred = await createUserWithEmailAndPassword(auth, fam.email, fam.password);
+  const uid = userCred.user.uid;
+  console.log(`[${i + 1}/2] Auth account: ${fam.email}`);
+
+  // 2. Write users/{uid}
+  await setDoc(doc(db, "users", uid), {
+    email: fam.email,
+    role: "swimmer",
+    createdAt: new Date(),
+  });
+
+  // 3. Write registrations doc
+  await setDoc(doc(db, "registrations", uid), {
+    uid,
+    parent: fam.parent,
+    spouse: fam.spouse,
+    swimmers: fam.swimmers,
+    emergencyContact: fam.emergencyContact,
+    notes: fam.notes,
+    createdAt: new Date(),
+  });
+
+  const names = fam.swimmers.map(s => s.firstName).join(", ");
+  console.log(`     Parent: ${fam.parent.firstName} ${fam.parent.lastName}`);
+  console.log(`     Swimmers: ${names}`);
+  console.log(`     Registration doc: registrations/${uid}\n`);
 }
 
-const swimmers = Array.from({ length: 10 }, makeSwimmer);
-
-// ── Write to Firestore & Auth ────────────────────────────────────
-const TEST_PASSWORD = "test1234";
-const results = [];
-
-for (const [i, swimmer] of swimmers.entries()) {
-  // Firestore — members collection
-  const docRef = await addDoc(collection(db, "members"), swimmer);
-  console.log(`  [${i + 1}/10] Firestore member: ${swimmer.name} (${docRef.id})`);
-
-  // Auth — create account
-  try {
-    const userCred = await createUserWithEmailAndPassword(auth, swimmer.email, TEST_PASSWORD);
-    await updateProfile(userCred.user, { displayName: swimmer.name });
-    console.log(`          Auth account: ${swimmer.email} / ${TEST_PASSWORD}`);
-  } catch (err) {
-    if (err.code === "auth/email-already-exists") {
-      console.log(`          Auth account: (already exists) ${swimmer.email}`);
-    } else {
-      console.error(`          Auth FAILED for ${swimmer.email}: ${err.message}`);
-    }
-  }
-
-  results.push({ name: swimmer.name, email: swimmer.email, docId: docRef.id });
+console.log("═══════════════════════════════════════");
+console.log(" Seed complete — 2 families ready");
+console.log("═══════════════════════════════════════\n");
+console.log("Login credentials (both accounts):");
+for (const fam of families) {
+  console.log(`  ${fam.email} / ${PASSWORD}`);
 }
-
-// ── Summary ──────────────────────────────────────────────────────
-console.log("\n══════════════════════════════════════════════════════");
-console.log(" Seed complete — 10 swimmers written to Firestore emulator");
-console.log("══════════════════════════════════════════════════════\n");
-console.log("Swimmer / Email / Password:");
-for (const r of results) {
-  console.log(`  ${r.name}`);
-  console.log(`    Email:    ${r.email}`);
-  console.log(`    Password: ${TEST_PASSWORD}`);
-  console.log(`    Doc ID:   ${r.docId}\n`);
-}
-console.log("Emulator UI: http://127.0.0.1:4000");
+console.log("\nEmulator UI: http://127.0.0.1:4000");
