@@ -1,4 +1,4 @@
-import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g as h,e as m,b as S,q as k,m as I,c as y,k as G,l as re,w as ce,i as me,r as Y,u as B,a as J,f as V}from"./firebase-DS2n7X8_.js";x();const b=[{id:1,name:"Endurance Base Building",season:"Winter 2026",daysPerWeek:4,priority:"High",progress:72,tasks:"18 / 25 workouts completed",due:"Feb 28, 2026",status:"In Progress"},{id:2,name:"Sprint Technique Focus",season:"Spring 2026",daysPerWeek:3,priority:"Medium",progress:45,tasks:"9 / 20 workouts completed",due:"Mar 15, 2026",status:"In Progress"},{id:3,name:"Stroke Refinement (Butterfly)",season:"Summer 2026",daysPerWeek:5,priority:"Low",progress:0,tasks:"0 / 12 workouts completed",due:"Apr 30, 2026",status:"Not Started"},{id:4,name:"Fall Conditioning",season:"Fall 2025",daysPerWeek:3,priority:"High",progress:100,tasks:"30 / 30 workouts completed",due:"Nov 20, 2025",status:"Completed"}];let f=[],D=[],g=null,v="swimmer",d=null,E=null;const C=[{id:101,name:"Alice Thompson",group:"Competitive",age:14,rank:"Regional"},{id:102,name:"Bob Wilson",group:"Intermediate",age:12,rank:"Novice"},{id:103,name:"Charlie Brown",group:"Competitive",age:15,rank:"State"},{id:104,name:"Daisy Miller",group:"Beginner",age:10,rank:"Novice"},{id:105,name:"Ethan Hunt",group:"Competitive",age:16,rank:"National"}];let o="overview",K=!1;function pe(){const e=document.getElementById("app");e.innerHTML=`
+import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g as h,e as m,b as S,q as k,m as I,c as y,k as G,l as ce,w as me,i as pe,r as Y,u as B,a as V,f as J}from"./firebase-DS2n7X8_.js";x();const b=[{id:1,name:"Endurance Base Building",season:"Winter 2026",daysPerWeek:4,priority:"High",progress:72,tasks:"18 / 25 workouts completed",due:"Feb 28, 2026",status:"In Progress"},{id:2,name:"Sprint Technique Focus",season:"Spring 2026",daysPerWeek:3,priority:"Medium",progress:45,tasks:"9 / 20 workouts completed",due:"Mar 15, 2026",status:"In Progress"},{id:3,name:"Stroke Refinement (Butterfly)",season:"Summer 2026",daysPerWeek:5,priority:"Low",progress:0,tasks:"0 / 12 workouts completed",due:"Apr 30, 2026",status:"Not Started"},{id:4,name:"Fall Conditioning",season:"Fall 2025",daysPerWeek:3,priority:"High",progress:100,tasks:"30 / 30 workouts completed",due:"Nov 20, 2025",status:"Completed"}];let f=[],D=[],g=null,v="swimmer",d=null,E=null;const C=[{id:101,name:"Alice Thompson",group:"Competitive",age:14,rank:"Regional"},{id:102,name:"Bob Wilson",group:"Intermediate",age:12,rank:"Novice"},{id:103,name:"Charlie Brown",group:"Competitive",age:15,rank:"State"},{id:104,name:"Daisy Miller",group:"Beginner",age:10,rank:"Novice"},{id:105,name:"Ethan Hunt",group:"Competitive",age:16,rank:"National"}];let o="overview",K=!1;function ue(){const e=document.getElementById("app");e.innerHTML=`
     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 20px; font-family: sans-serif;">
       <div style="width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #f5c518; border-radius: 50%; animation: spin 1s linear infinite;"></div>
       <p style="color: #666;">Loading your Dragon dashboard...</p>
@@ -6,7 +6,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       </style>
     </div>
-  `,console.log("Dashboard: Initializing auth listener..."),oe(S,async a=>{if(!a){console.log("Dashboard: No user authenticated, redirecting to signin..."),window.location.href="/dragonwebsite/signin.html";return}g=a,console.log("Dashboard: User authenticated:",a.email);try{console.log("Dashboard: Fetching user document...");const n=await le(h(m,"users",a.uid));v=a.email&&a.email.toLowerCase()==="dragonswim@outlook.com"?"coach":n.exists()?n.data().role:"swimmer",console.log("Dashboard: Detected role:",v),K?(console.log("Dashboard: Refreshing UI..."),u()):(console.log("Dashboard: Initializing data listeners..."),ue(),K=!0)}catch(n){console.error("Dashboard Critical Error:",n),e.innerHTML=`
+  `,console.log("Dashboard: Initializing auth listener..."),le(S,async a=>{if(!a){console.log("Dashboard: No user authenticated, redirecting to signin..."),window.location.href="/dragonwebsite/signin.html";return}g=a,console.log("Dashboard: User authenticated:",a.email);try{console.log("Dashboard: Fetching user document...");const n=await re(h(m,"users",a.uid));v=a.email&&a.email.toLowerCase()==="dragonswim@outlook.com"?"coach":n.exists()?n.data().role:"swimmer",console.log("Dashboard: Detected role:",v),K?(console.log("Dashboard: Refreshing UI..."),u()):(console.log("Dashboard: Initializing data listeners..."),ve(),K=!0,u())}catch(n){console.error("Dashboard Critical Error:",n),e.innerHTML=`
         <div style="padding: 40px; text-align: center; font-family: sans-serif; max-width: 500px; margin: 100px auto; border: 1px solid #fee2e2; background: #fef2f2; border-radius: 12px; color: #991b1b;">
           <h2 style="margin-bottom: 16px;">Failed to load dashboard</h2>
           <p style="margin-bottom: 24px;">Something went wrong while setting up your workspace. This might be due to a connection issue or a configuration error.</p>
@@ -15,7 +15,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
           </code>
           <button onclick="window.location.reload()" style="padding: 10px 20px; background: #991b1b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Retry Loading</button>
         </div>
-      `,v="swimmer"}})}function ue(){const e=k(y(m,"meets"),I("createdAt","desc"));G(e,n=>{f=n.docs.map(s=>({id:s.id,...s.data()})),u()},n=>{console.error("Error listening to meets:",n)});const a=k(y(m,"schedules"),I("createdAt","asc"));G(a,n=>{D=n.docs.map(s=>({id:s.id,...s.data()})),u()},n=>{console.error("Error listening to schedules:",n)}),ee()}async function ee(){if(!g)return;const e=k(y(m,"registrations"),ce("uid","==",g.uid),I("createdAt","desc"),re(1)),a=await me(e);a.empty||(E=a.docs[0].id,d=a.docs[0].data())}function u(){g&&ee().then(()=>{v==="coach"?he(g):ve(g)})}function ve(e){const a=document.getElementById("app");a.innerHTML=`
+      `,v="swimmer"}})}function ve(){const e=k(y(m,"meets"),I("createdAt","desc"));G(e,n=>{f=n.docs.map(s=>({id:s.id,...s.data()})),u()},n=>{console.error("Error listening to meets:",n)});const a=k(y(m,"schedules"),I("createdAt","asc"));G(a,n=>{D=n.docs.map(s=>({id:s.id,...s.data()})),u()},n=>{console.error("Error listening to schedules:",n)}),ae()}async function ae(){if(!g)return;const e=k(y(m,"registrations"),me("uid","==",g.uid),I("createdAt","desc"),ce(1)),a=await pe(e);a.empty||(E=a.docs[0].id,d=a.docs[0].data())}function u(){g&&ae().then(()=>{Q()}).catch(e=>{console.error("Error fetching family data:",e),Q()})}function Q(){v==="coach"?ge(g):he(g)}function he(e){const a=document.getElementById("app");a.innerHTML=`
     <div class="dash-layout">
       <!-- Sidebar -->
       <aside class="dash-sidebar" id="dash-sidebar">
@@ -68,15 +68,15 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
               <span></span><span></span><span></span>
             </button>
             <div>
-              <h1 class="dash-page-title">${ae(o)}</h1>
-              <p class="dash-page-subtitle">${ge(o)}</p>
+              <h1 class="dash-page-title">${se(o)}</h1>
+              <p class="dash-page-subtitle">${be(o)}</p>
             </div>
           </div>
           <div class="dash-topbar-right">
             <div class="dash-user-menu" id="user-menu">
               <button class="dash-user-trigger" id="user-trigger">
-                <div class="dash-avatar">${(Q()||e.email||"D").charAt(0).toUpperCase()}</div>
-                <span class="dash-user-name">${Q()||e.email||"Swimmer"}</span>
+                <div class="dash-avatar">${(X()||e.email||"D").charAt(0).toUpperCase()}</div>
+                <span class="dash-user-name">${X()||e.email||"Swimmer"}</span>
                 <span class="dash-dropdown-arrow">▾</span>
               </button>
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
@@ -89,11 +89,11 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
 
         <!-- Dynamic Content -->
         <div class="dash-content">
-          ${se(o,"swimmer")}
+          ${te(o,"swimmer")}
         </div>
       </main>
     </div>
-  `,ne(),x(),te()}function he(e){const a=document.getElementById("app");a.innerHTML=`
+  `,ie(),x(),ne()}function ge(e){const a=document.getElementById("app");a.innerHTML=`
     <div class="dash-layout">
       <!-- Sidebar -->
       <aside class="dash-sidebar" id="dash-sidebar">
@@ -140,7 +140,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
               <span></span><span></span><span></span>
             </button>
             <div>
-              <h1 class="dash-page-title">Coach: ${ae(o,"coach")}</h1>
+              <h1 class="dash-page-title">Coach: ${se(o,"coach")}</h1>
               <p class="dash-page-subtitle">Managing the Dragon Swim Team roster and sessions</p>
             </div>
           </div>
@@ -161,11 +161,11 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
 
         <!-- Dynamic Content -->
         <div class="dash-content">
-          ${se(o,"coach")}
+          ${te(o,"coach")}
         </div>
       </main>
     </div>
-  `,ne(),x(),te()}function Q(){if(!d||!d.parent)return null;const e=d.parent;return[e.firstName,e.lastName].filter(Boolean).join(" ")||null}function ae(e,a="swimmer"){return a==="coach"?{overview:"Coach Dashboard",roster:"Team Roster",meets:"Meet Management",schedule:"Season Schedule"}[e]||"Coach Dashboard":{overview:"Dashboard",profile:"Family Profile",plans:"Swim Plans",meets:"Swim Meets",schedule:"Practice Schedule"}[e]||"Dashboard"}function ge(e){return{overview:"Overview of your swim season at a glance",profile:"Manage your family information and swimmers",plans:"Track and manage your training plans",meets:"View registered and upcoming competitions",schedule:"Your weekly practice timetable"}[e]||""}function se(e,a="swimmer"){if(a==="coach")switch(e){case"overview":return X();case"roster":return be();case"meets":return Z();case"schedule":return _();default:return X()}switch(e){case"overview":return ye();case"profile":return Ee();case"plans":return Se();case"meets":return Z();case"schedule":return _();default:return""}}function te(){const e=document.getElementById("sidebar-theme-icon");if(e){const a=document.documentElement.getAttribute("data-theme")==="dark";e.textContent=a?"☀️":"🌙"}}function X(){return`
+  `,ie(),x(),ne()}function X(){if(!d||!d.parent)return null;const e=d.parent;return[e.firstName,e.lastName].filter(Boolean).join(" ")||null}function se(e,a="swimmer"){return a==="coach"?{overview:"Coach Dashboard",roster:"Team Roster",meets:"Meet Management",schedule:"Season Schedule"}[e]||"Coach Dashboard":{overview:"Dashboard",profile:"Family Profile",plans:"Swim Plans",meets:"Swim Meets",schedule:"Practice Schedule"}[e]||"Dashboard"}function be(e){return{overview:"Overview of your swim season at a glance",profile:"Manage your family information and swimmers",plans:"Track and manage your training plans",meets:"View registered and upcoming competitions",schedule:"Your weekly practice timetable"}[e]||""}function te(e,a="swimmer"){if(a==="coach")switch(e){case"overview":return Z();case"roster":return ye();case"meets":return _();case"schedule":return ee();default:return Z()}switch(e){case"overview":return fe();case"profile":return Se();case"plans":return ke();case"meets":return _();case"schedule":return ee();default:return""}}function ne(){const e=document.getElementById("sidebar-theme-icon");if(e){const a=document.documentElement.getAttribute("data-theme")==="dark";e.textContent=a?"☀️":"🌙"}}function Z(){return`
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${C.length}</div>
@@ -214,7 +214,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         </div>
       </div>
     </div>
-  `}function be(){return`
+  `}function ye(){return`
     <div class="dash-panel">
       <div class="dash-panel-header" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h3 class="dash-panel-title">Team Management</h3>
@@ -242,7 +242,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         </table>
       </div>
     </div>
-  `}function ye(){const e=b.filter(s=>s.status!=="Completed").length,a=b.filter(s=>s.status==="Completed").length,n=f.filter(s=>s.status!=="Completed").length;return`
+  `}function fe(){const e=b.filter(s=>s.status!=="Completed").length,a=b.filter(s=>s.status==="Completed").length,n=f.filter(s=>s.status!=="Completed").length;return`
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${b.length}</div>
@@ -266,13 +266,13 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
       <div class="dash-panel">
         <h3 class="dash-panel-title">Active Swim Plans</h3>
         <div class="dash-panel-body">
-          ${b.filter(s=>s.status!=="Completed").map(s=>fe(s)).join("")}
+          ${b.filter(s=>s.status!=="Completed").map(s=>we(s)).join("")}
         </div>
       </div>
       <div class="dash-panel">
         <h3 class="dash-panel-title">Upcoming Meets</h3>
         <div class="dash-panel-body">
-          ${f.filter(s=>s.status!=="Completed").map(s=>we(s)).join("")}
+          ${f.filter(s=>s.status!=="Completed").map(s=>$e(s)).join("")}
         </div>
       </div>
     </div>
@@ -280,10 +280,10 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
     <div class="dash-panel">
       <h3 class="dash-panel-title">Today's Practice</h3>
       <div class="dash-panel-body">
-        ${$e()}
+        ${Ee()}
       </div>
     </div>
-  `}function fe(e){return`
+  `}function we(e){return`
     <div class="dash-mini-card">
       <div class="dash-mini-top">
         <span class="dash-mini-name">${e.name}</span>
@@ -294,7 +294,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         <span class="dash-progress-pct">${e.progress}%</span>
       </div>
     </div>
-  `}function we(e){const a=e.status||"Open";return`
+  `}function $e(e){const a=e.status||"Open";return`
     <div class="dash-mini-card">
       <div class="dash-mini-top">
         <span class="dash-mini-name">${e.name||"Untitled Meet"}</span>
@@ -302,7 +302,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
       </div>
       <div class="dash-mini-meta">${e.date||""} · ${e.location||""}</div>
     </div>
-  `}function $e(){const a=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()],n=D.filter(s=>s.day===a);return n.length===0?`<p class="dash-empty">No practices scheduled for today (${a}). Rest day! 🎉</p>`:n.map(s=>`
+  `}function Ee(){const a=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()],n=D.filter(s=>s.day===a);return n.length===0?`<p class="dash-empty">No practices scheduled for today (${a}). Rest day! 🎉</p>`:n.map(s=>`
     <div class="dash-mini-card">
       <div class="dash-mini-top">
         <span class="dash-mini-name">${s.focus}</span>
@@ -310,7 +310,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
       </div>
       <div class="dash-mini-meta">${s.time} · ${s.coach}</div>
     </div>
-  `).join("")}function Ee(){if(!d)return`<div class="dash-panel" style="text-align: center; padding: 3rem;">
+  `).join("")}function Se(){if(!d)return`<div class="dash-panel" style="text-align: center; padding: 3rem;">
       <p class="dash-empty">No family registration found.</p>
       <p style="margin-top: 1rem;"><a href="/dragonwebsite/registration.html" class="btn btn-primary">Complete Registration</a></p>
     </div>`;const e=d.parent||{},a=d.spouse,n=d.swimmers||[],s=d.emergencyContact||{};return`
@@ -461,7 +461,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         </div>
       </div>
     </div>
-  `}function Se(){return`
+  `}function ke(){return`
     <div class="dash-cards-grid">
       ${b.map(e=>`
         <div class="dash-card">
@@ -490,7 +490,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         </div>
       `).join("")}
     </div>
-  `}function Z(){const e=v==="coach";return`
+  `}function _(){const e=v==="coach";return`
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">Upcoming Meets</h2>
       ${e?'<button class="btn btn-primary btn-sm" id="add-meet-btn">+ Add Meet</button>':""}
@@ -538,7 +538,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         </div>
       `).join("")}
     </div>
-  `}function _(){const e=v==="coach",a=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];return`
+  `}function ee(){const e=v==="coach",a=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];return`
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">Weekly Schedule</h2>
       ${e?'<button class="btn btn-primary btn-sm" id="add-session-btn">+ Add Session</button>':""}
@@ -583,7 +583,7 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
           </div>
         `}).join("")}
     </div>
-  `}function ke(e,a){const n=document.createElement("div");n.className="confirm-overlay",n.innerHTML=`
+  `}function Ie(e,a){const n=document.createElement("div");n.className="confirm-overlay",n.innerHTML=`
     <div class="confirm-modal">
       <h3 class="confirm-title">Remove Swimmer</h3>
       <p class="confirm-body">You are about to remove <strong style="color: var(--color-accent, #dc3545);">${e}</strong> from your family registration.</p>
@@ -593,4 +593,4 @@ import{i as x,t as de}from"./theme-toggle-CI3g1rpd.js";import{o as oe,h as le,g 
         <button class="btn btn-sm" id="confirm-delete" style="background: var(--color-accent, #dc3545); color: white; border: none;">Delete</button>
       </div>
     </div>
-  `,document.body.appendChild(n),n.querySelector("#confirm-cancel").addEventListener("click",()=>n.remove()),n.querySelector("#confirm-delete").addEventListener("click",async()=>{n.remove();const s=[...d.swimmers];s[a]={...s[a],deleted:!0,deletedAt:new Date().toISOString()};try{await B(h(m,"registrations",E),{swimmers:s}),d.swimmers=s,o="profile",u()}catch(i){console.error("Error marking swimmer deleted:",i),alert("Failed. Please try again.")}}),n.addEventListener("click",s=>{s.target===n&&n.remove()})}function ne(){var i,w,L,M,N,A,P,T,j,R,q,F,O,U,W,H;document.querySelectorAll(".dash-nav-item[data-tab]").forEach(t=>{t.addEventListener("click",()=>{o=t.dataset.tab,u()})}),(i=document.getElementById("dash-theme-toggle"))==null||i.addEventListener("click",()=>{de(),u()});const e=document.getElementById("dash-hamburger"),a=document.getElementById("dash-sidebar");e==null||e.addEventListener("click",()=>{a.classList.toggle("open")}),document.querySelectorAll(".dash-register-btn").forEach(t=>{t.addEventListener("click",()=>{window.location.href="/dragonwebsite/registration.html"})}),(w=document.getElementById("sidebar-signout"))==null||w.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(t){console.error("Error signing out:",t)}});const n=document.getElementById("user-trigger"),s=document.getElementById("user-dropdown");n==null||n.addEventListener("click",t=>{t.stopPropagation(),s.style.display=s.style.display==="none"?"block":"none"}),document.addEventListener("click",()=>{s&&(s.style.display="none")}),(L=document.getElementById("menu-profile"))==null||L.addEventListener("click",()=>{o="profile",s.style.display="none",u()}),(M=document.getElementById("menu-signout"))==null||M.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(t){console.error("Error signing out:",t)}}),(N=document.getElementById("edit-contact-btn"))==null||N.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(t=>t.style.display="none"),document.querySelectorAll(".profile-edit-field").forEach(t=>t.style.display="block"),document.getElementById("edit-actions").style.display="flex",document.getElementById("edit-contact-btn").style.display="none"}),(A=document.getElementById("cancel-contact-btn"))==null||A.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(t=>t.style.display=""),document.querySelectorAll(".profile-edit-field").forEach(t=>t.style.display="none"),document.getElementById("edit-actions").style.display="none",document.getElementById("edit-contact-btn").style.display=""}),(P=document.getElementById("save-contact-btn"))==null||P.addEventListener("click",async()=>{var l,r,c,p,$,z;const t={"parent.phone":((l=document.getElementById("edit-parent-phone"))==null?void 0:l.value.trim())||"","parent.address":((r=document.getElementById("edit-parent-address"))==null?void 0:r.value.trim())||""};d.spouse&&(t["spouse.phone"]=((c=document.getElementById("edit-spouse-phone"))==null?void 0:c.value.trim())||"",t["spouse.email"]=((p=document.getElementById("edit-spouse-email"))==null?void 0:p.value.trim())||""),t["emergencyContact.name"]=(($=document.getElementById("edit-emergency-name"))==null?void 0:$.value.trim())||"",t["emergencyContact.phone"]=((z=document.getElementById("edit-emergency-phone"))==null?void 0:z.value.trim())||"";try{await B(h(m,"registrations",E),t),d.parent.phone=t["parent.phone"],d.parent.address=t["parent.address"],d.spouse&&(d.spouse.phone=t["spouse.phone"],d.spouse.email=t["spouse.email"]),d.emergencyContact.name=t["emergencyContact.name"],d.emergencyContact.phone=t["emergencyContact.phone"],o="profile",u()}catch(ie){console.error("Error updating contact:",ie),alert("Failed to save. Please try again.")}}),(T=document.getElementById("add-swimmer-toggle-btn"))==null||T.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="block",document.getElementById("add-swimmer-toggle-btn").style.display="none"}),(j=document.getElementById("cancel-swimmer-btn"))==null||j.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="none",document.getElementById("add-swimmer-toggle-btn").style.display=""}),(R=document.getElementById("save-swimmer-btn"))==null||R.addEventListener("click",async()=>{const t=document.getElementById("new-swimmer-first").value.trim(),l=document.getElementById("new-swimmer-last").value.trim();if(!t||!l){alert("First name and last name are required.");return}const r={firstName:t,lastName:l,middleName:document.getElementById("new-swimmer-middle").value.trim()||null,gender:document.getElementById("new-swimmer-gender").value||null,dob:document.getElementById("new-swimmer-dob").value||null,usaSwimmingId:document.getElementById("new-swimmer-usaId").value.trim()||null,joinDate:null},c=[...d.swimmers,r];try{await B(h(m,"registrations",E),{swimmers:c}),d.swimmers=c,o="profile",u()}catch(p){console.error("Error adding swimmer:",p),alert("Failed to add swimmer. Please try again.")}}),document.querySelectorAll(".delete-swimmer-btn").forEach(t=>{t.addEventListener("click",()=>{const l=parseInt(t.dataset.index),r=d.swimmers[l],c=[r.firstName,r.lastName].filter(Boolean).join(" ");ke(c,l)})}),v==="coach"&&((q=document.getElementById("add-meet-btn"))==null||q.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="block"}),(F=document.getElementById("cancel-meet-btn"))==null||F.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="none"}),(O=document.getElementById("save-meet-btn"))==null||O.addEventListener("click",async()=>{const t=document.getElementById("meet-name").value,l=document.getElementById("meet-date").value,r=document.getElementById("meet-location").value,c=document.getElementById("meet-events").value;if(!t||!l){alert("Please provide at least a name and date.");return}try{await J(y(m,"meets"),{name:t,date:l,location:r,events:c.split(",").map(p=>p.trim()),status:"Open",createdAt:new Date}),document.getElementById("add-meet-form").style.display="none"}catch(p){console.error("Error adding meet:",p)}}),document.querySelectorAll(".delete-meet").forEach(t=>{t.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this meet?"))try{await V(h(m,"meets",t.dataset.id))}catch(l){console.error("Error deleting meet:",l)}})}),(U=document.getElementById("add-session-btn"))==null||U.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="block"}),(W=document.getElementById("cancel-session-btn"))==null||W.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="none"}),(H=document.getElementById("save-session-btn"))==null||H.addEventListener("click",async()=>{const t=document.getElementById("session-day").value,l=document.getElementById("session-time").value,r=document.getElementById("session-group").value,c=document.getElementById("session-focus").value,p=document.getElementById("session-coach").value;if(!l||!r){alert("Please provide time and group.");return}try{await J(y(m,"schedules"),{day:t,time:l,group:r,focus:c,coach:p,createdAt:new Date}),document.getElementById("add-session-form").style.display="none"}catch($){console.error("Error adding session:",$)}}),document.querySelectorAll(".delete-session").forEach(t=>{t.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this session?"))try{await V(h(m,"schedules",t.dataset.id))}catch(l){console.error("Error deleting session:",l)}})}))}pe();
+  `,document.body.appendChild(n),n.querySelector("#confirm-cancel").addEventListener("click",()=>n.remove()),n.querySelector("#confirm-delete").addEventListener("click",async()=>{n.remove();const s=[...d.swimmers];s[a]={...s[a],deleted:!0,deletedAt:new Date().toISOString()};try{await B(h(m,"registrations",E),{swimmers:s}),d.swimmers=s,o="profile",u()}catch(i){console.error("Error marking swimmer deleted:",i),alert("Failed. Please try again.")}}),n.addEventListener("click",s=>{s.target===n&&n.remove()})}function ie(){var i,w,L,M,N,A,P,T,j,R,q,F,O,U,W,H;document.querySelectorAll(".dash-nav-item[data-tab]").forEach(t=>{t.addEventListener("click",()=>{o=t.dataset.tab,u()})}),(i=document.getElementById("dash-theme-toggle"))==null||i.addEventListener("click",()=>{oe(),u()});const e=document.getElementById("dash-hamburger"),a=document.getElementById("dash-sidebar");e==null||e.addEventListener("click",()=>{a.classList.toggle("open")}),document.querySelectorAll(".dash-register-btn").forEach(t=>{t.addEventListener("click",()=>{window.location.href="/dragonwebsite/registration.html"})}),(w=document.getElementById("sidebar-signout"))==null||w.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(t){console.error("Error signing out:",t)}});const n=document.getElementById("user-trigger"),s=document.getElementById("user-dropdown");n==null||n.addEventListener("click",t=>{t.stopPropagation(),s.style.display=s.style.display==="none"?"block":"none"}),document.addEventListener("click",()=>{s&&(s.style.display="none")}),(L=document.getElementById("menu-profile"))==null||L.addEventListener("click",()=>{o="profile",s.style.display="none",u()}),(M=document.getElementById("menu-signout"))==null||M.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(t){console.error("Error signing out:",t)}}),(N=document.getElementById("edit-contact-btn"))==null||N.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(t=>t.style.display="none"),document.querySelectorAll(".profile-edit-field").forEach(t=>t.style.display="block"),document.getElementById("edit-actions").style.display="flex",document.getElementById("edit-contact-btn").style.display="none"}),(A=document.getElementById("cancel-contact-btn"))==null||A.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(t=>t.style.display=""),document.querySelectorAll(".profile-edit-field").forEach(t=>t.style.display="none"),document.getElementById("edit-actions").style.display="none",document.getElementById("edit-contact-btn").style.display=""}),(P=document.getElementById("save-contact-btn"))==null||P.addEventListener("click",async()=>{var l,r,c,p,$,z;const t={"parent.phone":((l=document.getElementById("edit-parent-phone"))==null?void 0:l.value.trim())||"","parent.address":((r=document.getElementById("edit-parent-address"))==null?void 0:r.value.trim())||""};d.spouse&&(t["spouse.phone"]=((c=document.getElementById("edit-spouse-phone"))==null?void 0:c.value.trim())||"",t["spouse.email"]=((p=document.getElementById("edit-spouse-email"))==null?void 0:p.value.trim())||""),t["emergencyContact.name"]=(($=document.getElementById("edit-emergency-name"))==null?void 0:$.value.trim())||"",t["emergencyContact.phone"]=((z=document.getElementById("edit-emergency-phone"))==null?void 0:z.value.trim())||"";try{await B(h(m,"registrations",E),t),d.parent.phone=t["parent.phone"],d.parent.address=t["parent.address"],d.spouse&&(d.spouse.phone=t["spouse.phone"],d.spouse.email=t["spouse.email"]),d.emergencyContact.name=t["emergencyContact.name"],d.emergencyContact.phone=t["emergencyContact.phone"],o="profile",u()}catch(de){console.error("Error updating contact:",de),alert("Failed to save. Please try again.")}}),(T=document.getElementById("add-swimmer-toggle-btn"))==null||T.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="block",document.getElementById("add-swimmer-toggle-btn").style.display="none"}),(j=document.getElementById("cancel-swimmer-btn"))==null||j.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="none",document.getElementById("add-swimmer-toggle-btn").style.display=""}),(R=document.getElementById("save-swimmer-btn"))==null||R.addEventListener("click",async()=>{const t=document.getElementById("new-swimmer-first").value.trim(),l=document.getElementById("new-swimmer-last").value.trim();if(!t||!l){alert("First name and last name are required.");return}const r={firstName:t,lastName:l,middleName:document.getElementById("new-swimmer-middle").value.trim()||null,gender:document.getElementById("new-swimmer-gender").value||null,dob:document.getElementById("new-swimmer-dob").value||null,usaSwimmingId:document.getElementById("new-swimmer-usaId").value.trim()||null,joinDate:null},c=[...d.swimmers,r];try{await B(h(m,"registrations",E),{swimmers:c}),d.swimmers=c,o="profile",u()}catch(p){console.error("Error adding swimmer:",p),alert("Failed to add swimmer. Please try again.")}}),document.querySelectorAll(".delete-swimmer-btn").forEach(t=>{t.addEventListener("click",()=>{const l=parseInt(t.dataset.index),r=d.swimmers[l],c=[r.firstName,r.lastName].filter(Boolean).join(" ");Ie(c,l)})}),v==="coach"&&((q=document.getElementById("add-meet-btn"))==null||q.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="block"}),(F=document.getElementById("cancel-meet-btn"))==null||F.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="none"}),(O=document.getElementById("save-meet-btn"))==null||O.addEventListener("click",async()=>{const t=document.getElementById("meet-name").value,l=document.getElementById("meet-date").value,r=document.getElementById("meet-location").value,c=document.getElementById("meet-events").value;if(!t||!l){alert("Please provide at least a name and date.");return}try{await V(y(m,"meets"),{name:t,date:l,location:r,events:c.split(",").map(p=>p.trim()),status:"Open",createdAt:new Date}),document.getElementById("add-meet-form").style.display="none"}catch(p){console.error("Error adding meet:",p)}}),document.querySelectorAll(".delete-meet").forEach(t=>{t.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this meet?"))try{await J(h(m,"meets",t.dataset.id))}catch(l){console.error("Error deleting meet:",l)}})}),(U=document.getElementById("add-session-btn"))==null||U.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="block"}),(W=document.getElementById("cancel-session-btn"))==null||W.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="none"}),(H=document.getElementById("save-session-btn"))==null||H.addEventListener("click",async()=>{const t=document.getElementById("session-day").value,l=document.getElementById("session-time").value,r=document.getElementById("session-group").value,c=document.getElementById("session-focus").value,p=document.getElementById("session-coach").value;if(!l||!r){alert("Please provide time and group.");return}try{await V(y(m,"schedules"),{day:t,time:l,group:r,focus:c,coach:p,createdAt:new Date}),document.getElementById("add-session-form").style.display="none"}catch($){console.error("Error adding session:",$)}}),document.querySelectorAll(".delete-session").forEach(t=>{t.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this session?"))try{await J(h(m,"schedules",t.dataset.id))}catch(l){console.error("Error deleting session:",l)}})}))}ue();
