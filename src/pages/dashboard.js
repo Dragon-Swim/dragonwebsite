@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme, updateToggleIcon } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, getDocs, onAuthStateChanged, signOut } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
 
 initTheme();
 
@@ -59,8 +59,18 @@ function initApp() {
 
   console.log("Dashboard: Initializing auth listener...");
 
+  // Timeout fallback — force render if auth listener hasn't fired after 5 seconds
+  let hasRendered = false;
+  const timeoutFallback = setTimeout(() => {
+    if (!hasRendered) {
+      console.warn("Dashboard: Auth listener timed out — redirecting to signin");
+      window.location.href = import.meta.env.BASE_URL + 'signin.html';
+    }
+  }, 5000);
+
   // Add auth check before rendering content
   onAuthStateChanged(auth, async (user) => {
+    clearTimeout(timeoutFallback);
     if (!user) {
       console.log("Dashboard: No user authenticated, redirecting to signin...");
       window.location.href = import.meta.env.BASE_URL + 'signin.html';
@@ -134,16 +144,11 @@ function initDataListeners() {
 
 async function fetchFamilyData() {
   if (!currentUser) return;
-  const qReg = query(
-    collection(db, "registrations"),
-    where("uid", "==", currentUser.uid),
-    orderBy("createdAt", "desc"),
-    limit(1)
-  );
-  const snapshot = await getDocs(qReg);
-  if (!snapshot.empty) {
-    familyDataId = snapshot.docs[0].id;
-    familyData = snapshot.docs[0].data();
+  const ref = doc(db, "registrations", currentUser.uid);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    familyDataId = snap.id;
+    familyData = snap.data();
   }
 }
 

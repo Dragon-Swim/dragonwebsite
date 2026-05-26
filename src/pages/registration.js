@@ -13,7 +13,7 @@ import './registration.css';
 import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
-import { auth, db, collection, addDoc, onAuthStateChanged } from '../utils/firebase.js';
+import { auth, db, doc, setDoc, onAuthStateChanged } from '../utils/firebase.js';
 import { t } from '../utils/i18n.js';
 
 initTheme();
@@ -313,8 +313,7 @@ function bindEvents() {
     };
 
     try {
-      await addDoc(collection(db, 'registrations'), {
-        uid: currentUser.uid,
+      await setDoc(doc(db, 'registrations', currentUser.uid), {
         parent,
         spouse,
         swimmers,
