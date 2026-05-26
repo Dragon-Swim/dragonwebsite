@@ -6,16 +6,16 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       </style>
     </div>
-  `,console.log("Dashboard: Initializing auth listener..."),le(S,async a=>{if(!a){console.log("Dashboard: No user authenticated, redirecting to signin..."),window.location.href="/dragonwebsite/signin.html";return}g=a,console.log("Dashboard: User authenticated:",a.email);try{console.log("Dashboard: Fetching user document...");const n=await re(h(m,"users",a.uid));v=a.email&&a.email.toLowerCase()==="dragonswim@outlook.com"?"coach":n.exists()?n.data().role:"swimmer",console.log("Dashboard: Detected role:",v),K?(console.log("Dashboard: Refreshing UI..."),u()):(console.log("Dashboard: Initializing data listeners..."),ve(),K=!0,u())}catch(n){console.error("Dashboard Critical Error:",n),e.innerHTML=`
+  `,console.log("Dashboard: Initializing auth listener...");const s=setTimeout(()=>{console.warn("Dashboard: Auth listener timed out — redirecting to signin"),window.location.href="/dragonwebsite/signin.html"},5e3);le(S,async t=>{if(clearTimeout(s),!t){console.log("Dashboard: No user authenticated, redirecting to signin..."),window.location.href="/dragonwebsite/signin.html";return}g=t,console.log("Dashboard: User authenticated:",t.email);try{console.log("Dashboard: Fetching user document...");const a=await re(h(m,"users",t.uid));v=t.email&&t.email.toLowerCase()==="dragonswim@outlook.com"?"coach":a.exists()?a.data().role:"swimmer",console.log("Dashboard: Detected role:",v),K?(console.log("Dashboard: Refreshing UI..."),u()):(console.log("Dashboard: Initializing data listeners..."),ve(),K=!0,u())}catch(a){console.error("Dashboard Critical Error:",a),e.innerHTML=`
         <div style="padding: 40px; text-align: center; font-family: sans-serif; max-width: 500px; margin: 100px auto; border: 1px solid #fee2e2; background: #fef2f2; border-radius: 12px; color: #991b1b;">
           <h2 style="margin-bottom: 16px;">Failed to load dashboard</h2>
           <p style="margin-bottom: 24px;">Something went wrong while setting up your workspace. This might be due to a connection issue or a configuration error.</p>
           <code style="display: block; padding: 12px; background: #fee2e2; border-radius: 6px; font-size: 13px; text-align: left; overflow-x: auto; margin-bottom: 24px;">
-            ${n.message||"Unknown error"}
+            ${a.message||"Unknown error"}
           </code>
           <button onclick="window.location.reload()" style="padding: 10px 20px; background: #991b1b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Retry Loading</button>
         </div>
-      `,v="swimmer"}})}function ve(){const e=k(y(m,"meets"),I("createdAt","desc"));G(e,n=>{f=n.docs.map(s=>({id:s.id,...s.data()})),u()},n=>{console.error("Error listening to meets:",n)});const a=k(y(m,"schedules"),I("createdAt","asc"));G(a,n=>{D=n.docs.map(s=>({id:s.id,...s.data()})),u()},n=>{console.error("Error listening to schedules:",n)}),ae()}async function ae(){if(!g)return;const e=k(y(m,"registrations"),me("uid","==",g.uid),I("createdAt","desc"),ce(1)),a=await pe(e);a.empty||(E=a.docs[0].id,d=a.docs[0].data())}function u(){g&&ae().then(()=>{Q()}).catch(e=>{console.error("Error fetching family data:",e),Q()})}function Q(){v==="coach"?ge(g):he(g)}function he(e){const a=document.getElementById("app");a.innerHTML=`
+      `,v="swimmer"}})}function ve(){const e=k(y(m,"meets"),I("createdAt","desc"));G(e,t=>{f=t.docs.map(a=>({id:a.id,...a.data()})),u()},t=>{console.error("Error listening to meets:",t)});const s=k(y(m,"schedules"),I("createdAt","asc"));G(s,t=>{D=t.docs.map(a=>({id:a.id,...a.data()})),u()},t=>{console.error("Error listening to schedules:",t)}),ae()}async function ae(){if(!g)return;const e=k(y(m,"registrations"),me("uid","==",g.uid),I("createdAt","desc"),ce(1)),s=await pe(e);s.empty||(E=s.docs[0].id,d=s.docs[0].data())}function u(){g&&ae().then(()=>{Q()}).catch(e=>{console.error("Error fetching family data:",e),Q()})}function Q(){v==="coach"?ge(g):he(g)}function he(e){const s=document.getElementById("app");s.innerHTML=`
     <div class="dash-layout">
       <!-- Sidebar -->
       <aside class="dash-sidebar" id="dash-sidebar">
@@ -93,7 +93,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         </div>
       </main>
     </div>
-  `,ie(),x(),ne()}function ge(e){const a=document.getElementById("app");a.innerHTML=`
+  `,ie(),x(),ne()}function ge(e){const s=document.getElementById("app");s.innerHTML=`
     <div class="dash-layout">
       <!-- Sidebar -->
       <aside class="dash-sidebar" id="dash-sidebar">
@@ -165,7 +165,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         </div>
       </main>
     </div>
-  `,ie(),x(),ne()}function X(){if(!d||!d.parent)return null;const e=d.parent;return[e.firstName,e.lastName].filter(Boolean).join(" ")||null}function se(e,a="swimmer"){return a==="coach"?{overview:"Coach Dashboard",roster:"Team Roster",meets:"Meet Management",schedule:"Season Schedule"}[e]||"Coach Dashboard":{overview:"Dashboard",profile:"Family Profile",plans:"Swim Plans",meets:"Swim Meets",schedule:"Practice Schedule"}[e]||"Dashboard"}function be(e){return{overview:"Overview of your swim season at a glance",profile:"Manage your family information and swimmers",plans:"Track and manage your training plans",meets:"View registered and upcoming competitions",schedule:"Your weekly practice timetable"}[e]||""}function te(e,a="swimmer"){if(a==="coach")switch(e){case"overview":return Z();case"roster":return ye();case"meets":return _();case"schedule":return ee();default:return Z()}switch(e){case"overview":return fe();case"profile":return Se();case"plans":return ke();case"meets":return _();case"schedule":return ee();default:return""}}function ne(){const e=document.getElementById("sidebar-theme-icon");if(e){const a=document.documentElement.getAttribute("data-theme")==="dark";e.textContent=a?"☀️":"🌙"}}function Z(){return`
+  `,ie(),x(),ne()}function X(){if(!d||!d.parent)return null;const e=d.parent;return[e.firstName,e.lastName].filter(Boolean).join(" ")||null}function se(e,s="swimmer"){return s==="coach"?{overview:"Coach Dashboard",roster:"Team Roster",meets:"Meet Management",schedule:"Season Schedule"}[e]||"Coach Dashboard":{overview:"Dashboard",profile:"Family Profile",plans:"Swim Plans",meets:"Swim Meets",schedule:"Practice Schedule"}[e]||"Dashboard"}function be(e){return{overview:"Overview of your swim season at a glance",profile:"Manage your family information and swimmers",plans:"Track and manage your training plans",meets:"View registered and upcoming competitions",schedule:"Your weekly practice timetable"}[e]||""}function te(e,s="swimmer"){if(s==="coach")switch(e){case"overview":return Z();case"roster":return ye();case"meets":return _();case"schedule":return ee();default:return Z()}switch(e){case"overview":return fe();case"profile":return Se();case"plans":return ke();case"meets":return _();case"schedule":return ee();default:return""}}function ne(){const e=document.getElementById("sidebar-theme-icon");if(e){const s=document.documentElement.getAttribute("data-theme")==="dark";e.textContent=s?"☀️":"🌙"}}function Z(){return`
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${C.length}</div>
@@ -242,7 +242,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         </table>
       </div>
     </div>
-  `}function fe(){const e=b.filter(s=>s.status!=="Completed").length,a=b.filter(s=>s.status==="Completed").length,n=f.filter(s=>s.status!=="Completed").length;return`
+  `}function fe(){const e=b.filter(a=>a.status!=="Completed").length,s=b.filter(a=>a.status==="Completed").length,t=f.filter(a=>a.status!=="Completed").length;return`
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${b.length}</div>
@@ -253,11 +253,11 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         <div class="dash-stat-label">Active Plans</div>
       </div>
       <div class="dash-stat-card accent">
-        <div class="dash-stat-number">${a}</div>
+        <div class="dash-stat-number">${s}</div>
         <div class="dash-stat-label">Completed</div>
       </div>
       <div class="dash-stat-card">
-        <div class="dash-stat-number">${n}</div>
+        <div class="dash-stat-number">${t}</div>
         <div class="dash-stat-label">Upcoming Meets</div>
       </div>
     </div>
@@ -266,13 +266,13 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
       <div class="dash-panel">
         <h3 class="dash-panel-title">Active Swim Plans</h3>
         <div class="dash-panel-body">
-          ${b.filter(s=>s.status!=="Completed").map(s=>we(s)).join("")}
+          ${b.filter(a=>a.status!=="Completed").map(a=>we(a)).join("")}
         </div>
       </div>
       <div class="dash-panel">
         <h3 class="dash-panel-title">Upcoming Meets</h3>
         <div class="dash-panel-body">
-          ${f.filter(s=>s.status!=="Completed").map(s=>$e(s)).join("")}
+          ${f.filter(a=>a.status!=="Completed").map(a=>$e(a)).join("")}
         </div>
       </div>
     </div>
@@ -294,26 +294,26 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         <span class="dash-progress-pct">${e.progress}%</span>
       </div>
     </div>
-  `}function $e(e){const a=e.status||"Open";return`
+  `}function $e(e){const s=e.status||"Open";return`
     <div class="dash-mini-card">
       <div class="dash-mini-top">
         <span class="dash-mini-name">${e.name||"Untitled Meet"}</span>
-        <span class="status-badge status-${a.toLowerCase().replace(" ","-")}">${a}</span>
+        <span class="status-badge status-${s.toLowerCase().replace(" ","-")}">${s}</span>
       </div>
       <div class="dash-mini-meta">${e.date||""} · ${e.location||""}</div>
     </div>
-  `}function Ee(){const a=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()],n=D.filter(s=>s.day===a);return n.length===0?`<p class="dash-empty">No practices scheduled for today (${a}). Rest day! 🎉</p>`:n.map(s=>`
+  `}function Ee(){const s=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()],t=D.filter(a=>a.day===s);return t.length===0?`<p class="dash-empty">No practices scheduled for today (${s}). Rest day! 🎉</p>`:t.map(a=>`
     <div class="dash-mini-card">
       <div class="dash-mini-top">
-        <span class="dash-mini-name">${s.focus}</span>
-        <span class="group-badge">${s.group}</span>
+        <span class="dash-mini-name">${a.focus}</span>
+        <span class="group-badge">${a.group}</span>
       </div>
-      <div class="dash-mini-meta">${s.time} · ${s.coach}</div>
+      <div class="dash-mini-meta">${a.time} · ${a.coach}</div>
     </div>
   `).join("")}function Se(){if(!d)return`<div class="dash-panel" style="text-align: center; padding: 3rem;">
       <p class="dash-empty">No family registration found.</p>
       <p style="margin-top: 1rem;"><a href="/dragonwebsite/registration.html" class="btn btn-primary">Complete Registration</a></p>
-    </div>`;const e=d.parent||{},a=d.spouse,n=d.swimmers||[],s=d.emergencyContact||{};return`
+    </div>`;const e=d.parent||{},s=d.spouse,t=d.swimmers||[],a=d.emergencyContact||{};return`
     <div class="profile-grid">
       <!-- Left Column -->
       <div class="profile-col">
@@ -348,27 +348,27 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
           </div>
         </div>
 
-        ${a?`
+        ${s?`
         <div class="dash-panel">
           <h3>Spouse / Partner</h3>
           <div class="profile-fields">
             <div class="profile-field">
               <span class="profile-label">Name</span>
-              <span class="profile-value">${[a.firstName,a.middleName,a.lastName].filter(Boolean).join(" ")||"—"}</span>
+              <span class="profile-value">${[s.firstName,s.middleName,s.lastName].filter(Boolean).join(" ")||"—"}</span>
             </div>
             <div class="profile-field">
               <span class="profile-label">Gender</span>
-              <span class="profile-value">${a.gender||"—"}</span>
+              <span class="profile-value">${s.gender||"—"}</span>
             </div>
             <div class="profile-field">
               <span class="profile-label">Phone</span>
-              <span class="profile-value profile-display" id="display-spouse-phone">${a.phone||"—"}</span>
-              <input class="form-input profile-input profile-edit-field" id="edit-spouse-phone" value="${a.phone||""}" />
+              <span class="profile-value profile-display" id="display-spouse-phone">${s.phone||"—"}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-spouse-phone" value="${s.phone||""}" />
             </div>
             <div class="profile-field">
               <span class="profile-label">Email</span>
-              <span class="profile-value profile-display" id="display-spouse-email">${a.email||"—"}</span>
-              <input class="form-input profile-input profile-edit-field" id="edit-spouse-email" value="${a.email||""}" />
+              <span class="profile-value profile-display" id="display-spouse-email">${s.email||"—"}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-spouse-email" value="${s.email||""}" />
             </div>
           </div>
         </div>
@@ -379,13 +379,13 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
           <div class="profile-fields">
             <div class="profile-field">
               <span class="profile-label">Name</span>
-              <span class="profile-value profile-display" id="display-emergency-name">${s.name||"—"}</span>
-              <input class="form-input profile-input profile-edit-field" id="edit-emergency-name" value="${s.name||""}" />
+              <span class="profile-value profile-display" id="display-emergency-name">${a.name||"—"}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-emergency-name" value="${a.name||""}" />
             </div>
             <div class="profile-field">
               <span class="profile-label">Phone</span>
-              <span class="profile-value profile-display" id="display-emergency-phone">${s.phone||"—"}</span>
-              <input class="form-input profile-input profile-edit-field" id="edit-emergency-phone" value="${s.phone||""}" />
+              <span class="profile-value profile-display" id="display-emergency-phone">${a.phone||"—"}</span>
+              <input class="form-input profile-input profile-edit-field" id="edit-emergency-phone" value="${a.phone||""}" />
             </div>
           </div>
         </div>
@@ -400,7 +400,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
       <div class="profile-col">
         <div class="dash-panel">
           <div class="dash-panel-header">
-            <h3>Swimmers (${n.length})</h3>
+            <h3>Swimmers (${t.length})</h3>
             <button class="btn btn-outline btn-sm" id="add-swimmer-toggle-btn">+ Add</button>
           </div>
           <div id="add-swimmer-form" style="display: none; margin-bottom: var(--space-md); padding: var(--space-md); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
@@ -443,7 +443,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
               <button class="btn btn-outline btn-sm" id="cancel-swimmer-btn">Cancel</button>
             </div>
           </div>
-          ${n.filter(i=>!i.deleted).length===0?'<p class="dash-empty">No swimmers registered.</p>':n.map((i,w)=>i.deleted?"":`
+          ${t.filter(i=>!i.deleted).length===0?'<p class="dash-empty">No swimmers registered.</p>':t.map((i,w)=>i.deleted?"":`
 
             <div class="swimmer-profile-card">
               <div class="swimmer-profile-info">
@@ -513,32 +513,32 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
     `:""}
 
     <div class="dash-cards-grid">
-      ${f.length===0?'<p class="dash-empty">No meets scheduled yet.</p>':f.map(a=>`
+      ${f.length===0?'<p class="dash-empty">No meets scheduled yet.</p>':f.map(s=>`
         <div class="dash-card">
           <div class="dash-card-header">
-            <h3 class="dash-card-title">${a.name}</h3>
-            <span class="status-badge status-${(a.status||"Open").toLowerCase().replace(" ","-")}">${a.status||"Open"}</span>
+            <h3 class="dash-card-title">${s.name}</h3>
+            <span class="status-badge status-${(s.status||"Open").toLowerCase().replace(" ","-")}">${s.status||"Open"}</span>
           </div>
           <div class="dash-card-body">
             <div class="dash-card-meta">
-              <span>📅 ${a.date}</span>
-              <span>📍 ${a.location}</span>
+              <span>📅 ${s.date}</span>
+              <span>📍 ${s.location}</span>
             </div>
             <div class="dash-card-events">
               <span class="dash-card-label">Events</span>
               <div class="dash-event-tags">
-                ${(a.events||[]).map(n=>`<span class="event-tag">${n}</span>`).join("")}
+                ${(s.events||[]).map(t=>`<span class="event-tag">${t}</span>`).join("")}
               </div>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-              ${!e&&a.status==="Open"?'<button class="btn btn-primary btn-sm dash-register-btn">Register</button>':""}
-              ${e?`<button class="btn btn-outline btn-sm delete-meet" data-id="${a.id}" style="color: var(--color-accent); border-color: var(--color-accent);">Delete</button>`:""}
+              ${!e&&s.status==="Open"?'<button class="btn btn-primary btn-sm dash-register-btn">Register</button>':""}
+              ${e?`<button class="btn btn-outline btn-sm delete-meet" data-id="${s.id}" style="color: var(--color-accent); border-color: var(--color-accent);">Delete</button>`:""}
             </div>
           </div>
         </div>
       `).join("")}
     </div>
-  `}function ee(){const e=v==="coach",a=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];return`
+  `}function ee(){const e=v==="coach",s=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];return`
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">Weekly Schedule</h2>
       ${e?'<button class="btn btn-primary btn-sm" id="add-session-btn">+ Add Session</button>':""}
@@ -549,7 +549,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         <h3 style="margin-bottom: 1rem;">New Practice Session</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
           <select id="session-day" class="form-input">
-            ${a.map(n=>`<option value="${n}">${n}</option>`).join("")}
+            ${s.map(t=>`<option value="${t}">${t}</option>`).join("")}
           </select>
           <input type="text" id="session-time" placeholder="Time (e.g. 5:00 AM)" class="form-input">
           <input type="text" id="session-group" placeholder="Group" class="form-input">
@@ -564,10 +564,10 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
     `:""}
 
     <div class="dash-schedule-grid">
-      ${a.map(n=>{const s=D.filter(i=>i.day===n);return`
+      ${s.map(t=>{const a=D.filter(i=>i.day===t);return`
           <div class="dash-schedule-day">
-            <h3 class="dash-schedule-day-name">${n}</h3>
-            ${s.length===0?'<p class="dash-empty-sm">No practice</p>':s.map(i=>`
+            <h3 class="dash-schedule-day-name">${t}</h3>
+            ${a.length===0?'<p class="dash-empty-sm">No practice</p>':a.map(i=>`
                 <div class="dash-schedule-item">
                   <div class="dash-schedule-time">${i.time}</div>
                   <div class="dash-schedule-focus">${i.focus}</div>
@@ -583,7 +583,7 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
           </div>
         `}).join("")}
     </div>
-  `}function Ie(e,a){const n=document.createElement("div");n.className="confirm-overlay",n.innerHTML=`
+  `}function Ie(e,s){const t=document.createElement("div");t.className="confirm-overlay",t.innerHTML=`
     <div class="confirm-modal">
       <h3 class="confirm-title">Remove Swimmer</h3>
       <p class="confirm-body">You are about to remove <strong style="color: var(--color-accent, #dc3545);">${e}</strong> from your family registration.</p>
@@ -593,4 +593,4 @@ import{i as x,t as oe}from"./theme-toggle-CI3g1rpd.js";import{o as le,h as re,g 
         <button class="btn btn-sm" id="confirm-delete" style="background: var(--color-accent, #dc3545); color: white; border: none;">Delete</button>
       </div>
     </div>
-  `,document.body.appendChild(n),n.querySelector("#confirm-cancel").addEventListener("click",()=>n.remove()),n.querySelector("#confirm-delete").addEventListener("click",async()=>{n.remove();const s=[...d.swimmers];s[a]={...s[a],deleted:!0,deletedAt:new Date().toISOString()};try{await B(h(m,"registrations",E),{swimmers:s}),d.swimmers=s,o="profile",u()}catch(i){console.error("Error marking swimmer deleted:",i),alert("Failed. Please try again.")}}),n.addEventListener("click",s=>{s.target===n&&n.remove()})}function ie(){var i,w,L,M,N,A,P,T,j,R,q,F,O,U,W,H;document.querySelectorAll(".dash-nav-item[data-tab]").forEach(t=>{t.addEventListener("click",()=>{o=t.dataset.tab,u()})}),(i=document.getElementById("dash-theme-toggle"))==null||i.addEventListener("click",()=>{oe(),u()});const e=document.getElementById("dash-hamburger"),a=document.getElementById("dash-sidebar");e==null||e.addEventListener("click",()=>{a.classList.toggle("open")}),document.querySelectorAll(".dash-register-btn").forEach(t=>{t.addEventListener("click",()=>{window.location.href="/dragonwebsite/registration.html"})}),(w=document.getElementById("sidebar-signout"))==null||w.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(t){console.error("Error signing out:",t)}});const n=document.getElementById("user-trigger"),s=document.getElementById("user-dropdown");n==null||n.addEventListener("click",t=>{t.stopPropagation(),s.style.display=s.style.display==="none"?"block":"none"}),document.addEventListener("click",()=>{s&&(s.style.display="none")}),(L=document.getElementById("menu-profile"))==null||L.addEventListener("click",()=>{o="profile",s.style.display="none",u()}),(M=document.getElementById("menu-signout"))==null||M.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(t){console.error("Error signing out:",t)}}),(N=document.getElementById("edit-contact-btn"))==null||N.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(t=>t.style.display="none"),document.querySelectorAll(".profile-edit-field").forEach(t=>t.style.display="block"),document.getElementById("edit-actions").style.display="flex",document.getElementById("edit-contact-btn").style.display="none"}),(A=document.getElementById("cancel-contact-btn"))==null||A.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(t=>t.style.display=""),document.querySelectorAll(".profile-edit-field").forEach(t=>t.style.display="none"),document.getElementById("edit-actions").style.display="none",document.getElementById("edit-contact-btn").style.display=""}),(P=document.getElementById("save-contact-btn"))==null||P.addEventListener("click",async()=>{var l,r,c,p,$,z;const t={"parent.phone":((l=document.getElementById("edit-parent-phone"))==null?void 0:l.value.trim())||"","parent.address":((r=document.getElementById("edit-parent-address"))==null?void 0:r.value.trim())||""};d.spouse&&(t["spouse.phone"]=((c=document.getElementById("edit-spouse-phone"))==null?void 0:c.value.trim())||"",t["spouse.email"]=((p=document.getElementById("edit-spouse-email"))==null?void 0:p.value.trim())||""),t["emergencyContact.name"]=(($=document.getElementById("edit-emergency-name"))==null?void 0:$.value.trim())||"",t["emergencyContact.phone"]=((z=document.getElementById("edit-emergency-phone"))==null?void 0:z.value.trim())||"";try{await B(h(m,"registrations",E),t),d.parent.phone=t["parent.phone"],d.parent.address=t["parent.address"],d.spouse&&(d.spouse.phone=t["spouse.phone"],d.spouse.email=t["spouse.email"]),d.emergencyContact.name=t["emergencyContact.name"],d.emergencyContact.phone=t["emergencyContact.phone"],o="profile",u()}catch(de){console.error("Error updating contact:",de),alert("Failed to save. Please try again.")}}),(T=document.getElementById("add-swimmer-toggle-btn"))==null||T.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="block",document.getElementById("add-swimmer-toggle-btn").style.display="none"}),(j=document.getElementById("cancel-swimmer-btn"))==null||j.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="none",document.getElementById("add-swimmer-toggle-btn").style.display=""}),(R=document.getElementById("save-swimmer-btn"))==null||R.addEventListener("click",async()=>{const t=document.getElementById("new-swimmer-first").value.trim(),l=document.getElementById("new-swimmer-last").value.trim();if(!t||!l){alert("First name and last name are required.");return}const r={firstName:t,lastName:l,middleName:document.getElementById("new-swimmer-middle").value.trim()||null,gender:document.getElementById("new-swimmer-gender").value||null,dob:document.getElementById("new-swimmer-dob").value||null,usaSwimmingId:document.getElementById("new-swimmer-usaId").value.trim()||null,joinDate:null},c=[...d.swimmers,r];try{await B(h(m,"registrations",E),{swimmers:c}),d.swimmers=c,o="profile",u()}catch(p){console.error("Error adding swimmer:",p),alert("Failed to add swimmer. Please try again.")}}),document.querySelectorAll(".delete-swimmer-btn").forEach(t=>{t.addEventListener("click",()=>{const l=parseInt(t.dataset.index),r=d.swimmers[l],c=[r.firstName,r.lastName].filter(Boolean).join(" ");Ie(c,l)})}),v==="coach"&&((q=document.getElementById("add-meet-btn"))==null||q.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="block"}),(F=document.getElementById("cancel-meet-btn"))==null||F.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="none"}),(O=document.getElementById("save-meet-btn"))==null||O.addEventListener("click",async()=>{const t=document.getElementById("meet-name").value,l=document.getElementById("meet-date").value,r=document.getElementById("meet-location").value,c=document.getElementById("meet-events").value;if(!t||!l){alert("Please provide at least a name and date.");return}try{await V(y(m,"meets"),{name:t,date:l,location:r,events:c.split(",").map(p=>p.trim()),status:"Open",createdAt:new Date}),document.getElementById("add-meet-form").style.display="none"}catch(p){console.error("Error adding meet:",p)}}),document.querySelectorAll(".delete-meet").forEach(t=>{t.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this meet?"))try{await J(h(m,"meets",t.dataset.id))}catch(l){console.error("Error deleting meet:",l)}})}),(U=document.getElementById("add-session-btn"))==null||U.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="block"}),(W=document.getElementById("cancel-session-btn"))==null||W.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="none"}),(H=document.getElementById("save-session-btn"))==null||H.addEventListener("click",async()=>{const t=document.getElementById("session-day").value,l=document.getElementById("session-time").value,r=document.getElementById("session-group").value,c=document.getElementById("session-focus").value,p=document.getElementById("session-coach").value;if(!l||!r){alert("Please provide time and group.");return}try{await V(y(m,"schedules"),{day:t,time:l,group:r,focus:c,coach:p,createdAt:new Date}),document.getElementById("add-session-form").style.display="none"}catch($){console.error("Error adding session:",$)}}),document.querySelectorAll(".delete-session").forEach(t=>{t.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this session?"))try{await J(h(m,"schedules",t.dataset.id))}catch(l){console.error("Error deleting session:",l)}})}))}ue();
+  `,document.body.appendChild(t),t.querySelector("#confirm-cancel").addEventListener("click",()=>t.remove()),t.querySelector("#confirm-delete").addEventListener("click",async()=>{t.remove();const a=[...d.swimmers];a[s]={...a[s],deleted:!0,deletedAt:new Date().toISOString()};try{await B(h(m,"registrations",E),{swimmers:a}),d.swimmers=a,o="profile",u()}catch(i){console.error("Error marking swimmer deleted:",i),alert("Failed. Please try again.")}}),t.addEventListener("click",a=>{a.target===t&&t.remove()})}function ie(){var i,w,L,A,M,N,P,T,j,R,q,F,O,U,W,H;document.querySelectorAll(".dash-nav-item[data-tab]").forEach(n=>{n.addEventListener("click",()=>{o=n.dataset.tab,u()})}),(i=document.getElementById("dash-theme-toggle"))==null||i.addEventListener("click",()=>{oe(),u()});const e=document.getElementById("dash-hamburger"),s=document.getElementById("dash-sidebar");e==null||e.addEventListener("click",()=>{s.classList.toggle("open")}),document.querySelectorAll(".dash-register-btn").forEach(n=>{n.addEventListener("click",()=>{window.location.href="/dragonwebsite/registration.html"})}),(w=document.getElementById("sidebar-signout"))==null||w.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(n){console.error("Error signing out:",n)}});const t=document.getElementById("user-trigger"),a=document.getElementById("user-dropdown");t==null||t.addEventListener("click",n=>{n.stopPropagation(),a.style.display=a.style.display==="none"?"block":"none"}),document.addEventListener("click",()=>{a&&(a.style.display="none")}),(L=document.getElementById("menu-profile"))==null||L.addEventListener("click",()=>{o="profile",a.style.display="none",u()}),(A=document.getElementById("menu-signout"))==null||A.addEventListener("click",async()=>{try{await Y(S),window.location.href="/dragonwebsite/signin.html"}catch(n){console.error("Error signing out:",n)}}),(M=document.getElementById("edit-contact-btn"))==null||M.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(n=>n.style.display="none"),document.querySelectorAll(".profile-edit-field").forEach(n=>n.style.display="block"),document.getElementById("edit-actions").style.display="flex",document.getElementById("edit-contact-btn").style.display="none"}),(N=document.getElementById("cancel-contact-btn"))==null||N.addEventListener("click",()=>{document.querySelectorAll(".profile-display").forEach(n=>n.style.display=""),document.querySelectorAll(".profile-edit-field").forEach(n=>n.style.display="none"),document.getElementById("edit-actions").style.display="none",document.getElementById("edit-contact-btn").style.display=""}),(P=document.getElementById("save-contact-btn"))==null||P.addEventListener("click",async()=>{var l,r,c,p,$,z;const n={"parent.phone":((l=document.getElementById("edit-parent-phone"))==null?void 0:l.value.trim())||"","parent.address":((r=document.getElementById("edit-parent-address"))==null?void 0:r.value.trim())||""};d.spouse&&(n["spouse.phone"]=((c=document.getElementById("edit-spouse-phone"))==null?void 0:c.value.trim())||"",n["spouse.email"]=((p=document.getElementById("edit-spouse-email"))==null?void 0:p.value.trim())||""),n["emergencyContact.name"]=(($=document.getElementById("edit-emergency-name"))==null?void 0:$.value.trim())||"",n["emergencyContact.phone"]=((z=document.getElementById("edit-emergency-phone"))==null?void 0:z.value.trim())||"";try{await B(h(m,"registrations",E),n),d.parent.phone=n["parent.phone"],d.parent.address=n["parent.address"],d.spouse&&(d.spouse.phone=n["spouse.phone"],d.spouse.email=n["spouse.email"]),d.emergencyContact.name=n["emergencyContact.name"],d.emergencyContact.phone=n["emergencyContact.phone"],o="profile",u()}catch(de){console.error("Error updating contact:",de),alert("Failed to save. Please try again.")}}),(T=document.getElementById("add-swimmer-toggle-btn"))==null||T.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="block",document.getElementById("add-swimmer-toggle-btn").style.display="none"}),(j=document.getElementById("cancel-swimmer-btn"))==null||j.addEventListener("click",()=>{document.getElementById("add-swimmer-form").style.display="none",document.getElementById("add-swimmer-toggle-btn").style.display=""}),(R=document.getElementById("save-swimmer-btn"))==null||R.addEventListener("click",async()=>{const n=document.getElementById("new-swimmer-first").value.trim(),l=document.getElementById("new-swimmer-last").value.trim();if(!n||!l){alert("First name and last name are required.");return}const r={firstName:n,lastName:l,middleName:document.getElementById("new-swimmer-middle").value.trim()||null,gender:document.getElementById("new-swimmer-gender").value||null,dob:document.getElementById("new-swimmer-dob").value||null,usaSwimmingId:document.getElementById("new-swimmer-usaId").value.trim()||null,joinDate:null},c=[...d.swimmers,r];try{await B(h(m,"registrations",E),{swimmers:c}),d.swimmers=c,o="profile",u()}catch(p){console.error("Error adding swimmer:",p),alert("Failed to add swimmer. Please try again.")}}),document.querySelectorAll(".delete-swimmer-btn").forEach(n=>{n.addEventListener("click",()=>{const l=parseInt(n.dataset.index),r=d.swimmers[l],c=[r.firstName,r.lastName].filter(Boolean).join(" ");Ie(c,l)})}),v==="coach"&&((q=document.getElementById("add-meet-btn"))==null||q.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="block"}),(F=document.getElementById("cancel-meet-btn"))==null||F.addEventListener("click",()=>{document.getElementById("add-meet-form").style.display="none"}),(O=document.getElementById("save-meet-btn"))==null||O.addEventListener("click",async()=>{const n=document.getElementById("meet-name").value,l=document.getElementById("meet-date").value,r=document.getElementById("meet-location").value,c=document.getElementById("meet-events").value;if(!n||!l){alert("Please provide at least a name and date.");return}try{await V(y(m,"meets"),{name:n,date:l,location:r,events:c.split(",").map(p=>p.trim()),status:"Open",createdAt:new Date}),document.getElementById("add-meet-form").style.display="none"}catch(p){console.error("Error adding meet:",p)}}),document.querySelectorAll(".delete-meet").forEach(n=>{n.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this meet?"))try{await J(h(m,"meets",n.dataset.id))}catch(l){console.error("Error deleting meet:",l)}})}),(U=document.getElementById("add-session-btn"))==null||U.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="block"}),(W=document.getElementById("cancel-session-btn"))==null||W.addEventListener("click",()=>{document.getElementById("add-session-form").style.display="none"}),(H=document.getElementById("save-session-btn"))==null||H.addEventListener("click",async()=>{const n=document.getElementById("session-day").value,l=document.getElementById("session-time").value,r=document.getElementById("session-group").value,c=document.getElementById("session-focus").value,p=document.getElementById("session-coach").value;if(!l||!r){alert("Please provide time and group.");return}try{await V(y(m,"schedules"),{day:n,time:l,group:r,focus:c,coach:p,createdAt:new Date}),document.getElementById("add-session-form").style.display="none"}catch($){console.error("Error adding session:",$)}}),document.querySelectorAll(".delete-session").forEach(n=>{n.addEventListener("click",async()=>{if(confirm("Are you sure you want to delete this session?"))try{await J(h(m,"schedules",n.dataset.id))}catch(l){console.error("Error deleting session:",l)}})}))}ue();
