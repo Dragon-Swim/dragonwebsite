@@ -3,6 +3,7 @@
 .env.local
 credentials.json
 token.json
+serviceAccountKey.json
 
 # Intermediate / temp files
 .tmp/
