@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme, updateToggleIcon } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
 
 initTheme();
 
@@ -27,8 +27,10 @@ let swimMeets = [];
 let practiceSchedules = [];
 let currentUser = null;
 let userRole = 'swimmer';
+let dbRole = null; // raw role from Firestore (admin/coach/swimmer)
 let familyData = null;
 let familyDataId = null;
+let allRegistrations = []; // snapshot of all registrations for coach roster
 
 const coachRoster = [
   { id: 101, name: 'Alice Thompson', group: 'Competitive', age: 14, rank: 'Regional' },
@@ -84,9 +86,10 @@ function initApp() {
       console.log("Dashboard: Fetching user document...");
       const userDoc = await getDoc(doc(db, "users", user.uid));
 
-      // Case-insensitive email check for coach account
+      // Determine role: read from Firestore, with hardcoded email fallback
+      dbRole = userDoc.exists() ? userDoc.data().role : null;
       const isCoachEmail = user.email && user.email.toLowerCase() === 'dragonswim@outlook.com';
-      userRole = isCoachEmail ? 'coach' : (userDoc.exists() ? userDoc.data().role : 'swimmer');
+      userRole = (dbRole === 'coach' || dbRole === 'admin' || isCoachEmail) ? 'coach' : (dbRole || 'swimmer');
       console.log("Dashboard: Detected role:", userRole);
 
       // Initialize Real-time Listeners ONLY ONCE
@@ -140,6 +143,17 @@ function initDataListeners() {
 
   // Fetch family registration data
   fetchFamilyData();
+
+  // Listen to all registrations (for coach roster)
+  if (userRole === 'coach') {
+    const qRegistrations = query(collection(db, "registrations"), orderBy("createdAt", "desc"));
+    onSnapshot(qRegistrations, (snapshot) => {
+      allRegistrations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      refreshUI();
+    }, (error) => {
+      console.error("Error listening to registrations:", error);
+    });
+  }
 }
 
 async function fetchFamilyData() {
@@ -203,6 +217,11 @@ function renderDashboard(user) {
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
             <span class="dash-nav-label">System</span>
+            ${dbRole === 'admin' ? `
+            <a href="${import.meta.env.BASE_URL}admin.html" class="dash-nav-item" style="text-decoration: none;">
+              <span class="dash-nav-icon">⚙️</span> Admin Panel
+            </a>
+            ` : ''}
             <a href="${import.meta.env.BASE_URL}contact.html" class="dash-nav-item" style="text-decoration: none;">
               <span class="dash-nav-icon">💬</span> Messages
             </a>
@@ -238,6 +257,7 @@ function renderDashboard(user) {
               </button>
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
                 <button class="dash-dropdown-item" id="menu-profile">👤 Profile</button>
+                ${dbRole === 'admin' ? '<button class="dash-dropdown-item" id="menu-admin">⚙️ Admin Panel</button>' : ''}
                 <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">🚪 Sign Out</button>
               </div>
             </div>
@@ -287,6 +307,11 @@ function renderCoachDashboard(user) {
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
             <span class="dash-nav-label">System</span>
+            ${dbRole === 'admin' ? `
+            <a href="${import.meta.env.BASE_URL}admin.html" class="dash-nav-item" style="text-decoration: none;">
+              <span class="dash-nav-icon">⚙️</span> Admin Panel
+            </a>
+            ` : ''}
             <button class="dash-nav-item" id="dash-theme-toggle">
               <span class="dash-nav-icon" id="sidebar-theme-icon">🌙</span> Theme
             </button>
@@ -319,6 +344,7 @@ function renderCoachDashboard(user) {
                 <span class="dash-dropdown-arrow">▾</span>
               </button>
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
+                ${dbRole === 'admin' ? '<button class="dash-dropdown-item" id="menu-admin">⚙️ Admin Panel</button>' : ''}
                 <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">🚪 Sign Out</button>
               </div>
             </div>
@@ -404,24 +430,54 @@ function updateSidebarThemeIcon() {
 }
 
 // ── Coach Specific Tab Views ──
+function getCoachActiveSwimmers() {
+  const swimmers = [];
+  for (const reg of allRegistrations) {
+    if (reg.swimmers) {
+      for (const s of reg.swimmers) {
+        if (!s.deleted) swimmers.push({ ...s, parentName: getParentNameFromReg(reg) });
+      }
+    }
+  }
+  return swimmers;
+}
+
+function getParentNameFromReg(reg) {
+  if (!reg.parent) return '—';
+  return [reg.parent.firstName, reg.parent.lastName].filter(Boolean).join(' ') || '—';
+}
+
+function getCoachRecentRegistrations() {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  return allRegistrations.filter(r => {
+    const created = r.createdAt?.toDate?.() || new Date(r.createdAt);
+    return created >= thirtyDaysAgo;
+  });
+}
+
 function renderCoachOverview() {
+  const activeSwimmers = getCoachActiveSwimmers();
+  const newRegistrations = getCoachRecentRegistrations();
+  const upcomingMeets = swimMeets.filter(m => m.status !== 'Completed');
+
   return `
     <div class="dash-stats-row">
       <div class="dash-stat-card">
-        <div class="dash-stat-number">${coachRoster.length}</div>
+        <div class="dash-stat-number">${activeSwimmers.length}</div>
         <div class="dash-stat-label">Active Athletes</div>
       </div>
       <div class="dash-stat-card">
-        <div class="dash-stat-number">12</div>
-        <div class="dash-stat-label">New Registrations</div>
+        <div class="dash-stat-number">${newRegistrations.length}</div>
+        <div class="dash-stat-label">New Registrations (30d)</div>
       </div>
       <div class="dash-stat-card accent">
-        <div class="dash-stat-number">4</div>
+        <div class="dash-stat-number">${upcomingMeets.length}</div>
         <div class="dash-stat-label">Upcoming Meets</div>
       </div>
       <div class="dash-stat-card">
-        <div class="dash-stat-number">85%</div>
-        <div class="dash-stat-label">Practice Attendance</div>
+        <div class="dash-stat-number">${allRegistrations.length}</div>
+        <div class="dash-stat-label">Registered Families</div>
       </div>
     </div>
 
@@ -429,28 +485,28 @@ function renderCoachOverview() {
       <div class="dash-panel">
         <h3 class="dash-panel-title">Top Athletes</h3>
         <div class="dash-panel-body">
-          ${coachRoster.slice(0, 3).map(s => `
+          ${activeSwimmers.length === 0 ? '<p class="dash-empty">No swimmers registered yet.</p>' :
+          activeSwimmers.slice(0, 5).map(s => `
             <div class="dash-mini-card">
                <div class="dash-mini-top">
-                <span class="dash-mini-name">${s.name}</span>
-                <span class="badge badge-primary">${s.rank}</span>
+                <span class="dash-mini-name">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</span>
+                <span class="badge badge-primary">${s.parentName}</span>
               </div>
-              <div class="dash-mini-meta">Group: ${s.group} · Age: ${s.age}</div>
+              <div class="dash-mini-meta">${s.gender || '—'} · Age: ${s.dob ? Math.floor((new Date() - new Date(s.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : '—'}</div>
             </div>
           `).join('')}
         </div>
       </div>
       <div class="dash-panel">
-        <h3 class="dash-panel-title">Recent Announcements</h3>
+        <h3 class="dash-panel-title">Recent Registrations</h3>
         <div class="dash-panel-body">
-          <div class="dash-mini-card">
-            <div class="dash-mini-top"><span class="dash-mini-name">Meet Registration Deadline</span></div>
-            <div class="dash-mini-meta">Sent to 45 parents · 2 hours ago</div>
-          </div>
-          <div class="dash-mini-card">
-            <div class="dash-mini-top"><span class="dash-mini-name">New Training Equipment</span></div>
-            <div class="dash-mini-meta">Sent to all coaches · Yesterday</div>
-          </div>
+          ${newRegistrations.length === 0 ? '<p class="dash-empty">No recent registrations.</p>' :
+          newRegistrations.slice(0, 5).map(r => `
+            <div class="dash-mini-card">
+              <div class="dash-mini-top"><span class="dash-mini-name">${getParentNameFromReg(r)}</span></div>
+              <div class="dash-mini-meta">${r.swimmers ? r.swimmers.filter(s => !s.deleted).length : 0} swimmer(s)</div>
+            </div>
+          `).join('')}
         </div>
       </div>
     </div>
@@ -458,32 +514,41 @@ function renderCoachOverview() {
 }
 
 function renderCoachRoster() {
+  const activeSwimmers = getCoachActiveSwimmers();
+
   return `
     <div class="dash-panel">
       <div class="dash-panel-header" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3 class="dash-panel-title">Team Management</h3>
+        <h3 class="dash-panel-title">Team Roster (${activeSwimmers.length} athletes)</h3>
       </div>
       <div class="dash-panel-body">
+        ${activeSwimmers.length === 0 ? '<p class="dash-empty">No swimmers registered yet.</p>' : `
         <table style="width: 100%; border-collapse: collapse; text-align: left;">
           <thead>
             <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
               <th style="padding: 1rem;">Name</th>
-              <th style="padding: 1rem;">Group</th>
+              <th style="padding: 1rem;">Parent</th>
               <th style="padding: 1rem;">Age</th>
-              <th style="padding: 1rem;">Rank</th>
+              <th style="padding: 1rem;">Gender</th>
+              <th style="padding: 1rem;">USA ID</th>
             </tr>
           </thead>
           <tbody>
-            ${coachRoster.map(s => `
-              <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 1rem; font-weight: 500;">${s.name}</td>
-                <td style="padding: 1rem;"><span class="group-badge">${s.group}</span></td>
-                <td style="padding: 1rem;">${s.age}</td>
-                <td style="padding: 1rem;"><span class="status-badge status-registered">${s.rank}</span></td>
-              </tr>
-            `).join('')}
+            ${activeSwimmers.map(s => {
+              const age = s.dob ? Math.floor((new Date() - new Date(s.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : '—';
+              return `
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                  <td style="padding: 1rem; font-weight: 500;">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</td>
+                  <td style="padding: 1rem;">${s.parentName}</td>
+                  <td style="padding: 1rem;">${age}</td>
+                  <td style="padding: 1rem;">${s.gender || '—'}</td>
+                  <td style="padding: 1rem;">${s.usaSwimmingId || '—'}</td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
+        `}
       </div>
     </div>
   `;
@@ -1006,6 +1071,11 @@ function bindEvents() {
     } catch (error) {
       console.error('Error signing out:', error);
     }
+  });
+
+  // Admin panel menu item
+  document.getElementById('menu-admin')?.addEventListener('click', () => {
+    window.location.href = import.meta.env.BASE_URL + 'admin.html';
   });
 
   // ── Profile Edit ──
