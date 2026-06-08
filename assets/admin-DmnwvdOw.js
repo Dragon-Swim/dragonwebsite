@@ -1,4 +1,4 @@
-import{i as y}from"./theme-toggle-CI3g1rpd.js";import{a as w,r as C}from"./footer-Ca1bpEjX.js";import{o as E,h as B,g as $,e as h,b as g,n as A,a as I,c as p,q as N,k as q,j as x}from"./firebase-B6pM3H1n.js";y();w();let b=null,d="create";const D=document.getElementById("app");E(g,async n=>{if(!n){window.location.href="/dragonwebsite/signin.html";return}const r=await B($(h,"users",n.uid));if((r.exists()?r.data().role:null)!=="admin"){window.location.href="/dragonwebsite/dashboard.html";return}b=n,f()});function f(){D.innerHTML=`
+import{i as y}from"./theme-toggle-CI3g1rpd.js";import{a as w,r as C}from"./footer-Ca1bpEjX.js";import{o as E,h as B,g as $,e as h,b as g,n as A,a as I,c as p,q as N,k as q,j as x}from"./firebase-BDUJL_9Z.js";y();w();let b=null,d="create";const D=document.getElementById("app");E(g,async n=>{if(!n){window.location.href="/dragonwebsite/signin.html";return}const r=await B($(h,"users",n.uid));if((r.exists()?r.data().role:null)!=="admin"){window.location.href="/dragonwebsite/dashboard.html";return}b=n,f()});function f(){D.innerHTML=`
     <div class="admin-layout">
       <aside class="admin-sidebar">
         <div class="admin-sidebar-header">
