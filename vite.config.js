@@ -14,6 +14,7 @@ export default defineConfig({
                 privacy: resolve(__dirname, 'privacy.html'),
                 terms: resolve(__dirname, 'terms.html'),
                 safesport: resolve(__dirname, 'safesport.html'),
+                admin: resolve(__dirname, 'admin.html'),
             },
         },
     },
