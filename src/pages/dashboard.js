@@ -8,9 +8,9 @@ import '../styles/variables.css';
 import '../styles/global.css';
 import './dashboard.css';
 
-import { initTheme, toggleTheme, updateToggleIcon } from '../components/theme-toggle.js';
+import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
 
 initTheme();
 
@@ -42,7 +42,6 @@ const coachRoster = [
 
 // App State
 let currentTab = 'overview';
-let isMobileMenuOpen = false;
 let isInitialized = false;
 
 function initApp() {
