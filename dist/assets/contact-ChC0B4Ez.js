@@ -1,4 +1,4 @@
-import{i as o}from"./theme-toggle-CI3g1rpd.js";import{r as s,a as l}from"./footer-BQePl1TG.js";o();s();const r=document.getElementById("app");r.innerHTML=`
+import{i as o}from"./theme-toggle-CI3g1rpd.js";import{a as s,r as l}from"./footer-Ca1bpEjX.js";import{a as r,c,e as n}from"./firebase-B6pM3H1n.js";o();s();const i=document.getElementById("app");i.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center;">
     <div class="container" style="max-width: 800px;">
       <div class="text-center" style="margin-bottom: var(--space-2xl);">
@@ -50,4 +50,4 @@ import{i as o}from"./theme-toggle-CI3g1rpd.js";import{r as s,a as l}from"./foote
       </div>
     </div>
   </section>
-`;l();document.getElementById("contact-form").addEventListener("submit",e=>{e.preventDefault(),document.getElementById("contact-form").style.display="none",document.getElementById("contact-success").style.display="block"});const c={root:null,rootMargin:"0px",threshold:.15},i=new IntersectionObserver((e,a)=>{e.forEach(t=>{t.isIntersecting&&(t.target.classList.add("animate-visible"),a.unobserve(t.target))})},c);document.querySelectorAll(".animate-on-scroll").forEach(e=>{i.observe(e)});
+`;l();document.getElementById("contact-form").addEventListener("submit",async e=>{e.preventDefault();const a=e.target.querySelector('button[type="submit"]');a.disabled=!0;try{await r(c(n,"contacts"),{name:document.getElementById("contact-name").value.trim(),email:document.getElementById("contact-email").value.trim(),phone:document.getElementById("contact-phone").value.trim()||null,reason:document.getElementById("contact-reason").value,preferredDate:document.getElementById("contact-date").value||null,message:document.getElementById("contact-message").value.trim(),createdAt:new Date}),document.getElementById("contact-form").style.display="none",document.getElementById("contact-success").style.display="block"}catch(t){console.error("Failed to submit contact form:",t),alert("Failed to send message. Please try again."),a.disabled=!1}});const d={root:null,rootMargin:"0px",threshold:.15},m=new IntersectionObserver((e,a)=>{e.forEach(t=>{t.isIntersecting&&(t.target.classList.add("animate-visible"),a.unobserve(t.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(e=>{m.observe(e)});
