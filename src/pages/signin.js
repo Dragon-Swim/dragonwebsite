@@ -58,12 +58,22 @@ function render() {
               </div>
               <div class="form-group">
                 <label class="form-label" for="auth-password">${isSignUp ? t('signup_password') : t('signin_password')}</label>
-                <input class="form-input" type="password" id="auth-password" placeholder="••••••••" required />
+                <div class="password-group">
+                  <input class="form-input" type="password" id="auth-password" placeholder="••••••••" required />
+                  <button type="button" class="password-toggle" data-target="auth-password" aria-label="Show password">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
               </div>
               ${isSignUp ? `
                 <div class="form-group">
                   <label class="form-label" for="auth-confirm">${t('signup_confirm')}</label>
-                  <input class="form-input" type="password" id="auth-confirm" placeholder="••••••••" required />
+                  <div class="password-group">
+                    <input class="form-input" type="password" id="auth-confirm" placeholder="••••••••" required />
+                    <button type="button" class="password-toggle" data-target="auth-confirm" aria-label="Show password">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                  </div>
                 </div>
               ` : ''}
               ${!isSignUp ? `
@@ -113,6 +123,15 @@ function bindEvents() {
       errorEl.style.display = 'block';
     }
   }
+
+  // Password visibility toggle
+  document.querySelectorAll('.password-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+    });
+  });
 
   // Toggle sign-in / sign-up
   document.getElementById('toggle-auth')?.addEventListener('click', (e) => {
