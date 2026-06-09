@@ -1,8 +1,8 @@
 /**
  * Admin Page — Dragon Swim Team
  * Protected page for role=admin users to manage coach accounts.
- * Coach creation writes to Firestore; a node script (scripts/create-coaches.mjs)
- * processes pending coach records to create Auth accounts via Admin SDK.
+ * Coach creation calls Firebase Auth REST API directly to create the
+ * user account, then stores only the profile in Firestore (no password).
  */
 
 import '../styles/reset.css';
@@ -88,7 +88,7 @@ function renderCreateForm() {
   return `
     <div class="admin-panel">
       <h3>New Coach</h3>
-      <p class="admin-hint">Fill in the coach's details. The account will be created as "pending" and must be processed via the sync script.</p>
+      <p class="admin-hint">Fill in the coach's details. The account will be created immediately.</p>
       <form id="coach-form" class="admin-form">
         <div class="form-group">
           <label class="form-label" for="coach-email">Email *</label>
@@ -111,13 +111,6 @@ function renderCreateForm() {
         <button type="submit" class="btn btn-primary" id="create-coach-btn">Create Coach</button>
         <p id="coach-form-message" class="admin-form-message"></p>
       </form>
-    </div>
-
-    <div class="admin-panel" style="margin-top: 1.5rem;">
-      <h3>Sync Instructions</h3>
-      <p class="admin-hint">After adding coaches, run this command in your terminal to create their Auth accounts:</p>
-      <pre class="admin-code">node scripts/create-coaches.mjs</pre>
-      <p class="admin-hint" style="margin-top: 0.5rem;">This requires <code>serviceAccountKey.json</code> in the project root.</p>
     </div>
   `;
 }
@@ -197,15 +190,40 @@ function bindEvents() {
       msgEl.textContent = '';
 
       try {
+        // 1. Create Firebase Auth account via REST API (password never touches Firestore)
+        const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+        const authResp = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, returnSecureToken: false }),
+          }
+        );
+
+        if (!authResp.ok) {
+          const errData = await authResp.json();
+          const code = errData.error?.message || 'UNKNOWN';
+          // Map common Firebase Auth errors to user-friendly messages
+          const messages = {
+            EMAIL_EXISTS: 'A user with this email already exists.',
+            WEAK_PASSWORD: 'Password must be at least 6 characters.',
+            INVALID_EMAIL: 'Invalid email address.',
+            OPERATION_NOT_ALLOWED: 'New accounts are currently disabled. Contact support.',
+          };
+          throw new Error(messages[code] || `Auth error: ${code}`);
+        }
+
+        // 2. Store coach profile in Firestore (no password)
         await addDoc(collection(db, 'coaches'), {
           email,
           displayName,
-          password, // stored temporarily until processed by sync script
-          status: 'pending',
+          status: 'active',
           createdBy: currentUser.uid,
           createdAt: new Date(),
         });
-        msgEl.textContent = `Coach "${displayName}" (${email}) added as pending. Run the sync script to activate.`;
+
+        msgEl.textContent = `Coach "${displayName}" (${email}) added successfully.`;
         msgEl.className = 'admin-form-message success';
         form.reset();
       } catch (err) {
