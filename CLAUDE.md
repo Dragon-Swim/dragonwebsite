@@ -53,6 +53,31 @@ directives/ - SOPs in Markdown (the instruction set)
 credentials.json, token.json - Google OAuth credentials (required files, in .gitignore)
 Key principle: Local files are only for processing. Deliverables live in cloud services (Google Sheets, Slides, etc.) where the user can access them. Everything in .tmp/ can be deleted and regenerated.
 
+## ⛔ Preserved Files — NEVER DELETE
+
+These files must survive across sessions. Check this list before ANY `rm`, `rm -rf`, or destructive git operation.
+
+**Secrets & Config (gitignored, irreplaceable if lost):**
+- `.env.local` — Firebase API keys (VITE_FIREBASE_*)
+- `.env` — environment variables
+- `credentials.json` — Google OAuth credentials
+- `token.json` — Google OAuth token
+- `serviceAccountKey.json` — Firebase Admin SDK private key
+
+**Session Continuity (gitignored, but carry context between sessions):**
+- `.tmp/handoff-*.md` — handoff notes from previous sessions
+
+**Project Infrastructure (tracked, must not be corrupted):**
+- `CLAUDE.md` — this file, loaded every session
+- `.gitignore` — protects secrets from being committed
+
+**Rules:**
+1. NEVER use `rm -rf .tmp/` — it deletes handoff files. Target specific files instead.
+2. NEVER use `rm -rf` on the project root or any top-level directory.
+3. Before `rm` or `git checkout -f`, scan this list.
+4. When deploying to `gh-pages`: gh-pages has its own `.gitignore` (not the same as main). Ensure `.env.local` and `.env` are in it before `git add -A`.
+5. Before `npm run build`: verify `.env.local` exists, or the build will inline `undefined` for all `VITE_*` vars → white screen.
+
 Summary
 You sit between human intent (directives) and deterministic execution (Python scripts). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
 
