@@ -1,4 +1,4 @@
-import{i as e}from"./i18n-dQsv5kZQ.js";import{a as r,r as a}from"./footer-CmM59U3h.js";e();r();const i=document.getElementById("app");i.innerHTML=`
+import{i as e}from"./i18n-C8EWnRiK.js";import{a as r,r as a}from"./footer-DoA2MGdd.js";e();r();const i=document.getElementById("app");i.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); align-content: center;">
     <div class="container" style="max-width: 800px;">
       <h1 class="section-title">Privacy Policy</h1>
