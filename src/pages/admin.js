@@ -16,7 +16,7 @@ import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import {
-  auth, db, doc, getDoc, collection, addDoc, onSnapshot,
+  auth, db, doc, getDoc, setDoc, collection, onSnapshot,
   query, orderBy, onAuthStateChanged, signOut,
 } from '../utils/firebase.js';
 
@@ -108,6 +108,13 @@ function renderCreateForm() {
             <input class="form-input" type="password" id="coach-confirm" placeholder="••••••••" required />
           </div>
         </div>
+        <div class="form-group">
+          <label class="form-label" for="coach-role">Role *</label>
+          <select class="form-input" id="coach-role" required>
+            <option value="coach">Coach (no admin access)</option>
+            <option value="admin">Admin Coach (can manage coaches)</option>
+          </select>
+        </div>
         <button type="submit" class="btn btn-primary" id="create-coach-btn">Create Coach</button>
         <p id="coach-form-message" class="admin-form-message"></p>
       </form>
@@ -128,12 +135,13 @@ function renderManageView() {
             <tr>
               <th>Email</th>
               <th>Name</th>
+              <th>Role</th>
               <th>Status</th>
               <th>Created</th>
             </tr>
           </thead>
           <tbody id="coach-table-body">
-            <tr><td colspan="4" class="admin-empty">Loading...</td></tr>
+            <tr><td colspan="5" class="admin-empty">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -169,6 +177,7 @@ function bindEvents() {
       const displayName = document.getElementById('coach-name').value.trim();
       const password = document.getElementById('coach-password').value;
       const confirm = document.getElementById('coach-confirm').value;
+      const role = document.getElementById('coach-role').value;
 
       if (!email || !displayName || !password) {
         msgEl.textContent = 'Please fill in all required fields.';
@@ -214,10 +223,27 @@ function bindEvents() {
           throw new Error(messages[code] || `Auth error: ${code}`);
         }
 
-        // 2. Store coach profile in Firestore (no password)
-        await addDoc(collection(db, 'coaches'), {
+        const authData = await authResp.json();
+        const uid = authData.localId;
+        if (!uid) {
+          throw new Error('Auth account created but no UID returned. Please check the response.');
+        }
+
+        // 2. Store role in Firestore users collection (dashboard reads this for role detection)
+        await setDoc(doc(db, 'users', uid), {
           email,
           displayName,
+          role,
+          createdBy: currentUser.uid,
+          createdAt: new Date(),
+        });
+
+        // 3. Store coach profile in coaches collection (admin panel reads this for management)
+        await setDoc(doc(db, 'coaches', uid), {
+          uid,
+          email,
+          displayName,
+          role,
           status: 'active',
           createdBy: currentUser.uid,
           createdAt: new Date(),
@@ -247,20 +273,23 @@ function bindEvents() {
         const d = docSnap.data();
         if (d.status === 'pending') pending++;
         const date = d.createdAt?.toDate?.() || new Date(d.createdAt);
+        const roleLabel = d.role === 'admin' ? 'Admin Coach' : 'Coach';
+        const roleClass = d.role === 'admin' ? 'admin-role-admin' : 'admin-role-coach';
         return `
           <tr>
             <td>${d.email || '—'}</td>
             <td>${d.displayName || '—'}</td>
+            <td><span class="admin-role-badge ${roleClass}">${roleLabel}</span></td>
             <td><span class="admin-status admin-status-${d.status}">${d.status}</span></td>
             <td>${date.toLocaleDateString()}</td>
           </tr>
         `;
       }).join('');
 
-      tbody.innerHTML = rows || '<tr><td colspan="4" class="admin-empty">No coaches yet.</td></tr>';
+      tbody.innerHTML = rows || '<tr><td colspan="5" class="admin-empty">No coaches yet.</td></tr>';
       pendingBadge.textContent = `${pending} pending`;
     }, (err) => {
-      tbody.innerHTML = `<tr><td colspan="4" class="admin-empty">Error loading: ${err.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="admin-empty">Error loading: ${err.message}</td></tr>`;
     });
   }
 }
