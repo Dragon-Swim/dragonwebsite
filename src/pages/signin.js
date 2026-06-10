@@ -42,8 +42,8 @@ function render() {
           <div class="signin-card">
             <div class="signin-header">
               <div class="signin-logo">
-                <img src="${import.meta.env.BASE_URL}logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img, light-logo" style="height:60px" />
-                <img src="${import.meta.env.BASE_URL}logo-dark.png" alt="Dragon Swim Team" class="nav-logo-img, dark-logo" style="height:60px" />
+                <img src="${import.meta.env.BASE_URL}logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img light-logo" style="height:60px" />
+                <img src="${import.meta.env.BASE_URL}logo-dark.png" alt="Dragon Swim Team" class="nav-logo-img dark-logo" style="height:60px" />
               </div>
               <h1 class="signin-title">${isSignUp ? t('signup_title') : t('signin_title')}</h1>
               <p class="signin-subtitle">${t('signin_subtitle')}</p>

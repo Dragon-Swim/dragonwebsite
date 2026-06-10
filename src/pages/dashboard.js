@@ -22,15 +22,15 @@ const swimPlans = [
   { id: 4, name: 'Fall Conditioning', season: 'Fall 2025', daysPerWeek: 3, priority: 'High', progress: 100, tasks: '30 / 30 workouts completed', due: 'Nov 20, 2025', status: 'Completed' },
 ];
 
-// ── State Storage (Moving from constants to reactive state) ──
+// ── State Storage ──
 let swimMeets = [];
 let practiceSchedules = [];
 let currentUser = null;
 let userRole = 'swimmer';
-let dbRole = null; // raw role from Firestore (admin/coach/swimmer)
+let dbRole = null;
 let familyData = null;
 let familyDataId = null;
-let allRegistrations = []; // snapshot of all registrations for coach roster
+let allRegistrations = [];
 
 const coachRoster = [
   { id: 101, name: 'Alice Thompson', group: 'Competitive', age: 14, rank: 'Regional' },
@@ -51,7 +51,7 @@ function initApp() {
   app.innerHTML = `
     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 20px; font-family: sans-serif;">
       <div style="width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #f5c518; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <p style="color: #666;">Loading your Dragon dashboard...</p>
+      <p style="color: #666;">${t('dash_loading')}</p>
       <style>
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       </style>
@@ -60,7 +60,6 @@ function initApp() {
 
   console.log("Dashboard: Initializing auth listener...");
 
-  // Timeout fallback — force render if auth listener hasn't fired after 5 seconds
   let hasRendered = false;
   const timeoutFallback = setTimeout(() => {
     if (!hasRendered) {
@@ -69,7 +68,6 @@ function initApp() {
     }
   }, 5000);
 
-  // Add auth check before rendering content
   onAuthStateChanged(auth, async (user) => {
     clearTimeout(timeoutFallback);
     if (!user) {
@@ -85,13 +83,11 @@ function initApp() {
       console.log("Dashboard: Fetching user document...");
       const userDoc = await getDoc(doc(db, "users", user.uid));
 
-      // Determine role: read from Firestore, with hardcoded email fallback
       dbRole = userDoc.exists() ? userDoc.data().role : null;
       const isCoachEmail = user.email && user.email.toLowerCase() === 'dragonswim@outlook.com';
       userRole = (dbRole === 'coach' || dbRole === 'admin' || isCoachEmail) ? 'coach' : (dbRole || 'swimmer');
       console.log("Dashboard: Detected role:", userRole);
 
-      // Initialize Real-time Listeners ONLY ONCE
       if (!isInitialized) {
         console.log("Dashboard: Initializing data listeners...");
         initDataListeners();
@@ -104,15 +100,14 @@ function initApp() {
     } catch (error) {
       console.error("Dashboard Critical Error:", error);
 
-      // Display error to user
       app.innerHTML = `
         <div style="padding: 40px; text-align: center; font-family: sans-serif; max-width: 500px; margin: 100px auto; border: 1px solid #fee2e2; background: #fef2f2; border-radius: 12px; color: #991b1b;">
-          <h2 style="margin-bottom: 16px;">Failed to load dashboard</h2>
-          <p style="margin-bottom: 24px;">Something went wrong while setting up your workspace. This might be due to a connection issue or a configuration error.</p>
+          <h2 style="margin-bottom: 16px;">${t('dash_load_failed_title')}</h2>
+          <p style="margin-bottom: 24px;">${t('dash_load_failed_msg')}</p>
           <code style="display: block; padding: 12px; background: #fee2e2; border-radius: 6px; font-size: 13px; text-align: left; overflow-x: auto; margin-bottom: 24px;">
-            ${error.message || 'Unknown error'}
+            ${error.message || t('dash_unknown_error')}
           </code>
-          <button onclick="window.location.reload()" style="padding: 10px 20px; background: #991b1b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Retry Loading</button>
+          <button onclick="window.location.reload()" style="padding: 10px 20px; background: #991b1b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">${t('dash_load_failed_retry')}</button>
         </div>
       `;
 
@@ -122,7 +117,6 @@ function initApp() {
 }
 
 function initDataListeners() {
-  // Listen to Meets
   const qMeets = query(collection(db, "meets"), orderBy("createdAt", "desc"));
   onSnapshot(qMeets, (snapshot) => {
     swimMeets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -131,7 +125,6 @@ function initDataListeners() {
     console.error("Error listening to meets:", error);
   });
 
-  // Listen to Schedules
   const qSchedules = query(collection(db, "schedules"), orderBy("createdAt", "asc"));
   onSnapshot(qSchedules, (snapshot) => {
     practiceSchedules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -140,10 +133,8 @@ function initDataListeners() {
     console.error("Error listening to schedules:", error);
   });
 
-  // Fetch family registration data
   fetchFamilyData();
 
-  // Listen to all registrations (for coach roster)
   if (userRole === 'coach') {
     const qRegistrations = query(collection(db, "registrations"), orderBy("createdAt", "desc"));
     onSnapshot(qRegistrations, (snapshot) => {
@@ -183,11 +174,18 @@ function renderCurrentView() {
   }
 }
 
+// ── Helper: Day names ──
+const DAY_KEYS = ['dash_day_sunday', 'dash_day_monday', 'dash_day_tuesday', 'dash_day_wednesday', 'dash_day_thursday', 'dash_day_friday', 'dash_day_saturday'];
+
+function getDayName(index) {
+  return t(DAY_KEYS[index] || 'dash_day_monday');
+}
+
+// ── Swimmer Dashboard ──
 function renderDashboard(user) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="dash-layout">
-      <!-- Sidebar -->
       <aside class="dash-sidebar" id="dash-sidebar">
         <div class="dash-sidebar-header">
           <a href="${import.meta.env.BASE_URL}" class="dash-logo">
@@ -197,46 +195,44 @@ function renderDashboard(user) {
         </div>
         <nav class="dash-nav">
           <div class="dash-nav-section">
-            <span class="dash-nav-label">Menu</span>
+            <span class="dash-nav-label">${t('dash_sidebar_menu')}</span>
             <button class="dash-nav-item ${currentTab === 'overview' ? 'active' : ''}" data-tab="overview">
-              <span class="dash-nav-icon">📊</span> Overview
+              <span class="dash-nav-icon">📊</span> ${t('dash_swimmer_overview_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'profile' ? 'active' : ''}" data-tab="profile">
-              <span class="dash-nav-icon">👤</span> Profile
+              <span class="dash-nav-icon">👤</span> ${t('dash_swimmer_profile_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'plans' ? 'active' : ''}" data-tab="plans">
-              <span class="dash-nav-icon">📋</span> Swim Plans
+              <span class="dash-nav-icon">📋</span> ${t('dash_swimmer_plans_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'meets' ? 'active' : ''}" data-tab="meets">
-              <span class="dash-nav-icon">🏆</span> Swim Meets
+              <span class="dash-nav-icon">🏆</span> ${t('dash_swimmer_meets_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
-              <span class="dash-nav-icon">📅</span> Schedule
+              <span class="dash-nav-icon">📅</span> ${t('dash_swimmer_schedule_label')}
             </button>
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
-            <span class="dash-nav-label">System</span>
+            <span class="dash-nav-label">${t('dash_sidebar_system')}</span>
             ${dbRole === 'admin' ? `
             <a href="${import.meta.env.BASE_URL}admin.html" class="dash-nav-item" style="text-decoration: none;">
-              <span class="dash-nav-icon">⚙️</span> Admin Panel
+              <span class="dash-nav-icon">⚙️</span> ${t('dash_sidebar_admin')}
             </a>
             ` : ''}
             <a href="${import.meta.env.BASE_URL}contact.html" class="dash-nav-item" style="text-decoration: none;">
-              <span class="dash-nav-icon">💬</span> Messages
+              <span class="dash-nav-icon">💬</span> ${t('dash_sidebar_messages')}
             </a>
             <button class="dash-nav-item" id="dash-theme-toggle">
-              <span class="dash-nav-icon" id="sidebar-theme-icon">🌙</span> Theme
+              <span class="dash-nav-icon" id="sidebar-theme-icon">🌙</span> ${t('dash_sidebar_theme')}
             </button>
             <button class="dash-nav-item" id="sidebar-signout" style="color: var(--color-accent); margin-top: var(--space-md);">
-              <span class="dash-nav-icon">🚪</span> Sign Out
+              <span class="dash-nav-icon">🚪</span> ${t('dash_sidebar_signout')}
             </button>
           </div>
         </nav>
       </aside>
 
-      <!-- Main Content Area -->
       <main class="dash-main">
-        <!-- Topbar -->
         <header class="dash-topbar">
           <div class="dash-topbar-left">
             <button class="dash-hamburger" id="dash-hamburger">
@@ -250,20 +246,19 @@ function renderDashboard(user) {
           <div class="dash-topbar-right">
             <div class="dash-user-menu" id="user-menu">
               <button class="dash-user-trigger" id="user-trigger">
-                <div class="dash-avatar">${(getParentName() || user.email || 'D').charAt(0).toUpperCase()}</div>
-                <span class="dash-user-name">${getParentName() || user.email || 'Swimmer'}</span>
+                <div class="dash-avatar">${(getParentName() || user.email || t('dash_swimmer_username_fallback')).charAt(0).toUpperCase()}</div>
+                <span class="dash-user-name">${getParentName() || user.email || t('dash_swimmer_username_fallback')}</span>
                 <span class="dash-dropdown-arrow">▾</span>
               </button>
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
-                <button class="dash-dropdown-item" id="menu-profile">👤 Profile</button>
-                ${dbRole === 'admin' ? '<button class="dash-dropdown-item" id="menu-admin">⚙️ Admin Panel</button>' : ''}
-                <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">🚪 Sign Out</button>
+                <button class="dash-dropdown-item" id="menu-profile">${t('dash_user_menu_profile')}</button>
+                ${dbRole === 'admin' ? `<button class="dash-dropdown-item" id="menu-admin">${t('dash_user_menu_admin')}</button>` : ''}
+                <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">${t('dash_user_menu_signout')}</button>
               </div>
             </div>
           </div>
         </header>
 
-        <!-- Dynamic Content -->
         <div class="dash-content">
           ${renderTabContent(currentTab, 'swimmer')}
         </div>
@@ -276,11 +271,11 @@ function renderDashboard(user) {
   updateSidebarThemeIcon();
 }
 
+// ── Coach Dashboard ──
 function renderCoachDashboard(user) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="dash-layout">
-      <!-- Sidebar -->
       <aside class="dash-sidebar" id="dash-sidebar">
         <div class="dash-sidebar-header">
           <a href="${import.meta.env.BASE_URL}" class="dash-logo">
@@ -290,40 +285,38 @@ function renderCoachDashboard(user) {
         </div>
         <nav class="dash-nav">
           <div class="dash-nav-section">
-            <span class="dash-nav-label">Coach Menu</span>
+            <span class="dash-nav-label">${t('dash_coach_menu')}</span>
             <button class="dash-nav-item ${currentTab === 'overview' ? 'active' : ''}" data-tab="overview">
-              <span class="dash-nav-icon">🏠</span> Overview
+              <span class="dash-nav-icon">🏠</span> ${t('dash_coach_overview_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'roster' ? 'active' : ''}" data-tab="roster">
-              <span class="dash-nav-icon">👥</span> Swimmer Roster
+              <span class="dash-nav-icon">👥</span> ${t('dash_coach_roster_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'meets' ? 'active' : ''}" data-tab="meets">
-              <span class="dash-nav-icon">🏁</span> Meet Management
+              <span class="dash-nav-icon">🏁</span> ${t('dash_coach_meets_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
-              <span class="dash-nav-icon">⏱️</span> Practice Schedule
+              <span class="dash-nav-icon">⏱️</span> ${t('dash_coach_schedule_label')}
             </button>
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
-            <span class="dash-nav-label">System</span>
+            <span class="dash-nav-label">${t('dash_sidebar_system')}</span>
             ${dbRole === 'admin' ? `
             <a href="${import.meta.env.BASE_URL}admin.html" class="dash-nav-item" style="text-decoration: none;">
-              <span class="dash-nav-icon">⚙️</span> Admin Panel
+              <span class="dash-nav-icon">⚙️</span> ${t('dash_sidebar_admin')}
             </a>
             ` : ''}
             <button class="dash-nav-item" id="dash-theme-toggle">
-              <span class="dash-nav-icon" id="sidebar-theme-icon">🌙</span> Theme
+              <span class="dash-nav-icon" id="sidebar-theme-icon">🌙</span> ${t('dash_sidebar_theme')}
             </button>
             <button class="dash-nav-item" id="sidebar-signout" style="color: var(--color-accent); margin-top: var(--space-md);">
-              <span class="dash-nav-icon">🚪</span> Sign Out
+              <span class="dash-nav-icon">🚪</span> ${t('dash_sidebar_signout')}
             </button>
           </div>
         </nav>
       </aside>
 
-      <!-- Main Content Area -->
       <main class="dash-main">
-        <!-- Topbar -->
         <header class="dash-topbar">
           <div class="dash-topbar-left">
             <button class="dash-hamburger" id="dash-hamburger">
@@ -331,26 +324,25 @@ function renderCoachDashboard(user) {
             </button>
             <div>
               <h1 class="dash-page-title">Coach: ${getTabTitle(currentTab, 'coach')}</h1>
-              <p class="dash-page-subtitle">Managing the Dragon Swim Team roster and sessions</p>
+              <p class="dash-page-subtitle">${t('dash_coach_topbar_sub')}</p>
             </div>
           </div>
           <div class="dash-topbar-right">
-            <div class="badge badge-primary" style="margin-right: 1rem;">Coach Mode</div>
+            <div class="badge badge-primary" style="margin-right: 1rem;">${t('dash_coach_badge')}</div>
             <div class="dash-user-menu" id="user-menu">
               <button class="dash-user-trigger" id="user-trigger">
-                <div class="dash-avatar" style="background: var(--color-accent); color: white;">${(user.displayName || user.email || 'C').charAt(0).toUpperCase()}</div>
-                <span class="dash-user-name">${user.displayName || user.email || 'Coach'}</span>
+                <div class="dash-avatar" style="background: var(--color-accent); color: white;">${(user.displayName || user.email || t('dash_coach_username_fallback')).charAt(0).toUpperCase()}</div>
+                <span class="dash-user-name">${user.displayName || user.email || t('dash_coach_username_fallback')}</span>
                 <span class="dash-dropdown-arrow">▾</span>
               </button>
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
-                ${dbRole === 'admin' ? '<button class="dash-dropdown-item" id="menu-admin">⚙️ Admin Panel</button>' : ''}
-                <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">🚪 Sign Out</button>
+                ${dbRole === 'admin' ? `<button class="dash-dropdown-item" id="menu-admin">${t('dash_user_menu_admin')}</button>` : ''}
+                <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">${t('dash_user_menu_signout')}</button>
               </div>
             </div>
           </div>
         </header>
 
-        <!-- Dynamic Content -->
         <div class="dash-content">
           ${renderTabContent(currentTab, 'coach')}
         </div>
@@ -372,30 +364,30 @@ function getParentName() {
 function getTabTitle(tab, role = 'swimmer') {
   if (role === 'coach') {
     const titles = {
-      'overview': 'Coach Dashboard',
-      'roster': 'Team Roster',
-      'meets': 'Meet Management',
-      'schedule': 'Season Schedule',
+      'overview': t('dash_coach_tab_overview'),
+      'roster': t('dash_coach_tab_roster'),
+      'meets': t('dash_coach_tab_meets'),
+      'schedule': t('dash_coach_tab_schedule'),
     };
-    return titles[tab] || 'Coach Dashboard';
+    return titles[tab] || t('dash_coach_tab_overview');
   }
   const titles = {
-    'overview': 'Dashboard',
-    'profile': 'Family Profile',
-    'plans': 'Swim Plans',
-    'meets': 'Swim Meets',
-    'schedule': 'Practice Schedule',
+    'overview': t('dash_swimmer_tab_overview'),
+    'profile': t('dash_swimmer_tab_profile'),
+    'plans': t('dash_swimmer_tab_plans'),
+    'meets': t('dash_swimmer_tab_meets'),
+    'schedule': t('dash_swimmer_tab_schedule'),
   };
-  return titles[tab] || 'Dashboard';
+  return titles[tab] || t('dash_swimmer_tab_overview');
 }
 
 function getTabSubtitle(tab) {
   const subs = {
-    'overview': 'Overview of your swim season at a glance',
-    'profile': 'Manage your family information and swimmers',
-    'plans': 'Track and manage your training plans',
-    'meets': 'View registered and upcoming competitions',
-    'schedule': 'Your weekly practice timetable',
+    'overview': t('dash_swimmer_overview_sub'),
+    'profile': t('dash_swimmer_profile_sub'),
+    'plans': t('dash_swimmer_plans_sub'),
+    'meets': t('dash_swimmer_meets_sub'),
+    'schedule': t('dash_swimmer_schedule_sub'),
   };
   return subs[tab] || '';
 }
@@ -405,8 +397,8 @@ function renderTabContent(tab, role = 'swimmer') {
     switch (tab) {
       case 'overview': return renderCoachOverview();
       case 'roster': return renderCoachRoster();
-      case 'meets': return renderSwimMeets(); // Reuse for now
-      case 'schedule': return renderSchedule(); // Reuse for now
+      case 'meets': return renderSwimMeets();
+      case 'schedule': return renderSchedule();
       default: return renderCoachOverview();
     }
   }
@@ -464,27 +456,27 @@ function renderCoachOverview() {
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${activeSwimmers.length}</div>
-        <div class="dash-stat-label">Active Athletes</div>
+        <div class="dash-stat-label">${t('dash_coach_active_athletes')}</div>
       </div>
       <div class="dash-stat-card">
         <div class="dash-stat-number">${newRegistrations.length}</div>
-        <div class="dash-stat-label">New Registrations (30d)</div>
+        <div class="dash-stat-label">${t('dash_coach_new_registrations')}</div>
       </div>
       <div class="dash-stat-card accent">
         <div class="dash-stat-number">${upcomingMeets.length}</div>
-        <div class="dash-stat-label">Upcoming Meets</div>
+        <div class="dash-stat-label">${t('dash_coach_upcoming_meets')}</div>
       </div>
       <div class="dash-stat-card">
         <div class="dash-stat-number">${allRegistrations.length}</div>
-        <div class="dash-stat-label">Registered Families</div>
+        <div class="dash-stat-label">${t('dash_coach_registered_families')}</div>
       </div>
     </div>
 
     <div class="dash-overview-grid">
       <div class="dash-panel">
-        <h3 class="dash-panel-title">Top Athletes</h3>
+        <h3 class="dash-panel-title">${t('dash_coach_top_athletes')}</h3>
         <div class="dash-panel-body">
-          ${activeSwimmers.length === 0 ? '<p class="dash-empty">No swimmers registered yet.</p>' :
+          ${activeSwimmers.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_swimmers')}</p>` :
           activeSwimmers.slice(0, 5).map(s => `
             <div class="dash-mini-card">
                <div class="dash-mini-top">
@@ -497,9 +489,9 @@ function renderCoachOverview() {
         </div>
       </div>
       <div class="dash-panel">
-        <h3 class="dash-panel-title">Recent Registrations</h3>
+        <h3 class="dash-panel-title">${t('dash_coach_recent_registrations')}</h3>
         <div class="dash-panel-body">
-          ${newRegistrations.length === 0 ? '<p class="dash-empty">No recent registrations.</p>' :
+          ${newRegistrations.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_recent')}</p>` :
           newRegistrations.slice(0, 5).map(r => `
             <div class="dash-mini-card">
               <div class="dash-mini-top"><span class="dash-mini-name">${getParentNameFromReg(r)}</span></div>
@@ -518,18 +510,18 @@ function renderCoachRoster() {
   return `
     <div class="dash-panel">
       <div class="dash-panel-header" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3 class="dash-panel-title">Team Roster (${activeSwimmers.length} athletes)</h3>
+        <h3 class="dash-panel-title">${t('dash_coach_roster_title')} (${activeSwimmers.length} athletes)</h3>
       </div>
       <div class="dash-panel-body">
-        ${activeSwimmers.length === 0 ? '<p class="dash-empty">No swimmers registered yet.</p>' : `
+        ${activeSwimmers.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_swimmers')}</p>` : `
         <table style="width: 100%; border-collapse: collapse; text-align: left;">
           <thead>
             <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
-              <th style="padding: 1rem;">Name</th>
-              <th style="padding: 1rem;">Parent</th>
-              <th style="padding: 1rem;">Age</th>
-              <th style="padding: 1rem;">Gender</th>
-              <th style="padding: 1rem;">USA ID</th>
+              <th style="padding: 1rem;">${t('dash_coach_roster_name')}</th>
+              <th style="padding: 1rem;">${t('dash_coach_roster_parent')}</th>
+              <th style="padding: 1rem;">${t('dash_coach_roster_age')}</th>
+              <th style="padding: 1rem;">${t('dash_coach_roster_gender')}</th>
+              <th style="padding: 1rem;">${t('dash_coach_roster_usa_id')}</th>
             </tr>
           </thead>
           <tbody>
@@ -563,31 +555,31 @@ function renderOverview() {
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${swimPlans.length}</div>
-        <div class="dash-stat-label">Total Plans</div>
+        <div class="dash-stat-label">${t('dash_swimmer_total_plans')}</div>
       </div>
       <div class="dash-stat-card">
         <div class="dash-stat-number">${activePlans}</div>
-        <div class="dash-stat-label">Active Plans</div>
+        <div class="dash-stat-label">${t('dash_swimmer_active_plans')}</div>
       </div>
       <div class="dash-stat-card accent">
         <div class="dash-stat-number">${completedPlans}</div>
-        <div class="dash-stat-label">Completed</div>
+        <div class="dash-stat-label">${t('dash_swimmer_completed')}</div>
       </div>
       <div class="dash-stat-card">
         <div class="dash-stat-number">${upcomingMeets}</div>
-        <div class="dash-stat-label">Upcoming Meets</div>
+        <div class="dash-stat-label">${t('dash_swimmer_upcoming_meets')}</div>
       </div>
     </div>
 
     <div class="dash-overview-grid">
       <div class="dash-panel">
-        <h3 class="dash-panel-title">Active Swim Plans</h3>
+        <h3 class="dash-panel-title">${t('dash_swimmer_active_plans_title')}</h3>
         <div class="dash-panel-body">
           ${swimPlans.filter(p => p.status !== 'Completed').map(p => miniPlanCard(p)).join('')}
         </div>
       </div>
       <div class="dash-panel">
-        <h3 class="dash-panel-title">Upcoming Meets</h3>
+        <h3 class="dash-panel-title">${t('dash_swimmer_upcoming_meets_title')}</h3>
         <div class="dash-panel-body">
           ${swimMeets.filter(m => m.status !== 'Completed').map(m => miniMeetCard(m)).join('')}
         </div>
@@ -595,7 +587,7 @@ function renderOverview() {
     </div>
 
     <div class="dash-panel">
-      <h3 class="dash-panel-title">Today's Practice</h3>
+      <h3 class="dash-panel-title">${t('dash_swimmer_today_practice')}</h3>
       <div class="dash-panel-body">
         ${renderTodayPractice()}
       </div>
@@ -632,12 +624,12 @@ function miniMeetCard(meet) {
 }
 
 function renderTodayPractice() {
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const today = days[new Date().getDay()];
+  const todayIndex = new Date().getDay();
+  const today = getDayName(todayIndex);
   const todayPractices = practiceSchedules.filter(s => s.day === today);
 
   if (todayPractices.length === 0) {
-    return `<p class="dash-empty">No practices scheduled for today (${today}). Rest day! 🎉</p>`;
+    return `<p class="dash-empty">${t('dash_swimmer_rest_day')} (${today}). Rest day! 🎉</p>`;
   }
 
   return todayPractices.map(s => `
@@ -655,8 +647,8 @@ function renderTodayPractice() {
 function renderProfile() {
   if (!familyData) {
     return `<div class="dash-panel" style="text-align: center; padding: 3rem;">
-      <p class="dash-empty">No family registration found.</p>
-      <p style="margin-top: 1rem;"><a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-primary">Complete Registration</a></p>
+      <p class="dash-empty">${t('dash_profile_no_reg')}</p>
+      <p style="margin-top: 1rem;"><a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-primary">${t('dash_profile_complete_reg')}</a></p>
     </div>`;
   }
 
@@ -667,33 +659,32 @@ function renderProfile() {
 
   return `
     <div class="profile-grid">
-      <!-- Left Column -->
       <div class="profile-col">
         <div class="dash-panel">
           <div class="dash-panel-header">
-            <h3>Parent / Guardian</h3>
-            <button class="btn btn-outline btn-sm" id="edit-contact-btn">Edit</button>
+            <h3>${t('dash_profile_parent_title')}</h3>
+            <button class="btn btn-outline btn-sm" id="edit-contact-btn">${t('dash_profile_edit')}</button>
           </div>
           <div class="profile-fields">
             <div class="profile-field">
-              <span class="profile-label">Name</span>
+              <span class="profile-label">${t('dash_profile_name')}</span>
               <span class="profile-value">${[p.firstName, p.middleName, p.lastName].filter(Boolean).join(' ') || '—'}</span>
             </div>
             <div class="profile-field">
-              <span class="profile-label">Gender</span>
+              <span class="profile-label">${t('dash_profile_gender')}</span>
               <span class="profile-value">${p.gender || '—'}</span>
             </div>
             <div class="profile-field">
-              <span class="profile-label">Email</span>
+              <span class="profile-label">${t('dash_profile_email')}</span>
               <span class="profile-value">${p.email || '—'}</span>
             </div>
             <div class="profile-field">
-              <span class="profile-label">Phone</span>
+              <span class="profile-label">${t('dash_profile_phone')}</span>
               <span class="profile-value profile-display" id="display-parent-phone">${p.phone || '—'}</span>
               <input class="form-input profile-input profile-edit-field" id="edit-parent-phone" value="${p.phone || ''}" />
             </div>
             <div class="profile-field">
-              <span class="profile-label">Address</span>
+              <span class="profile-label">${t('dash_profile_address')}</span>
               <span class="profile-value profile-display" id="display-parent-address">${p.address || '—'}</span>
               <input class="form-input profile-input profile-edit-field" id="edit-parent-address" value="${p.address || ''}" />
             </div>
@@ -702,23 +693,23 @@ function renderProfile() {
 
         ${spouse ? `
         <div class="dash-panel">
-          <h3>Spouse / Partner</h3>
+          <h3>${t('dash_profile_spouse_title')}</h3>
           <div class="profile-fields">
             <div class="profile-field">
-              <span class="profile-label">Name</span>
+              <span class="profile-label">${t('dash_profile_name')}</span>
               <span class="profile-value">${[spouse.firstName, spouse.middleName, spouse.lastName].filter(Boolean).join(' ') || '—'}</span>
             </div>
             <div class="profile-field">
-              <span class="profile-label">Gender</span>
+              <span class="profile-label">${t('dash_profile_gender')}</span>
               <span class="profile-value">${spouse.gender || '—'}</span>
             </div>
             <div class="profile-field">
-              <span class="profile-label">Phone</span>
+              <span class="profile-label">${t('dash_profile_phone')}</span>
               <span class="profile-value profile-display" id="display-spouse-phone">${spouse.phone || '—'}</span>
               <input class="form-input profile-input profile-edit-field" id="edit-spouse-phone" value="${spouse.phone || ''}" />
             </div>
             <div class="profile-field">
-              <span class="profile-label">Email</span>
+              <span class="profile-label">${t('dash_profile_email')}</span>
               <span class="profile-value profile-display" id="display-spouse-email">${spouse.email || '—'}</span>
               <input class="form-input profile-input profile-edit-field" id="edit-spouse-email" value="${spouse.email || ''}" />
             </div>
@@ -727,15 +718,15 @@ function renderProfile() {
         ` : ''}
 
         <div class="dash-panel">
-          <h3>Emergency Contact</h3>
+          <h3>${t('dash_profile_emergency_title')}</h3>
           <div class="profile-fields">
             <div class="profile-field">
-              <span class="profile-label">Name</span>
+              <span class="profile-label">${t('dash_profile_name')}</span>
               <span class="profile-value profile-display" id="display-emergency-name">${ec.name || '—'}</span>
               <input class="form-input profile-input profile-edit-field" id="edit-emergency-name" value="${ec.name || ''}" />
             </div>
             <div class="profile-field">
-              <span class="profile-label">Phone</span>
+              <span class="profile-label">${t('dash_profile_phone')}</span>
               <span class="profile-value profile-display" id="display-emergency-phone">${ec.phone || '—'}</span>
               <input class="form-input profile-input profile-edit-field" id="edit-emergency-phone" value="${ec.phone || ''}" />
             </div>
@@ -743,59 +734,58 @@ function renderProfile() {
         </div>
 
         <div class="profile-edit-actions" id="edit-actions" style="display: none;">
-          <button class="btn btn-primary btn-sm" id="save-contact-btn">Save</button>
-          <button class="btn btn-outline btn-sm" id="cancel-contact-btn">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="save-contact-btn">${t('dash_profile_save')}</button>
+          <button class="btn btn-outline btn-sm" id="cancel-contact-btn">${t('dash_profile_cancel')}</button>
         </div>
       </div>
 
-      <!-- Right Column -->
       <div class="profile-col">
         <div class="dash-panel">
           <div class="dash-panel-header">
-            <h3>Swimmers (${swimmers.length})</h3>
-            <button class="btn btn-outline btn-sm" id="add-swimmer-toggle-btn">+ Add</button>
+            <h3>${t('dash_profile_swimmers_title')} (${swimmers.length})</h3>
+            <button class="btn btn-outline btn-sm" id="add-swimmer-toggle-btn">${t('dash_profile_add_swimmer')}</button>
           </div>
           <div id="add-swimmer-form" style="display: none; margin-bottom: var(--space-md); padding: var(--space-md); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">First Name</label>
+                <label class="form-label">${t('dash_profile_swimmer_first')}</label>
                 <input class="form-input" id="new-swimmer-first" />
               </div>
               <div class="form-group">
-                <label class="form-label">Last Name</label>
+                <label class="form-label">${t('dash_profile_swimmer_last')}</label>
                 <input class="form-input" id="new-swimmer-last" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Middle Name</label>
+                <label class="form-label">${t('dash_profile_swimmer_middle')}</label>
                 <input class="form-input" id="new-swimmer-middle" />
               </div>
               <div class="form-group">
-                <label class="form-label">Gender</label>
+                <label class="form-label">${t('dash_profile_swimmer_gender')}</label>
                 <select class="form-select" id="new-swimmer-gender">
-                  <option value="" disabled selected>Select...</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
+                  <option value="" disabled selected>${t('dash_profile_select_gender')}</option>
+                  <option value="male">${t('dash_profile_gender_male')}</option>
+                  <option value="female">${t('dash_profile_gender_female')}</option>
                 </select>
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Date of Birth</label>
+                <label class="form-label">${t('dash_profile_swimmer_dob')}</label>
                 <input class="form-input" type="date" id="new-swimmer-dob" />
               </div>
               <div class="form-group">
-                <label class="form-label">USA Swimming ID</label>
+                <label class="form-label">${t('dash_profile_swimmer_usa_id')}</label>
                 <input class="form-input" id="new-swimmer-usaId" />
               </div>
             </div>
             <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-md);">
-              <button class="btn btn-primary btn-sm" id="save-swimmer-btn">Save Swimmer</button>
-              <button class="btn btn-outline btn-sm" id="cancel-swimmer-btn">Cancel</button>
+              <button class="btn btn-primary btn-sm" id="save-swimmer-btn">${t('dash_profile_save_swimmer')}</button>
+              <button class="btn btn-outline btn-sm" id="cancel-swimmer-btn">${t('dash_profile_cancel_swimmer')}</button>
             </div>
           </div>
-          ${swimmers.filter(s => !s.deleted).length === 0 ? '<p class="dash-empty">No swimmers registered.</p>' : swimmers.map((s, i) => s.deleted ? '' : `
+          ${swimmers.filter(s => !s.deleted).length === 0 ? `<p class="dash-empty">${t('dash_profile_no_swimmers')}</p>` : swimmers.map((s, i) => s.deleted ? '' : `
 
             <div class="swimmer-profile-card">
               <div class="swimmer-profile-info">
@@ -807,7 +797,7 @@ function renderProfile() {
                   ${s.joinDate ? `<span>Joined: ${s.joinDate}</span>` : ''}
                 </div>
               </div>
-              <button class="btn btn-outline btn-sm delete-swimmer-btn" data-index="${i}" style="color: var(--color-accent); border-color: var(--color-accent);">Remove</button>
+              <button class="btn btn-outline btn-sm delete-swimmer-btn" data-index="${i}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_profile_remove')}</button>
             </div>
           `).join('')}
         </div>
@@ -856,28 +846,28 @@ function renderSwimMeets() {
 
   return `
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">Upcoming Meets</h2>
-      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-meet-btn">+ Add Meet</button>` : ''}
+      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_meets_upcoming')}</h2>
+      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-meet-btn">${t('dash_meets_add')}</button>` : ''}
     </div>
 
     ${isCoach ? `
       <div id="add-meet-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
-        <h3 style="margin-bottom: 1rem;">New Swim Meet</h3>
+        <h3 style="margin-bottom: 1rem;">${t('dash_meets_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-          <input type="text" id="meet-name" placeholder="Meet Name" class="form-input">
+          <input type="text" id="meet-name" placeholder="${t('dash_meets_name_placeholder')}" class="form-input">
           <input type="date" id="meet-date" class="form-input">
-          <input type="text" id="meet-location" placeholder="Location" class="form-input">
-          <input type="text" id="meet-events" placeholder="Events (comma separated)" class="form-input">
+          <input type="text" id="meet-location" placeholder="${t('dash_meets_location_placeholder')}" class="form-input">
+          <input type="text" id="meet-events" placeholder="${t('dash_meets_events_placeholder')}" class="form-input">
         </div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
-          <button class="btn btn-primary btn-sm" id="save-meet-btn">Save Meet</button>
-          <button class="btn btn-outline btn-sm" id="cancel-meet-btn">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="save-meet-btn">${t('dash_meets_save')}</button>
+          <button class="btn btn-outline btn-sm" id="cancel-meet-btn">${t('dash_meets_cancel')}</button>
         </div>
       </div>
     ` : ''}
 
     <div class="dash-cards-grid">
-      ${swimMeets.length === 0 ? `<p class="dash-empty">No meets scheduled yet.</p>` :
+      ${swimMeets.length === 0 ? `<p class="dash-empty">${t('dash_meets_no_meets')}</p>` :
       swimMeets.map(m => `
         <div class="dash-card">
           <div class="dash-card-header">
@@ -896,8 +886,8 @@ function renderSwimMeets() {
               </div>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-              ${!isCoach && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">Register</button>` : ''}
-              ${isCoach ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">Delete</button>` : ''}
+              ${!isCoach && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
+              ${isCoach ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
             </div>
           </div>
         </div>
@@ -909,41 +899,44 @@ function renderSwimMeets() {
 // ── Schedule Tab ──
 function renderSchedule() {
   const isCoach = userRole === 'coach';
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayNames = [0, 1, 2, 3, 4, 5, 6].map(i => getDayName(i));
+  // Week starts Monday
+  const scheduleDays = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
 
   return `
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">Weekly Schedule</h2>
-      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-session-btn">+ Add Session</button>` : ''}
+      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_schedule_weekly')}</h2>
+      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-session-btn">${t('dash_schedule_add')}</button>` : ''}
     </div>
 
     ${isCoach ? `
       <div id="add-session-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
-        <h3 style="margin-bottom: 1rem;">New Practice Session</h3>
+        <h3 style="margin-bottom: 1rem;">${t('dash_schedule_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
           <select id="session-day" class="form-input">
-            ${days.map(d => `<option value="${d}">${d}</option>`).join('')}
+            ${scheduleDays.map(d => `<option value="${getDayName(d)}">${getDayName(d)}</option>`).join('')}
           </select>
-          <input type="text" id="session-time" placeholder="Time (e.g. 5:00 AM)" class="form-input">
-          <input type="text" id="session-group" placeholder="Group" class="form-input">
-          <input type="text" id="session-focus" placeholder="Focus" class="form-input">
-          <input type="text" id="session-coach" placeholder="Coach" class="form-input">
+          <input type="text" id="session-time" placeholder="${t('dash_schedule_time_placeholder')}" class="form-input">
+          <input type="text" id="session-group" placeholder="${t('dash_schedule_group_placeholder')}" class="form-input">
+          <input type="text" id="session-focus" placeholder="${t('dash_schedule_focus_placeholder')}" class="form-input">
+          <input type="text" id="session-coach" placeholder="${t('dash_schedule_coach_placeholder')}" class="form-input">
         </div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
-          <button class="btn btn-primary btn-sm" id="save-session-btn">Save Session</button>
-          <button class="btn btn-outline btn-sm" id="cancel-session-btn">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="save-session-btn">${t('dash_schedule_save')}</button>
+          <button class="btn btn-outline btn-sm" id="cancel-session-btn">${t('dash_schedule_cancel')}</button>
         </div>
       </div>
     ` : ''}
 
     <div class="dash-schedule-grid">
-      ${days.map(day => {
-    const sessions = practiceSchedules.filter(s => s.day === day);
+      ${scheduleDays.map(dayIndex => {
+    const dayName = getDayName(dayIndex);
+    const sessions = practiceSchedules.filter(s => s.day === dayName);
     return `
           <div class="dash-schedule-day">
-            <h3 class="dash-schedule-day-name">${day}</h3>
+            <h3 class="dash-schedule-day-name">${dayName}</h3>
             ${sessions.length === 0
-        ? `<p class="dash-empty-sm">No practice</p>`
+        ? `<p class="dash-empty-sm">${t('dash_schedule_no_practice')}</p>`
         : sessions.map(s => `
                 <div class="dash-schedule-item">
                   <div class="dash-schedule-time">${s.time}</div>
@@ -964,18 +957,18 @@ function renderSchedule() {
   `;
 }
 
-// ── Events ──
+// ── Confirmation Modal ──
 function showDeleteConfirm(swimmerName, swimmerIndex) {
   const overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.innerHTML = `
     <div class="confirm-modal">
-      <h3 class="confirm-title">Remove Swimmer</h3>
-      <p class="confirm-body">You are about to remove <strong style="color: var(--color-accent, #dc3545);">${swimmerName}</strong> from your family registration.</p>
-      <p class="confirm-warning">This swimmer will be marked as inactive. Contact a coach if you need to restore this record.</p>
+      <h3 class="confirm-title">${t('dash_profile_delete_title')}</h3>
+      <p class="confirm-body">${t('dash_profile_delete_body1')} <strong style="color: var(--color-accent, #dc3545);">${swimmerName}</strong> ${t('dash_profile_delete_body2')}</p>
+      <p class="confirm-warning">${t('dash_profile_delete_warning')}</p>
       <div class="confirm-actions">
-        <button class="btn btn-outline btn-sm" id="confirm-cancel">Cancel</button>
-        <button class="btn btn-sm" id="confirm-delete" style="background: var(--color-accent, #dc3545); color: white; border: none;">Delete</button>
+        <button class="btn btn-outline btn-sm" id="confirm-cancel">${t('dash_profile_delete_cancel')}</button>
+        <button class="btn btn-sm" id="confirm-delete" style="background: var(--color-accent, #dc3545); color: white; border: none;">${t('dash_profile_delete_confirm')}</button>
       </div>
     </div>
   `;
@@ -994,7 +987,7 @@ function showDeleteConfirm(swimmerName, swimmerIndex) {
       refreshUI();
     } catch (err) {
       console.error("Error marking swimmer deleted:", err);
-      alert("Failed. Please try again.");
+      alert(t('dash_profile_save_failed'));
     }
   });
 
@@ -1003,6 +996,7 @@ function showDeleteConfirm(swimmerName, swimmerIndex) {
   });
 }
 
+// ── Events ──
 function bindEvents() {
   // Sidebar nav
   document.querySelectorAll('.dash-nav-item[data-tab]').forEach(btn => {
@@ -1055,14 +1049,12 @@ function bindEvents() {
     if (userDropdown) userDropdown.style.display = 'none';
   });
 
-  // Profile menu item
   document.getElementById('menu-profile')?.addEventListener('click', () => {
     currentTab = 'profile';
     userDropdown.style.display = 'none';
     refreshUI();
   });
 
-  // Signout menu item
   document.getElementById('menu-signout')?.addEventListener('click', async () => {
     try {
       await signOut(auth);
@@ -1072,7 +1064,6 @@ function bindEvents() {
     }
   });
 
-  // Admin panel menu item
   document.getElementById('menu-admin')?.addEventListener('click', () => {
     window.location.href = import.meta.env.BASE_URL + 'admin.html';
   });
@@ -1120,7 +1111,7 @@ function bindEvents() {
       refreshUI();
     } catch (err) {
       console.error("Error updating contact:", err);
-      alert("Failed to save. Please try again.");
+      alert(t('dash_profile_save_failed'));
     }
   });
 
@@ -1139,7 +1130,7 @@ function bindEvents() {
     const firstName = document.getElementById('new-swimmer-first').value.trim();
     const lastName = document.getElementById('new-swimmer-last').value.trim();
     if (!firstName || !lastName) {
-      alert('First name and last name are required.');
+      alert(t('dash_profile_swimmer_required'));
       return;
     }
     const newSwimmer = {
@@ -1159,7 +1150,7 @@ function bindEvents() {
       refreshUI();
     } catch (err) {
       console.error("Error adding swimmer:", err);
-      alert("Failed to add swimmer. Please try again.");
+      alert(t('dash_profile_swimmer_add_failed'));
     }
   });
 
@@ -1189,7 +1180,7 @@ function bindEvents() {
       const eventsStr = document.getElementById('meet-events').value;
 
       if (!name || !date) {
-        alert('Please provide at least a name and date.');
+        alert(t('dash_meets_name_date_required'));
         return;
       }
 
@@ -1210,7 +1201,7 @@ function bindEvents() {
 
     document.querySelectorAll('.delete-meet').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (confirm('Are you sure you want to delete this meet?')) {
+        if (confirm(t('dash_meets_confirm_delete'))) {
           try {
             await deleteDoc(doc(db, "meets", btn.dataset.id));
           } catch (err) {
@@ -1235,7 +1226,7 @@ function bindEvents() {
       const coach = document.getElementById('session-coach').value;
 
       if (!time || !group) {
-        alert('Please provide time and group.');
+        alert(t('dash_schedule_time_group_required'));
         return;
       }
 
@@ -1256,7 +1247,7 @@ function bindEvents() {
 
     document.querySelectorAll('.delete-session').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (confirm('Are you sure you want to delete this session?')) {
+        if (confirm(t('dash_schedule_delete_confirm'))) {
           try {
             await deleteDoc(doc(db, "schedules", btn.dataset.id));
           } catch (err) {
