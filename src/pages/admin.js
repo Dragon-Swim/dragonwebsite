@@ -15,6 +15,7 @@ import './admin.css';
 import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
+import { downloadAdminCSV, ADMIN_COLUMNS } from '../utils/csv.js';
 import {
   auth, db, doc, getDoc, setDoc, collection, onSnapshot,
   query, orderBy, onAuthStateChanged, signOut,
@@ -25,6 +26,7 @@ renderNavbar();
 
 let currentUser = null;
 let currentTab = 'create';
+let allRegistrations = [];
 
 const app = document.getElementById('app');
 
@@ -44,6 +46,15 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   currentUser = user;
+
+  // Listen for registration data (needed for export tab)
+  const qReg = query(collection(db, 'registrations'), orderBy('createdAt', 'desc'));
+  onSnapshot(qReg, (snapshot) => {
+    allRegistrations = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Re-render if export tab is active (refresh swimmer count)
+    if (currentTab === 'export') render();
+  });
+
   render();
 });
 
@@ -62,6 +73,9 @@ function render() {
           <button class="admin-nav-item ${currentTab === 'manage' ? 'active' : ''}" data-tab="manage">
             👥 Manage Coaches
           </button>
+          <button class="admin-nav-item ${currentTab === 'export' ? 'active' : ''}" data-tab="export">
+            📥 Export Data
+          </button>
         </nav>
         <div class="admin-sidebar-footer">
           <a href="${import.meta.env.BASE_URL}dashboard.html" class="admin-nav-item">← Back to Dashboard</a>
@@ -71,10 +85,10 @@ function render() {
 
       <main class="admin-main">
         <header class="admin-topbar">
-          <h1 class="admin-page-title">${currentTab === 'create' ? 'Create Coach Account' : 'Manage Coaches'}</h1>
+          <h1 class="admin-page-title">${currentTab === 'create' ? 'Create Coach Account' : currentTab === 'manage' ? 'Manage Coaches' : 'Export Data'}</h1>
         </header>
         <div class="admin-content">
-          ${currentTab === 'create' ? renderCreateForm() : renderManageView()}
+          ${currentTab === 'create' ? renderCreateForm() : currentTab === 'manage' ? renderManageView() : renderExportView()}
         </div>
       </main>
     </div>
@@ -128,7 +142,7 @@ function renderManageView() {
       <div class="admin-panel-header">
         <h3>All Coach Accounts</h3>
         <span class="admin-badge" id="pending-count">0 pending</span>
-      </div>
+    </div>
       <div class="admin-table-wrapper">
         <table class="admin-table">
           <thead>
@@ -145,6 +159,66 @@ function renderManageView() {
           </tbody>
         </table>
       </div>
+    </div>
+  `;
+}
+
+function renderExportView() {
+  let totalFamilies = allRegistrations.length;
+  let totalSwimmers = 0;
+  const statusCounts = { pending: 0, active: 0, inactive: 0 };
+
+  for (const reg of allRegistrations) {
+    const swimmers = reg.swimmers || [];
+    for (const s of swimmers) {
+      if (s.deleted) continue;
+      totalSwimmers++;
+      const st = s.status || 'pending';
+      statusCounts[st] = (statusCounts[st] || 0) + 1;
+    }
+  }
+
+  const statHeaders = ['Families', 'Swimmers', 'Active', 'Pending', 'Inactive'];
+  const statValues = [totalFamilies, totalSwimmers, statusCounts.active || 0, statusCounts.pending || 0, statusCounts.inactive || 0];
+
+  return `
+    <div class="admin-panel">
+      <h3>Export All Registration Data</h3>
+      <p class="admin-hint">Download a CSV file with every swimmer and their family contact information.</p>
+
+      <table class="admin-table" style="margin: 1.5rem 0; max-width: 600px;">
+        <thead>
+          <tr>${statHeaders.map(h => `<th>${h}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          <tr>${statValues.map(v => `<td style="font-weight: 600; font-size: 1.1rem;">${v}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+
+      <div class="admin-panel" style="background: var(--bg-secondary, #f9fafb); margin-top: 1.5rem;">
+        <h4>CSV Columns</h4>
+        <p class="admin-hint">
+          One row per swimmer. Families with multiple swimmers appear on multiple rows with the same parent info.
+          <button type="button" class="btn btn-outline btn-sm" id="export-select-all" style="margin-left: 1rem;">Select All</button>
+          <button type="button" class="btn btn-outline btn-sm" id="export-deselect-all">Deselect All</button>
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0;" id="export-column-checkboxes">
+          ${ADMIN_COLUMNS.map(c => `
+            <label class="checkbox-label" style="display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+              <input type="checkbox" class="export-col-cb" value="${c.key}" checked />
+              <span>${c.label}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+
+      <div style="margin-top: 2rem; display: flex; gap: 1rem; align-items: center;">
+        <button class="btn btn-primary" id="admin-export-csv-btn" ${totalSwimmers === 0 ? 'disabled' : ''}>
+          📥 Download CSV
+        </button>
+        <span style="color: var(--text-muted); font-size: 0.9rem;" id="export-filename-preview"></span>
+      </div>
+      <p id="export-message" class="admin-form-message" style="margin-top: 1rem;"></p>
     </div>
   `;
 }
@@ -290,6 +364,45 @@ function bindEvents() {
       pendingBadge.textContent = `${pending} pending`;
     }, (err) => {
       tbody.innerHTML = `<tr><td colspan="5" class="admin-empty">Error loading: ${err.message}</td></tr>`;
+    });
+  }
+
+  // Export tab — download CSV
+  if (currentTab === 'export') {
+    const exportBtn = document.getElementById('admin-export-csv-btn');
+    const preview = document.getElementById('export-filename-preview');
+    if (preview) {
+      const today = new Date().toISOString().slice(0, 10);
+      preview.textContent = `dragon-full-roster-${today}.csv`;
+    }
+
+    // Select All / Deselect All
+    document.getElementById('export-select-all')?.addEventListener('click', () => {
+      document.querySelectorAll('.export-col-cb').forEach(cb => { cb.checked = true; });
+    });
+    document.getElementById('export-deselect-all')?.addEventListener('click', () => {
+      document.querySelectorAll('.export-col-cb').forEach(cb => { cb.checked = false; });
+    });
+
+    exportBtn?.addEventListener('click', () => {
+      const checkedKeys = [];
+      document.querySelectorAll('.export-col-cb:checked').forEach(cb => {
+        checkedKeys.push(cb.value);
+      });
+      if (checkedKeys.length === 0) {
+        const msg = document.getElementById('export-message');
+        msg.textContent = 'Please select at least one column.';
+        msg.className = 'admin-form-message error';
+        return;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      downloadAdminCSV(allRegistrations, `dragon-full-roster-${today}.csv`, checkedKeys);
+      const msg = document.getElementById('export-message');
+      if (msg) {
+        msg.textContent = `Download started — ${checkedKeys.length} columns.`;
+        msg.className = 'admin-form-message success';
+        setTimeout(() => { msg.textContent = ''; msg.className = 'admin-form-message'; }, 3000);
+      }
     });
   }
 }
