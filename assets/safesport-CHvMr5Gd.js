@@ -1,4 +1,4 @@
-import{i as s}from"./i18n-cfzYsXIq.js";import{a as e,r as a}from"./footer-9Zbu_KFG.js";s();e();const t=document.getElementById("app");t.innerHTML=`
+import{i as s}from"./i18n-cfzYsXIq.js";import{a as e,r as a}from"./footer-DYNOo2cx.js";s();e();const t=document.getElementById("app");t.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); align-content: center;">
     <div class="container" style="max-width: 800px;">
       <h1 class="section-title">USA SafeSport Compliance</h1>

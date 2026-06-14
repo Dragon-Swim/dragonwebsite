@@ -1,4 +1,4 @@
-import{i as r,t as e}from"./i18n-cfzYsXIq.js";import{a as c,r as n}from"./footer-9Zbu_KFG.js";r();c();const l=document.getElementById("app");l.innerHTML=`
+import{i as r,t as e}from"./i18n-cfzYsXIq.js";import{a as n,r as c}from"./footer-DYNOo2cx.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -17,22 +17,18 @@ import{i as r,t as e}from"./i18n-cfzYsXIq.js";import{a as c,r as n}from"./footer
       <div class="hero-right">
         <div class="hero-float-grid">
           <!-- Floating feature cards -->
-          <div class="hero-float-card hfc-1">
-            <div class="hfc-icon">🏊‍♂️</div>
-            <div class="hfc-label">Swim Plans</div>
-          </div>
-          <div class="hero-float-card hfc-2">
+          <a href="/dragonwebsite/signin.html" class="hero-float-card hfc-2">
             <div class="hfc-icon">🏆</div>
             <div class="hfc-label">Swim Meets</div>
-          </div>
-          <div class="hero-float-card hfc-3">
+          </a>
+          <a href="/dragonwebsite/signin.html" class="hero-float-card hfc-3">
             <div class="hfc-icon">📅</div>
             <div class="hfc-label">Schedules</div>
-          </div>
-          <div class="hero-float-card hfc-4">
+          </a>
+          <a href="/dragonwebsite/contact.html" class="hero-float-card hfc-4">
             <div class="hfc-icon">💬</div>
             <div class="hfc-label">Coach Chat</div>
-          </div>
+          </a>
           <!-- Central dragon -->
           <div class="hero-central-icon">
             <div class="hero-central-ring"></div>
@@ -163,7 +159,7 @@ import{i as r,t as e}from"./i18n-cfzYsXIq.js";import{a as c,r as n}from"./footer
     </div>
   </section>
 
-`;n();const d={root:null,rootMargin:"0px",threshold:.15},h=new IntersectionObserver((a,t)=>{a.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(a=>{h.observe(a)});function i(a,t,s){return`
+`;c();const d={root:null,rootMargin:"0px",threshold:.15},h=new IntersectionObserver((a,t)=>{a.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(a=>{h.observe(a)});function i(a,t,s){return`
     <div class="card season-card" style="--season-accent: ${s}">
       <div class="season-emoji">${t}</div>
       <h3 class="season-name">${e("season_"+a)}</h3>
