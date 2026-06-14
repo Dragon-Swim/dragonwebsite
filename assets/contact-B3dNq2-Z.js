@@ -1,4 +1,4 @@
-import{i as c,t as e}from"./i18n-Do8R_3uV.js";import{a as l,r as s}from"./footer-7sDl51H8.js";import{a as n,c as r,e as i}from"./firebase-B6pM3H1n.js";c();l();const d=document.getElementById("app");d.innerHTML=`
+import{i as c,t as e}from"./i18n-DiRWGI-u.js";import{a as l,r as s}from"./footer-C982sxS8.js";import{a as n,c as r,e as i}from"./firebase-8Bk_msJm.js";c();l();const d=document.getElementById("app");d.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center;">
     <div class="container" style="max-width: 800px;">
       <div class="text-center" style="margin-bottom: var(--space-2xl);">

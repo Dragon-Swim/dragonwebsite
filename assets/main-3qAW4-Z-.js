@@ -1,4 +1,4 @@
-import{i as r,t as a}from"./i18n-Do8R_3uV.js";import{a as c,r as n}from"./footer-7sDl51H8.js";r();c();const d=document.getElementById("app");d.innerHTML=`
+import{i as r,t as a}from"./i18n-DiRWGI-u.js";import{a as n,r as c}from"./footer-C982sxS8.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -81,9 +81,9 @@ import{i as r,t as a}from"./i18n-Do8R_3uV.js";import{a as c,r as n}from"./footer
         <div class="divider" style="margin: var(--space-md) auto;"></div>
       </div>
       <div class="team-grid animate-on-scroll" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg);">
-        ${o("Coach Martinez","Head Coach","Specializes in distance, endurance, and overall program structure.")}
-        ${o("Coach Kim","Assistant Coach","Focuses on stroke technique, fundamentals, and core strength.")}
-        ${o("Coach Davis","IM Specialist","Expert in Individual Medley, sprints, and race-day logistics.")}
+        ${o("Coach Kevin","Head Coach","As an ASCA Level 5 Coach and ASCA Life Member, Coach Kevin brings elite, nationally recognized expertise to the pool deck. Consistently ranked among the country's best, Coach Kevin was named to the ASCA Top 50 Age Group Coaches list in 2019 and the Top 25 Age Group Coaches for Small Teams in 2025. Under his leadership, the team achieved ASCA Top 100 Age Group Team honors in both 2020 and 2021. Most recently, Coach Kevin's dedication to athlete development was recognized on a national scale as a finalist for the 2024 ASCA Top 4 Impact Coach award.")}
+        ${o("Coach Lisa","Coach","Coach Lisa understands that in competitive swimming, details dictate success. Dedicated to building an unbreakable foundation for every athlete, Coach Lisa is an expert in stroke technique and fundamentals. By utilizing precise stroke breakdown and biomechanical analysis, they optimize each swimmer's entry angle, catch, and pulling efficiency. Beyond meticulous underwater technique, Coach Lisa places a heavy emphasis on core strength, seamlessly bridging the gap between dryland conditioning and holding a flawless underwater streamline. Whether working with developing swimmers or elite athletes aiming for national cuts, Coach Lisa helps them find their breakthrough through zero-flaw fundamentals, allowing them to move through the water with maximum efficiency and injury prevention.")}
+        ${o("Coach Sue","Coach","Coach Sue is a master of aquatic conditioning and race strategy, focused on unlocking an athlete's full physiological potential through scientific and dynamic comprehensive training. Coach Sue eliminates the monotony of one-dimensional practices by designing highly engaging, multi-stroke swim sets that seamlessly transition between butterfly, backstroke, breaststroke, and freestyle. This high-intensity, comprehensive approach not only significantly boosts a swimmer's Individual Medley (IM) prowess but also precisely targets different energy systems—from the aerobic base to anaerobic lactate threshold sprinting. In Coach Sue's practices, every meticulously crafted set is designed to build stroke control under extreme fatigue, finely tune pacing awareness, and forge mental toughness for race day.")}
       </div>
     </div>
   </section>
@@ -118,7 +118,7 @@ import{i as r,t as a}from"./i18n-Do8R_3uV.js";import{a as c,r as n}from"./footer
     </div>
   </section>
 
-`;n();const l={root:null,rootMargin:"0px",threshold:.15},v=new IntersectionObserver((e,t)=>{e.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},l);document.querySelectorAll(".animate-on-scroll").forEach(e=>{v.observe(e)});function i(e,t,s){return`
+`;c();const d={root:null,rootMargin:"0px",threshold:.15},h=new IntersectionObserver((e,t)=>{e.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(e=>{h.observe(e)});function i(e,t,s){return`
     <div class="card season-card" style="--season-accent: ${s}">
       <div class="season-emoji">${t}</div>
       <h3 class="season-name">${a("season_"+e)}</h3>
