@@ -17,6 +17,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   googleProvider,
+  sendPasswordResetEmail,
   doc,
   setDoc
 } from '../utils/firebase.js';
@@ -31,6 +32,8 @@ renderNavbar();
 
 const urlParams = new URLSearchParams(window.location.search);
 let isSignUp = urlParams.get('mode') === 'signup';
+let isForgot = false;
+let failedAttempts = 0;
 
 const app = document.getElementById('app');
 
@@ -40,6 +43,36 @@ function render() {
       <div class="container">
         <div class="signin-wrapper">
           <div class="signin-card">
+            ${isForgot ? `
+            <!-- Forgot Password Header -->
+            <div class="signin-header">
+              <div class="signin-logo">
+                <img src="${import.meta.env.BASE_URL}logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img light-logo" style="height:60px" />
+                <img src="${import.meta.env.BASE_URL}logo-dark.png" alt="Dragon Swim Team" class="nav-logo-img dark-logo" style="height:60px" />
+              </div>
+              <h1 class="signin-title">${t('signin_forgot_title')}</h1>
+              <p class="signin-subtitle">${t('signin_forgot_subtitle')}</p>
+            </div>
+
+            <!-- Forgot Password Form -->
+            <form class="signin-form" id="forgot-form">
+              <div class="form-group">
+                <label class="form-label" for="forgot-email">${t('signin_forgot_email')}</label>
+                <input class="form-input" type="email" id="forgot-email" placeholder="you@example.com" required />
+              </div>
+              <button type="submit" class="btn btn-primary btn-lg signin-submit" style="width: 100%;" id="forgot-submit-btn">
+                ${t('signin_forgot_btn')}
+              </button>
+            </form>
+
+            <!-- Success message (hidden by default) -->
+            <p id="forgot-success" style="display: none; color: #16A34A; font-size: 14px; text-align: center; margin-top: 10px;"></p>
+
+            <!-- Back to sign in -->
+            <div class="signin-toggle">
+              <a href="#" id="forgot-back">${t('signin_forgot_back')}</a>
+            </div>
+            ` : `
             <div class="signin-header">
               <div class="signin-logo">
                 <img src="${import.meta.env.BASE_URL}logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img light-logo" style="height:60px" />
@@ -54,13 +87,13 @@ function render() {
               ` : ''}
               <div class="form-group">
                 <label class="form-label" for="auth-email">${isSignUp ? t('signup_email') : t('signin_email')}</label>
-                <input class="form-input" type="email" id="auth-email" placeholder="you@example.com" required />
+                <input class="form-input" type="email" id="auth-email" placeholder="you@example.com" required ${failedAttempts >= 3 ? 'disabled' : ''} />
               </div>
               <div class="form-group">
                 <label class="form-label" for="auth-password">${isSignUp ? t('signup_password') : t('signin_password')}</label>
                 <div class="password-group">
-                  <input class="form-input" type="password" id="auth-password" placeholder="••••••••" required />
-                  <button type="button" class="password-toggle" data-target="auth-password" aria-label="Show password">
+                  <input class="form-input" type="password" id="auth-password" placeholder="••••••••" required ${failedAttempts >= 3 ? 'disabled' : ''} />
+                  <button type="button" class="password-toggle" data-target="auth-password" aria-label="Show password" ${failedAttempts >= 3 ? 'disabled' : ''}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                   </button>
                 </div>
@@ -78,10 +111,10 @@ function render() {
               ` : ''}
               ${!isSignUp ? `
                 <div class="signin-forgot">
-                  <a href="#">${t('signin_forgot')}</a>
+                  <a href="#" id="forgot-link"${failedAttempts >= 3 ? ' style="color: #F59E0B; font-weight: 700; font-size: 1.05em; text-decoration: underline; animation: pulse 1.5s infinite;"' : ''}>${failedAttempts >= 3 ? '⚠ ' : ''}${t('signin_forgot')}</a>
                 </div>
               ` : ''}
-              <button type="submit" class="btn btn-primary btn-lg signin-submit" id="submit-btn" style="width: 100%;">
+              <button type="submit" class="btn btn-primary btn-lg signin-submit" id="submit-btn" style="width: 100%;" ${failedAttempts >= 3 ? 'disabled' : ''}>
                 ${isSignUp ? t('signup_btn') : t('signin_btn')}
               </button>
             </form>
@@ -97,11 +130,12 @@ function render() {
 
             <div class="signin-toggle">
               ${isSignUp
-      ? `${t('signup_has_account')} <a href="#" id="toggle-auth">${t('signup_signin_link')}</a>`
-      : `${t('signin_no_account')} <a href="#" id="toggle-auth">${t('signin_signup_link')}</a>`
-    }
+	      ? `${t('signup_has_account')} <a href="#" id="toggle-auth">${t('signup_signin_link')}</a>`
+	      : `${t('signin_no_account')} <a href="#" id="toggle-auth">${t('signin_signup_link')}</a>`
+	    }
             </div>
-            
+            `}
+
             <p id="auth-error" style="color:red; font-size: 14px; text-align: center; margin-top: 10px; display: none;"></p>
           </div>
         </div>
@@ -137,6 +171,8 @@ function bindEvents() {
   document.getElementById('toggle-auth')?.addEventListener('click', (e) => {
     e.preventDefault();
     isSignUp = !isSignUp;
+    isForgot = false;
+    failedAttempts = 0;
     // Remove old footer before re-render
     document.querySelector('.footer')?.remove();
     render();
@@ -182,8 +218,19 @@ function bindEvents() {
       }
     } catch (error) {
       console.error(error);
-      showError(error.message || 'Authentication failed');
-      btnEl.disabled = false;
+      // Track failed attempts for sign-in mode only
+      if (!isSignUp) {
+        failedAttempts++;
+      }
+      if (failedAttempts >= 3) {
+        showError('Too many failed attempts. Please reset your password below.');
+        // Re-render to lock the form and highlight forgot password link
+        document.querySelector('.footer')?.remove();
+        render();
+      } else {
+        showError(error.message || 'Authentication failed');
+        btnEl.disabled = false;
+      }
     }
   });
 
@@ -212,6 +259,58 @@ function bindEvents() {
         showError(error.message || 'Google sign in failed');
       }
     }
+  });
+
+  // ── Forgot Password Flow ──
+
+  // Click "Forgot password?" link
+  document.getElementById('forgot-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    isForgot = true;
+    failedAttempts = 0;
+    document.querySelector('.footer')?.remove();
+    render();
+  });
+
+  // Submit forgot password form
+  document.getElementById('forgot-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('forgot-email').value;
+    const errorEl2 = document.getElementById('auth-error');
+    const successEl = document.getElementById('forgot-success');
+    const submitBtn = document.getElementById('forgot-submit-btn');
+
+    // Clear previous messages
+    if (errorEl2) errorEl2.style.display = 'none';
+    if (successEl) successEl.style.display = 'none';
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      if (successEl) {
+        successEl.textContent = t('signin_forgot_success');
+        successEl.style.display = 'block';
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      if (errorEl2) {
+        errorEl2.textContent = error.code === 'auth/user-not-found'
+          ? t('signin_forgot_error')
+          : (error.message || t('signin_forgot_error'));
+        errorEl2.style.display = 'block';
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
+  // Click "Back to sign in"
+  document.getElementById('forgot-back')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    isForgot = false;
+    failedAttempts = 0;
+    document.querySelector('.footer')?.remove();
+    render();
   });
 }
 

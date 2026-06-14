@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from '../utils/firebase.js';
 
 initTheme();
 
@@ -253,6 +253,7 @@ function renderDashboard(user) {
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
                 <button class="dash-dropdown-item" id="menu-profile">${t('dash_user_menu_profile')}</button>
                 ${dbRole === 'admin' ? `<button class="dash-dropdown-item" id="menu-admin">${t('dash_user_menu_admin')}</button>` : ''}
+                ${currentUser && currentUser.providerData && currentUser.providerData[0].providerId === 'password' ? `<button class="dash-dropdown-item" id="menu-password">🔑 ${t('dash_profile_password_btn')}</button>` : ''}
                 <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">${t('dash_user_menu_signout')}</button>
               </div>
             </div>
@@ -337,6 +338,7 @@ function renderCoachDashboard(user) {
               </button>
               <div class="dash-dropdown" id="user-dropdown" style="display: none;">
                 ${dbRole === 'admin' ? `<button class="dash-dropdown-item" id="menu-admin">${t('dash_user_menu_admin')}</button>` : ''}
+                ${currentUser && currentUser.providerData && currentUser.providerData[0].providerId === 'password' ? `<button class="dash-dropdown-item" id="menu-password">🔑 ${t('dash_profile_password_btn')}</button>` : ''}
                 <button class="dash-dropdown-item" id="menu-signout" style="color: var(--color-accent);">${t('dash_user_menu_signout')}</button>
               </div>
             </div>
@@ -996,6 +998,97 @@ function showDeleteConfirm(swimmerName, swimmerIndex) {
   });
 }
 
+// ── Password Change Modal ──
+function showPasswordModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal" style="max-width: 420px;">
+      <h3 class="confirm-title">${t('dash_profile_security_title')}</h3>
+      <div style="padding: var(--space-md) 0;">
+        <div class="profile-field">
+          <label class="form-label" for="modal-current-password">${t('dash_profile_current_password')}</label>
+          <input class="form-input" type="password" id="modal-current-password" placeholder="Enter current password" />
+        </div>
+        <div class="profile-field">
+          <label class="form-label" for="modal-new-password">${t('dash_profile_new_password')}</label>
+          <input class="form-input" type="password" id="modal-new-password" placeholder="Enter new password" />
+        </div>
+        <div class="profile-field">
+          <label class="form-label" for="modal-confirm-password">${t('dash_profile_confirm_password')}</label>
+          <input class="form-input" type="password" id="modal-confirm-password" placeholder="Confirm new password" />
+        </div>
+        <p id="modal-password-msg" style="font-size: 14px; margin-top: 10px; display: none;"></p>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="modal-password-cancel">${t('dash_profile_cancel')}</button>
+        <button class="btn btn-primary btn-sm" id="modal-password-submit">${t('dash_profile_password_btn')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const msgEl = overlay.querySelector('#modal-password-msg');
+
+  overlay.querySelector('#modal-password-cancel').addEventListener('click', () => overlay.remove());
+
+  overlay.querySelector('#modal-password-submit').addEventListener('click', async () => {
+    const currentPassword = overlay.querySelector('#modal-current-password').value;
+    const newPassword = overlay.querySelector('#modal-new-password').value;
+    const confirmPassword = overlay.querySelector('#modal-confirm-password').value;
+
+    msgEl.style.display = 'none';
+
+    // Validate
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      msgEl.textContent = 'All fields are required.';
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      msgEl.textContent = t('dash_profile_password_mismatch');
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+      return;
+    }
+    if (newPassword.length < 6) {
+      msgEl.textContent = 'Password must be at least 6 characters.';
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+      return;
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+
+      msgEl.textContent = t('dash_profile_password_success');
+      msgEl.style.color = '#16A34A';
+      msgEl.style.display = 'block';
+
+      // Clear form
+      overlay.querySelector('#modal-current-password').value = '';
+      overlay.querySelector('#modal-new-password').value = '';
+      overlay.querySelector('#modal-confirm-password').value = '';
+    } catch (error) {
+      console.error('Password update error:', error);
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        msgEl.textContent = t('dash_profile_password_wrong');
+      } else {
+        msgEl.textContent = t('dash_profile_password_error') + ' ' + (error.message || '');
+      }
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+    }
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
 // ── Events ──
 function bindEvents() {
   // Sidebar nav
@@ -1066,6 +1159,11 @@ function bindEvents() {
 
   document.getElementById('menu-admin')?.addEventListener('click', () => {
     window.location.href = import.meta.env.BASE_URL + 'admin.html';
+  });
+
+  document.getElementById('menu-password')?.addEventListener('click', () => {
+    userDropdown.style.display = 'none';
+    showPasswordModal();
   });
 
   // ── Profile Edit ──
@@ -1162,6 +1260,69 @@ function bindEvents() {
       const name = [swimmer.firstName, swimmer.lastName].filter(Boolean).join(' ');
       showDeleteConfirm(name, idx);
     });
+  });
+
+  // ── Update Password ──
+  document.getElementById('update-password-btn')?.addEventListener('click', async () => {
+    const msgEl = document.getElementById('password-update-msg');
+    const currentPassword = document.getElementById('change-current-password').value;
+    const newPassword = document.getElementById('change-new-password').value;
+    const confirmPassword = document.getElementById('change-confirm-password').value;
+
+    // Hide previous message
+    msgEl.style.display = 'none';
+    msgEl.style.color = '';
+    const btnEl = document.getElementById('update-password-btn');
+    if (btnEl) btnEl.disabled = true;
+
+    // Validate inputs
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      msgEl.textContent = 'All fields are required.';
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+      if (btnEl) btnEl.disabled = false;
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      msgEl.textContent = t('dash_profile_password_mismatch');
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+      if (btnEl) btnEl.disabled = false;
+      return;
+    }
+    if (newPassword.length < 6) {
+      msgEl.textContent = 'Password must be at least 6 characters.';
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+      if (btnEl) btnEl.disabled = false;
+      return;
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+
+      msgEl.textContent = t('dash_profile_password_success');
+      msgEl.style.color = '#16A34A';
+      msgEl.style.display = 'block';
+
+      // Clear form on success
+      document.getElementById('change-current-password').value = '';
+      document.getElementById('change-new-password').value = '';
+      document.getElementById('change-confirm-password').value = '';
+    } catch (error) {
+      console.error('Password update error:', error);
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        msgEl.textContent = t('dash_profile_password_wrong');
+      } else {
+        msgEl.textContent = t('dash_profile_password_error') + ' ' + (error.message || '');
+      }
+      msgEl.style.color = 'var(--color-accent, #DC2626)';
+      msgEl.style.display = 'block';
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
   });
 
   // ── Coach Management Events ──

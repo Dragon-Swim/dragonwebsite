@@ -8,7 +8,11 @@ import {
     GoogleAuthProvider,
     onAuthStateChanged,
     signOut,
-    updateProfile
+    updateProfile,
+    sendPasswordResetEmail,
+    updatePassword,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
 } from "firebase/auth";
 import {
     getFirestore,
@@ -102,6 +106,10 @@ export {
     onAuthStateChanged,
     signOut,
     updateProfile,
+    sendPasswordResetEmail,
+    updatePassword,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
     doc,
     setDoc,
     getDoc,

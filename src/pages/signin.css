@@ -155,3 +155,9 @@
         padding: var(--space-xl);
     }
 }
+
+/* Pulse animation for locked-out forgot password link */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}

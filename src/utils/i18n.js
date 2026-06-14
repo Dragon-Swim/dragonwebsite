@@ -23,16 +23,16 @@ const translations = {
         seasons_subtitle: 'Join us any time of year. Each season offers a unique training focus.',
         season_spring: 'Spring',
         season_spring_dates: 'March – May',
-        season_spring_desc: 'Technique refinement and race preparation. Focus on stroke mechanics and starts.',
+        season_spring_desc: 'Spring brings the thrilling culmination of our Short Course (25-yard) season, immediately followed by a major shift in training environment.',
         season_summer: 'Summer',
         season_summer_dates: 'June – August',
-        season_summer_desc: 'Intensive training and competition season. Daily practices with meet preparation.',
+        season_summer_desc: 'Summer is all about long-course speed and power, culminating in the grand finale of our competitive year.',
         season_fall: 'Fall',
         season_fall_dates: 'September – November',
-        season_fall_desc: 'Endurance building and base conditioning. Preparing for the winter championship season.',
+        season_fall_desc: 'Following the summer rest period, the Fall season marks the official start of our new swim year. The primary focus during these months is aerobic base building and technical refinement.',
         season_winter: 'Winter',
         season_winter_dates: 'December – February',
-        season_winter_desc: 'Championship season. Peak performance training and major competitions.',
+        season_winter_desc: 'Winter is the crucible of our training year—acting much like an academic mid-term. Training volume and intensity ramp up as we prepare swimmers for the championship season ahead.',
         why_title: 'Why Dragon Swim?',
         why_coaching: 'Expert Coaching',
         why_coaching_desc: 'Our certified coaches bring years of competitive and coaching experience.',
@@ -138,6 +138,15 @@ const translations = {
         signup_has_account: 'Already have an account?',
         signup_signin_link: 'Sign In',
         signin_google: 'Continue with Google',
+
+        // Forgot Password
+        signin_forgot_title: 'Reset Password',
+        signin_forgot_subtitle: "Enter your email and we'll send you a reset link.",
+        signin_forgot_email: 'Email Address',
+        signin_forgot_btn: 'Send Reset Email',
+        signin_forgot_success: 'Password reset email sent! Check your inbox.',
+        signin_forgot_back: 'Back to sign in',
+        signin_forgot_error: 'Unable to send reset email. Please verify your email address.',
 
         // Footer
         footer_tagline: 'Training champions in and out of the water.',
@@ -253,6 +262,17 @@ const translations = {
         dash_profile_save_failed: 'Failed. Please try again.',
         dash_profile_swimmer_required: 'First name and last name are required.',
         dash_profile_swimmer_add_failed: 'Failed to add swimmer. Please try again.',
+
+        // Account Security
+        dash_profile_security_title: 'Account Security',
+        dash_profile_current_password: 'Current Password',
+        dash_profile_new_password: 'New Password',
+        dash_profile_confirm_password: 'Confirm New Password',
+        dash_profile_password_btn: 'Update Password',
+        dash_profile_password_success: 'Password updated successfully!',
+        dash_profile_password_mismatch: 'New passwords do not match.',
+        dash_profile_password_wrong: 'Current password is incorrect.',
+        dash_profile_password_error: 'Failed to update password.',
 
         // ── Dashboard — Swim Meets ──
         dash_meets_upcoming: 'Upcoming Meets',
