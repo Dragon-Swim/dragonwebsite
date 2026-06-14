@@ -1,4 +1,4 @@
-import{t as e,u as i,a as l}from"./i18n-Do8R_3uV.js";function c(){const a=document.createElement("nav");a.className="navbar",a.id="navbar",a.innerHTML=`
+import{t as e,u as i,a as l}from"./i18n-cfzYsXIq.js";function c(){const a=document.createElement("nav");a.className="navbar",a.id="navbar",a.innerHTML=`
     <div class="nav-container container">
       <a href="/dragonwebsite/" class="nav-logo">
         <img src="/dragonwebsite/logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img light-logo" />
@@ -20,7 +20,7 @@ import{t as e,u as i,a as l}from"./i18n-Do8R_3uV.js";function c(){const a=docume
         </button>
       </div>
     </div>
-  `,document.body.prepend(a),i(),document.getElementById("theme-toggle").addEventListener("click",l);const n=document.getElementById("nav-hamburger"),o=document.getElementById("nav-links");n.addEventListener("click",()=>{n.classList.toggle("active"),o.classList.toggle("open")}),o.querySelectorAll(".nav-link").forEach(s=>{s.addEventListener("click",()=>{n.classList.remove("active"),o.classList.remove("open")})}),window.addEventListener("scroll",()=>{a.classList.toggle("scrolled",window.scrollY>10)})}function t(a){const n=window.location.pathname;return a==="/dragonwebsite/"&&(n==="/dragonwebsite/"||n==="/dragonwebsite/index.html")||a!=="/dragonwebsite/"&&n===a?"active":""}function d(){const a=document.createElement("footer");a.className="footer",a.innerHTML=`
+  `,document.body.prepend(a),i(),document.getElementById("theme-toggle").addEventListener("click",l);const n=document.getElementById("nav-hamburger"),s=document.getElementById("nav-links");n.addEventListener("click",()=>{n.classList.toggle("active"),s.classList.toggle("open")}),s.querySelectorAll(".nav-link").forEach(o=>{o.addEventListener("click",()=>{n.classList.remove("active"),s.classList.remove("open")})}),window.addEventListener("scroll",()=>{a.classList.toggle("scrolled",window.scrollY>10)})}function t(a){const n=window.location.pathname;return a==="/dragonwebsite/"&&(n==="/dragonwebsite/"||n==="/dragonwebsite/index.html")||a!=="/dragonwebsite/"&&n===a?"active":""}function d(){const a=document.createElement("footer");a.className="footer",a.innerHTML=`
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
@@ -42,7 +42,6 @@ import{t as e,u as i,a as l}from"./i18n-Do8R_3uV.js";function c(){const a=docume
           <h4 class="footer-heading">${e("footer_contact")}</h4>
           <ul class="footer-list">
             <li>${e("contact_email_address")}</li>
-            <li>${e("contact_hours")}</li>
           </ul>
         </div>
       </div>
