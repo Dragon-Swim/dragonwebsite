@@ -135,6 +135,8 @@
     box-shadow: var(--shadow-md);
     transition: all var(--transition-base);
     z-index: 2;
+    text-decoration: none;
+    color: inherit;
 }
 
 .hero-float-card:hover {

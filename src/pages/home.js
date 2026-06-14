@@ -38,22 +38,18 @@ app.innerHTML = `
       <div class="hero-right">
         <div class="hero-float-grid">
           <!-- Floating feature cards -->
-          <div class="hero-float-card hfc-1">
-            <div class="hfc-icon">🏊‍♂️</div>
-            <div class="hfc-label">Swim Plans</div>
-          </div>
-          <div class="hero-float-card hfc-2">
+          <a href="${import.meta.env.BASE_URL}signin.html" class="hero-float-card hfc-2">
             <div class="hfc-icon">🏆</div>
             <div class="hfc-label">Swim Meets</div>
-          </div>
-          <div class="hero-float-card hfc-3">
+          </a>
+          <a href="${import.meta.env.BASE_URL}signin.html" class="hero-float-card hfc-3">
             <div class="hfc-icon">📅</div>
             <div class="hfc-label">Schedules</div>
-          </div>
-          <div class="hero-float-card hfc-4">
+          </a>
+          <a href="${import.meta.env.BASE_URL}contact.html" class="hero-float-card hfc-4">
             <div class="hfc-icon">💬</div>
             <div class="hfc-label">Coach Chat</div>
-          </div>
+          </a>
           <!-- Central dragon -->
           <div class="hero-central-icon">
             <div class="hero-central-ring"></div>
