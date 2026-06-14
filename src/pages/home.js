@@ -26,7 +26,7 @@ app.innerHTML = `
     <div class="container hero-container">
       <div class="hero-left animate-on-scroll">
         <div class="hero-badge badge badge-primary">🏊 Year-Round Competitive Swimming</div>
-        <h1 class="hero-title">Train, Compete &amp; Grow with <span class="text-gradient">Dragon Swim</span></h1>
+        <h1 class="hero-title">${t('hero_title')} <span class="text-gradient">Dragon Swim</span></h1>
         <p class="hero-subtitle">${t('hero_subtitle')}</p>
         <div class="hero-actions">
           <a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-gradient btn-lg">
@@ -75,14 +75,59 @@ app.innerHTML = `
     <div class="corner-dot corner-br"></div>
   </section>
 
+  <!-- Mission & Vision Section -->
+  <section class="section mission-section" style="background: var(--bg-secondary);">
+    <div class="container" style="max-width: 800px; text-align: center;">
+      <div class="animate-on-scroll">
+        <span class="badge badge-primary">${t('home_mission_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_mission_title')}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+        <p class="mission-statement">${t('home_mission_text')}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Dragon Swim Section -->
+  <section class="section features-section">
+    <div class="container">
+      <div class="text-center features-header animate-on-scroll" style="margin: 0 auto var(--space-2xl);">
+        <span class="badge badge-primary features-label">${t('why_title')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('why_title')}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+      </div>
+      <div class="features-grid animate-on-scroll">
+        <div class="card feature-card text-center">
+          <div class="feature-icon">🏅</div>
+          <h3 class="feature-title">${t('why_coaching')}</h3>
+          <p class="feature-desc">${t('why_coaching_desc')}</p>
+        </div>
+        <div class="card feature-card text-center">
+          <div class="feature-icon">🤝</div>
+          <h3 class="feature-title">${t('why_community')}</h3>
+          <p class="feature-desc">${t('why_community_desc')}</p>
+        </div>
+        <div class="card feature-card text-center">
+          <div class="feature-icon">📅</div>
+          <h3 class="feature-title">${t('why_flexibility')}</h3>
+          <p class="feature-desc">${t('why_flexibility_desc')}</p>
+        </div>
+        <div class="card feature-card text-center">
+          <div class="feature-icon">🌟</div>
+          <h3 class="feature-title">${t('why_growth')}</h3>
+          <p class="feature-desc">${t('why_growth_desc')}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Meet the Team Section -->
   <section class="section team-intro-section">
     <div class="container">
       <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
-        <span class="badge badge-primary">Our Journey</span>
-        <h2 class="section-title" style="margin-top: var(--space-md);">Meet The Team</h2>
+        <span class="badge badge-primary">${t('home_journey_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_team_title')}</h2>
         <div class="divider" style="margin: var(--space-md) auto;"></div>
-        <p class="section-subtitle" style="margin: 0 auto;">Dedicated professionals committed to helping you reach your full potential in the water.</p>
+        <p class="section-subtitle" style="margin: 0 auto;">${t('home_team_subtitle')}</p>
       </div>
       
       <div class="team-photo-wrapper animate-on-scroll" style="margin-bottom: var(--space-2xl); text-align: center;">
@@ -97,8 +142,8 @@ app.innerHTML = `
   <section class="section coaches-section" style="background: var(--bg-secondary);">
     <div class="container">
       <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
-        <span class="badge badge-primary">Leadership</span>
-        <h2 class="section-title" style="margin-top: var(--space-md);">Meet Our Coaches</h2>
+        <span class="badge badge-primary">${t('home_leadership_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_coaches_title')}</h2>
         <div class="divider" style="margin: var(--space-md) auto;"></div>
       </div>
       <div class="team-grid animate-on-scroll" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg);">
@@ -130,11 +175,11 @@ app.innerHTML = `
   <!-- CTA Section -->
   <section class="cta-section">
     <div class="container text-center animate-on-scroll">
-      <h2 class="cta-title">Ready to Dive In?</h2>
-      <p class="cta-subtitle">Join Dragon Swim Team today and start your competitive journey.</p>
+      <h2 class="cta-title">${t('home_cta_title')}</h2>
+      <p class="cta-subtitle">${t('home_cta_subtitle')}</p>
       <div class="cta-actions">
         <a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-primary btn-lg">${t('hero_cta')} →</a>
-        <a href="${import.meta.env.BASE_URL}contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">Talk to a Coach</a>
+        <a href="${import.meta.env.BASE_URL}contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">${t('home_cta_coach')}</a>
       </div>
     </div>
   </section>

@@ -32,7 +32,6 @@ export function renderFooter() {
           <h4 class="footer-heading">${t('footer_contact')}</h4>
           <ul class="footer-list">
             <li>${t('contact_email_address')}</li>
-            <li>${t('contact_hours')}</li>
           </ul>
         </div>
       </div>

@@ -13,10 +13,21 @@ const translations = {
         nav_signin: 'Sign In',
 
         // Home Page
-        hero_title: 'Train Like a Dragon',
+        hero_title: 'Train, Compete & Grow with',
         hero_subtitle: 'Join our competitive swim team and unlock your full potential in the water. Seasonal programs for all skill levels.',
         hero_cta: 'Register Now',
         hero_cta_secondary: 'Learn More',
+        home_mission_badge: 'Our Mission',
+        home_mission_title: 'Mission & Vision',
+        home_mission_text: 'Dragon Swim is a safe and supportive environment for every athlete. Our goal is to maximize safety, comfort, and protection for all swimmers while bringing out the best in each of them. Our mission is to provide access to both developmental and competitive pathways, emphasizing individual progress, team unity, and family participation.',
+        home_journey_badge: 'Our Journey',
+        home_team_title: 'Meet The Team',
+        home_team_subtitle: 'Dedicated professionals committed to helping you reach your full potential in the water.',
+        home_leadership_badge: 'Leadership',
+        home_coaches_title: 'Meet Our Coaches',
+        home_cta_title: 'Ready to Dive In?',
+        home_cta_subtitle: 'Join Dragon Swim Team today and start your competitive journey.',
+        home_cta_coach: 'Talk to a Coach',
         about_title: 'About Dragon Swim',
         about_text: 'Dragon Swim Team is a year-round competitive and recreational swimming program dedicated to developing swimmers of all ages and abilities. Our experienced coaching staff provides personalized training through seasonal programs designed to build technique, endurance, and team spirit.',
         seasons_title: 'Our Seasons',
@@ -118,7 +129,7 @@ const translations = {
         contact_hours_title: 'Office Hours',
         contact_hours: 'Monday – Friday: 4:00 PM – 7:00 PM',
         contact_email_address_text: 'Email Us',
-        contact_email_address: 'coach@dragonswim.com',
+        contact_email_address: 'dragonswim@outlook.com',
 
         // Sign In Page
         signin_title: 'Welcome Back',
@@ -195,6 +206,7 @@ const translations = {
         dash_swimmer_upcoming_meets_title: 'Upcoming Meets',
         dash_swimmer_today_practice: 'Today\'s Practice',
         dash_swimmer_rest_day: 'No practices scheduled for today',
+        dash_plans_under_construction: '🚧 Under Construction',
 
         // ── Dashboard — Coach ──
         dash_coach_menu: 'Coach Menu',

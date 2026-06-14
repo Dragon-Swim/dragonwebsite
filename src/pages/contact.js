@@ -14,6 +14,10 @@ import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import { db, collection, addDoc } from '../utils/firebase.js';
 import { t } from '../utils/i18n.js';
+import emailjs from '@emailjs/browser';
+
+// Initialize EmailJS (public key is safe to expose — restricted by domain whitelist in EmailJS dashboard)
+emailjs.init(import.meta.env.VITE_EMAILJS_PUBLIC_KEY);
 
 initTheme();
 renderNavbar();
@@ -81,16 +85,34 @@ document.getElementById('contact-form').addEventListener('submit', async (e) => 
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
 
+  const formData = {
+    name: document.getElementById('contact-name').value.trim(),
+    email: document.getElementById('contact-email').value.trim(),
+    phone: document.getElementById('contact-phone').value.trim() || null,
+    reason: document.getElementById('contact-reason').value,
+    preferredDate: document.getElementById('contact-date').value || null,
+    message: document.getElementById('contact-message').value.trim(),
+  };
+
   try {
     await addDoc(collection(db, 'contacts'), {
-      name: document.getElementById('contact-name').value.trim(),
-      email: document.getElementById('contact-email').value.trim(),
-      phone: document.getElementById('contact-phone').value.trim() || null,
-      reason: document.getElementById('contact-reason').value,
-      preferredDate: document.getElementById('contact-date').value || null,
-      message: document.getElementById('contact-message').value.trim(),
+      ...formData,
       createdAt: new Date()
     });
+
+    // Also send notification email via EmailJS (fire-and-forget)
+    emailjs.send(
+      import.meta.env.VITE_EMAILJS_SERVICE_ID,
+      import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+      {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || 'Not provided',
+        reason: formData.reason,
+        preferred_date: formData.preferredDate || 'Not specified',
+        message: formData.message,
+      }
+    ).catch(err => console.warn('EmailJS delivery failed (data saved in Firestore):', err));
 
     document.getElementById('contact-form').style.display = 'none';
     document.getElementById('contact-success').style.display = 'block';

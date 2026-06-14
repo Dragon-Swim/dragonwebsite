@@ -576,8 +576,8 @@ function renderOverview() {
     <div class="dash-overview-grid">
       <div class="dash-panel">
         <h3 class="dash-panel-title">${t('dash_swimmer_active_plans_title')}</h3>
-        <div class="dash-panel-body">
-          ${swimPlans.filter(p => p.status !== 'Completed').map(p => miniPlanCard(p)).join('')}
+        <div class="dash-panel-body" style="text-align: center; padding: 2rem;">
+          <p style="color: var(--text-secondary);">${t('dash_plans_under_construction')}</p>
         </div>
       </div>
       <div class="dash-panel">
@@ -811,33 +811,10 @@ function renderProfile() {
 // ── Swim Plans Tab ──
 function renderSwimPlans() {
   return `
-    <div class="dash-cards-grid">
-      ${swimPlans.map(p => `
-        <div class="dash-card">
-          <div class="dash-card-header">
-            <h3 class="dash-card-title">${p.name}</h3>
-            <div class="dash-card-badges">
-              <span class="status-badge status-${p.status.toLowerCase().replace(' ', '-')}">${p.status}</span>
-              <span class="priority-badge priority-${p.priority.toLowerCase()}">${p.priority}</span>
-            </div>
-          </div>
-          <div class="dash-card-body">
-            <div class="dash-card-row">
-              <span class="dash-card-label">Progress</span>
-              <span class="dash-card-value">${p.progress}%</span>
-            </div>
-            <div class="dash-progress-bar"><div class="dash-progress-fill" style="width: ${p.progress}%"></div></div>
-            <div class="dash-card-meta">
-              <span>📅 Season: ${p.season}</span>
-              <span>Training: ${p.daysPerWeek} Days/Week</span>
-            </div>
-            <div class="dash-card-meta">
-              <span>📋 ${p.tasks}</span>
-              <span>Due: ${p.due}</span>
-            </div>
-          </div>
-        </div>
-      `).join('')}
+    <div class="dash-panel" style="text-align: center; padding: 4rem 2rem;">
+      <div style="font-size: 3rem; margin-bottom: 1rem;">🚧</div>
+      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${t('dash_plans_under_construction')}</h2>
+      <p style="color: var(--text-secondary);">${t('dash_swimmer_plans_sub')}</p>
     </div>
   `;
 }
