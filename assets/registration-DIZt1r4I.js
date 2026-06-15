@@ -1,4 +1,4 @@
-import{i as v,t}from"./i18n-cfzYsXIq.js";import{a as f,r as b}from"./footer-DYNOo2cx.js";import{o as y,b as w,l as $,g as h,e as _}from"./firebase-8Bk_msJm.js";v();f();let d=1,u=null;const E=document.getElementById("app");function p(){return`
+import{i as v,t}from"./i18n-BG1_MAni.js";import{a as f,r as b}from"./footer-Bl_MiwNH.js";import{o as y,b as w,l as $,g as h,e as _}from"./firebase-8Bk_msJm.js";v();f();let d=1,u=null;const E=document.getElementById("app");function p(){return`
     <option value="" disabled selected>Select...</option>
     <option value="male">${t("reg_gender_male")}</option>
     <option value="female">${t("reg_gender_female")}</option>
