@@ -24,7 +24,9 @@ const swimPlans = [
 
 // ── State Storage ──
 let swimMeets = [];
+let editingMeetId = null;
 let practiceSchedules = [];
+let editingSessionId = null;
 let currentUser = null;
 let userRole = 'swimmer';
 let dbRole = null;
@@ -614,13 +616,16 @@ function miniPlanCard(plan) {
 
 function miniMeetCard(meet) {
   const status = meet.status || 'Open';
+  const dateDisplay = meet.startDate && meet.endDate
+    ? `${meet.startDate} – ${meet.endDate}`
+    : meet.date || '';
   return `
     <div class="dash-mini-card">
       <div class="dash-mini-top">
         <span class="dash-mini-name">${meet.name || 'Untitled Meet'}</span>
         <span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span>
       </div>
-      <div class="dash-mini-meta">${meet.date || ''} · ${meet.location || ''}</div>
+      <div class="dash-mini-meta">${dateDisplay} · ${meet.location || ''}</div>
     </div>
   `;
 }
@@ -637,10 +642,9 @@ function renderTodayPractice() {
   return todayPractices.map(s => `
     <div class="dash-mini-card">
       <div class="dash-mini-top">
-        <span class="dash-mini-name">${s.focus}</span>
-        <span class="group-badge">${s.group}</span>
+        <span class="dash-mini-name">${s.startTime} – ${s.endTime}</span>
       </div>
-      <div class="dash-mini-meta">${s.time} · ${s.coach}</div>
+      <div class="dash-mini-meta">${s.location || ''}</div>
     </div>
   `).join('');
 }
@@ -831,12 +835,12 @@ function renderSwimMeets() {
 
     ${isCoach ? `
       <div id="add-meet-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
-        <h3 style="margin-bottom: 1rem;">${t('dash_meets_new_title')}</h3>
+        <h3 style="margin-bottom: 1rem;" id="meet-form-title">${t('dash_meets_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
           <input type="text" id="meet-name" placeholder="${t('dash_meets_name_placeholder')}" class="form-input">
-          <input type="date" id="meet-date" class="form-input">
+          <input type="date" id="meet-start-date" class="form-input" title="${t('dash_meets_start_date_placeholder')}">
+          <input type="date" id="meet-end-date" class="form-input" title="${t('dash_meets_end_date_placeholder')}">
           <input type="text" id="meet-location" placeholder="${t('dash_meets_location_placeholder')}" class="form-input">
-          <input type="text" id="meet-events" placeholder="${t('dash_meets_events_placeholder')}" class="form-input">
         </div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
           <button class="btn btn-primary btn-sm" id="save-meet-btn">${t('dash_meets_save')}</button>
@@ -855,17 +859,12 @@ function renderSwimMeets() {
           </div>
           <div class="dash-card-body">
             <div class="dash-card-meta">
-              <span>📅 ${m.date}</span>
+              <span>📅 ${m.startDate && m.endDate ? `${m.startDate} – ${m.endDate}` : m.date || ''}</span>
               <span>📍 ${m.location}</span>
-            </div>
-            <div class="dash-card-events">
-              <span class="dash-card-label">Events</span>
-              <div class="dash-event-tags">
-                ${(m.events || []).map(e => `<span class="event-tag">${e}</span>`).join('')}
-              </div>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
               ${!isCoach && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
+              ${isCoach ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}">${t('dash_meets_edit')}</button>` : ''}
               ${isCoach ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
             </div>
           </div>
@@ -890,15 +889,14 @@ function renderSchedule() {
 
     ${isCoach ? `
       <div id="add-session-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
-        <h3 style="margin-bottom: 1rem;">${t('dash_schedule_new_title')}</h3>
+        <h3 style="margin-bottom: 1rem;" id="session-form-title">${t('dash_schedule_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
           <select id="session-day" class="form-input">
             ${scheduleDays.map(d => `<option value="${getDayName(d)}">${getDayName(d)}</option>`).join('')}
           </select>
-          <input type="text" id="session-time" placeholder="${t('dash_schedule_time_placeholder')}" class="form-input">
-          <input type="text" id="session-group" placeholder="${t('dash_schedule_group_placeholder')}" class="form-input">
-          <input type="text" id="session-focus" placeholder="${t('dash_schedule_focus_placeholder')}" class="form-input">
-          <input type="text" id="session-coach" placeholder="${t('dash_schedule_coach_placeholder')}" class="form-input">
+          <input type="text" id="session-start-time" placeholder="${t('dash_schedule_start_time_placeholder')}" class="form-input">
+          <input type="text" id="session-end-time" placeholder="${t('dash_schedule_end_time_placeholder')}" class="form-input">
+          <input type="text" id="session-location" placeholder="${t('dash_schedule_location_placeholder')}" class="form-input">
         </div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
           <button class="btn btn-primary btn-sm" id="save-session-btn">${t('dash_schedule_save')}</button>
@@ -918,14 +916,13 @@ function renderSchedule() {
         ? `<p class="dash-empty-sm">${t('dash_schedule_no_practice')}</p>`
         : sessions.map(s => `
                 <div class="dash-schedule-item">
-                  <div class="dash-schedule-time">${s.time}</div>
-                  <div class="dash-schedule-focus">${s.focus}</div>
-                  <div class="dash-schedule-meta" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                      <span class="group-badge">${s.group}</span>
-                      <span>${s.coach}</span>
-                    </div>
-                    ${isCoach ? `<button class="delete-session" data-id="${s.id}" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--color-accent); padding: 0 5px;">&times;</button>` : ''}
+                  <div class="dash-schedule-time">${s.startTime} – ${s.endTime}</div>
+                  <div class="dash-schedule-focus">${s.location || ''}</div>
+                  <div class="dash-schedule-meta" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                    ${isCoach ? `
+                      <button class="edit-session" data-id="${s.id}" data-day="${s.day}" data-start="${s.startTime || ''}" data-end="${s.endTime || ''}" data-location="${s.location || ''}" style="background: none; border: none; font-size: 1rem; cursor: pointer; color: var(--color-primary); padding: 0 5px;" title="Edit">✎</button>
+                      <button class="delete-session" data-id="${s.id}" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--color-accent); padding: 0 5px;" title="Delete">&times;</button>
+                    ` : ''}
                   </div>
                 </div>
               `).join('')}
@@ -1305,43 +1302,88 @@ function bindEvents() {
   // ── Coach Management Events ──
   if (userRole === 'coach') {
     // Meet Management
-    document.getElementById('add-meet-btn')?.addEventListener('click', () => {
-      document.getElementById('add-meet-form').style.display = 'block';
-    });
-    document.getElementById('cancel-meet-btn')?.addEventListener('click', () => {
-      document.getElementById('add-meet-form').style.display = 'none';
-    });
-    document.getElementById('save-meet-btn')?.addEventListener('click', async () => {
-      const name = document.getElementById('meet-name').value;
-      const date = document.getElementById('meet-date').value;
-      const location = document.getElementById('meet-location').value;
-      const eventsStr = document.getElementById('meet-events').value;
+    const meetForm = document.getElementById('add-meet-form');
+    const meetSaveBtn = document.getElementById('save-meet-btn');
+    const meetCancelBtn = document.getElementById('cancel-meet-btn');
+    const meetFormTitle = document.getElementById('meet-form-title');
 
-      if (!name || !date) {
+    document.getElementById('add-meet-btn')?.addEventListener('click', () => {
+      editingMeetId = null;
+      meetFormTitle.textContent = t('dash_meets_new_title');
+      meetSaveBtn.textContent = t('dash_meets_save');
+      document.getElementById('meet-name').value = '';
+      document.getElementById('meet-start-date').value = '';
+      document.getElementById('meet-end-date').value = '';
+      document.getElementById('meet-location').value = '';
+      meetForm.style.display = 'block';
+    });
+    meetCancelBtn?.addEventListener('click', () => {
+      meetForm.style.display = 'none';
+      editingMeetId = null;
+    });
+    meetSaveBtn?.addEventListener('click', async () => {
+      const name = document.getElementById('meet-name').value.trim();
+      const startDate = document.getElementById('meet-start-date').value;
+      const endDate = document.getElementById('meet-end-date').value;
+      const location = document.getElementById('meet-location').value.trim();
+
+      if (!name || !startDate || !endDate) {
         alert(t('dash_meets_name_date_required'));
         return;
       }
 
       try {
-        await addDoc(collection(db, "meets"), {
-          name,
-          date,
-          location,
-          events: eventsStr.split(',').map(e => e.trim()),
-          status: 'Open',
-          createdAt: new Date()
-        });
-        document.getElementById('add-meet-form').style.display = 'none';
+        if (editingMeetId) {
+          // Update existing meet
+          await updateDoc(doc(db, "meets", editingMeetId), {
+            name,
+            startDate,
+            endDate,
+            location,
+          });
+        } else {
+          // Add new meet
+          await addDoc(collection(db, "meets"), {
+            name,
+            startDate,
+            endDate,
+            location,
+            status: 'Open',
+            createdAt: new Date()
+          });
+        }
+        meetForm.style.display = 'none';
+        editingMeetId = null;
       } catch (err) {
-        console.error("Error adding meet:", err);
+        console.error("Error saving meet:", err);
       }
     });
 
+    // Edit meet
+    document.querySelectorAll('.edit-meet').forEach(btn => {
+      btn.addEventListener('click', () => {
+        editingMeetId = btn.dataset.id;
+        meetFormTitle.textContent = t('dash_meets_edit_title');
+        meetSaveBtn.textContent = t('dash_meets_update');
+        document.getElementById('meet-name').value = btn.dataset.name;
+        document.getElementById('meet-start-date').value = btn.dataset.start;
+        document.getElementById('meet-end-date').value = btn.dataset.end;
+        document.getElementById('meet-location').value = btn.dataset.location;
+        meetForm.style.display = 'block';
+        meetForm.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    // Delete meet
     document.querySelectorAll('.delete-meet').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (confirm(t('dash_meets_confirm_delete'))) {
           try {
             await deleteDoc(doc(db, "meets", btn.dataset.id));
+            if (editingMeetId === btn.dataset.id) {
+              meetForm.style.display = 'none';
+              editingMeetId = null;
+            }
           } catch (err) {
             console.error("Error deleting meet:", err);
           }
@@ -1350,44 +1392,87 @@ function bindEvents() {
     });
 
     // Session Management
-    document.getElementById('add-session-btn')?.addEventListener('click', () => {
-      document.getElementById('add-session-form').style.display = 'block';
-    });
-    document.getElementById('cancel-session-btn')?.addEventListener('click', () => {
-      document.getElementById('add-session-form').style.display = 'none';
-    });
-    document.getElementById('save-session-btn')?.addEventListener('click', async () => {
-      const day = document.getElementById('session-day').value;
-      const time = document.getElementById('session-time').value;
-      const group = document.getElementById('session-group').value;
-      const focus = document.getElementById('session-focus').value;
-      const coach = document.getElementById('session-coach').value;
+    const addForm = document.getElementById('add-session-form');
+    const saveBtn = document.getElementById('save-session-btn');
+    const cancelBtn = document.getElementById('cancel-session-btn');
+    const formTitle = document.getElementById('session-form-title');
 
-      if (!time || !group) {
-        alert(t('dash_schedule_time_group_required'));
+    document.getElementById('add-session-btn')?.addEventListener('click', () => {
+      editingSessionId = null;
+      formTitle.textContent = t('dash_schedule_new_title');
+      saveBtn.textContent = t('dash_schedule_save');
+      document.getElementById('session-day').value = getDayName(1); // Monday
+      document.getElementById('session-start-time').value = '';
+      document.getElementById('session-end-time').value = '';
+      document.getElementById('session-location').value = '';
+      addForm.style.display = 'block';
+    });
+    cancelBtn?.addEventListener('click', () => {
+      addForm.style.display = 'none';
+      editingSessionId = null;
+    });
+    saveBtn?.addEventListener('click', async () => {
+      const day = document.getElementById('session-day').value;
+      const startTime = document.getElementById('session-start-time').value.trim();
+      const endTime = document.getElementById('session-end-time').value.trim();
+      const location = document.getElementById('session-location').value.trim();
+
+      if (!day || !startTime || !endTime) {
+        alert(t('dash_schedule_required_fields'));
         return;
       }
 
       try {
-        await addDoc(collection(db, "schedules"), {
-          day,
-          time,
-          group,
-          focus,
-          coach,
-          createdAt: new Date()
-        });
-        document.getElementById('add-session-form').style.display = 'none';
+        if (editingSessionId) {
+          // Update existing session
+          await updateDoc(doc(db, "schedules", editingSessionId), {
+            day,
+            startTime,
+            endTime,
+            location,
+          });
+        } else {
+          // Add new session
+          await addDoc(collection(db, "schedules"), {
+            day,
+            startTime,
+            endTime,
+            location,
+            createdAt: new Date()
+          });
+        }
+        addForm.style.display = 'none';
+        editingSessionId = null;
       } catch (err) {
-        console.error("Error adding session:", err);
+        console.error("Error saving session:", err);
       }
     });
 
+    // Edit session
+    document.querySelectorAll('.edit-session').forEach(btn => {
+      btn.addEventListener('click', () => {
+        editingSessionId = btn.dataset.id;
+        formTitle.textContent = t('dash_schedule_edit_title');
+        saveBtn.textContent = t('dash_schedule_update');
+        document.getElementById('session-day').value = btn.dataset.day;
+        document.getElementById('session-start-time').value = btn.dataset.start;
+        document.getElementById('session-end-time').value = btn.dataset.end;
+        document.getElementById('session-location').value = btn.dataset.location;
+        addForm.style.display = 'block';
+        addForm.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    // Delete session
     document.querySelectorAll('.delete-session').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (confirm(t('dash_schedule_delete_confirm'))) {
           try {
             await deleteDoc(doc(db, "schedules", btn.dataset.id));
+            if (editingSessionId === btn.dataset.id) {
+              addForm.style.display = 'none';
+              editingSessionId = null;
+            }
           } catch (err) {
             console.error("Error deleting session:", err);
           }
