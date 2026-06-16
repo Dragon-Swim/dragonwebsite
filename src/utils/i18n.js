@@ -98,6 +98,11 @@ const translations = {
         reg_submit: 'Submit Registration',
         reg_success: 'Registration submitted successfully! We\'ll be in touch soon.',
 
+        // SafeSport
+        safesport_badge: 'Compliance',
+        safesport_title: 'USA SafeSport Compliance',
+        safesport_intro: 'Dragon Swim Team is committed to maintaining a safe, positive, and respectful environment for all athletes, coaches, and families. Below are essential SafeSport resources for reporting concerns, understanding policies, and upholding our shared responsibility to protect every participant.',
+
         // Contact Page
         contact_page_title: 'Contact a Coach',
         contact_page_subtitle: 'Get in touch with a coach to evaluate your placement.',

@@ -25,7 +25,7 @@ export function renderFooter() {
           <ul class="footer-list">
             <li><a href="${import.meta.env.BASE_URL}privacy.html">Privacy Policy</a></li>
             <li><a href="${import.meta.env.BASE_URL}terms.html">Terms & Conditions</a></li>
-            <li><a href="${import.meta.env.BASE_URL}safesport.html">USA SafeSport Compliance</a></li>
+            <li><a href="${import.meta.env.BASE_URL}#safesport">USA SafeSport Compliance</a></li>
           </ul>
         </div>
         <div class="footer-section">

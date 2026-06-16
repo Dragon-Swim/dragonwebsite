@@ -410,6 +410,45 @@
     margin: 0 auto;
 }
 
+/* ── SafeSport Section ── */
+.safesport-section {
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.safesport-links {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-md);
+}
+
+.safesport-link {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.safesport-link:hover {
+    border-color: var(--color-primary);
+    background: var(--bg-secondary);
+}
+
+.safesport-link-title {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--color-primary);
+}
+
+.safesport-link-desc {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
     .features-grid {
@@ -417,6 +456,10 @@
     }
 
     .seasons-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .safesport-links {
         grid-template-columns: repeat(2, 1fr);
     }
 }
@@ -448,7 +491,8 @@
     }
 
     .features-grid,
-    .seasons-grid {
+    .seasons-grid,
+    .safesport-links {
         grid-template-columns: 1fr;
     }
 

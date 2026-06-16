@@ -168,6 +168,50 @@ app.innerHTML = `
     </div>
   </section>
 
+  <!-- SafeSport Compliance Section -->
+  <section class="section safesport-section" id="safesport" style="background: var(--bg-secondary);">
+    <div class="container" style="max-width: 800px;">
+      <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
+        <span class="badge badge-primary">${t('safesport_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('safesport_title')}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+        <p style="color: var(--text-secondary); line-height: 1.8; margin: 0 auto; max-width: 650px;">${t('safesport_intro')}</p>
+      </div>
+      <div class="animate-on-scroll">
+        <div class="safesport-links">
+          <a href="https://www.usaswimming.org/safe-sport/report-a-concern" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Report a Concern</span>
+            <span class="safesport-link-desc">Report misconduct, abuse, or safety violations to USA Swimming</span>
+          </a>
+          <a href="https://www.usaswimming.org/articles-landing-page/2017/04/06/2017-athlete-protection-policies" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Athlete Protection Policy</span>
+            <span class="safesport-link-desc">USA Swimming's MAAPP policies for athlete safety</span>
+          </a>
+          <a href="https://www.usaswimming.org/safe-sport/club-tool-kit#team-templates" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Code of Conduct</span>
+            <span class="safesport-link-desc">Club toolkit with team templates and conduct guidelines</span>
+          </a>
+          <a href="https://safesport.i-sight.com/portal" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Online Reporting Form</span>
+            <span class="safesport-link-desc">Submit a report directly through the SafeSport portal</span>
+          </a>
+          <a href="https://uscenterforsafesport.org/" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Safe Sport</span>
+            <span class="safesport-link-desc">U.S. Center for SafeSport — training, resources, and response</span>
+          </a>
+          <a href="https://www.usaswimming.org/swimmers-parents/parents/safe-sport-for-parents" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Safe Sport for Parents</span>
+            <span class="safesport-link-desc">USA Swimming parent education and SafeSport resources</span>
+          </a>
+          <a href="https://www.usaswimming.org/articles-landing-page/2017/04/05/free-safe-sport-training-for-athletes" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Safe Sport for Athletes</span>
+            <span class="safesport-link-desc">Free SafeSport training courses for athletes</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- CTA Section -->
   <section class="cta-section">
     <div class="container text-center animate-on-scroll">
