@@ -1,4 +1,4 @@
-import{t as e,u as i,a as l}from"./i18n-cfzYsXIq.js";function c(){const a=document.createElement("nav");a.className="navbar",a.id="navbar",a.innerHTML=`
+import{t as e,u as i,a as l}from"./i18n-lMocD5gN.js";function c(){const a=document.createElement("nav");a.className="navbar",a.id="navbar",a.innerHTML=`
     <div class="nav-container container">
       <a href="/dragonwebsite/" class="nav-logo">
         <img src="/dragonwebsite/logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img light-logo" />
@@ -35,7 +35,7 @@ import{t as e,u as i,a as l}from"./i18n-cfzYsXIq.js";function c(){const a=docume
           <ul class="footer-list">
             <li><a href="/dragonwebsite/privacy.html">Privacy Policy</a></li>
             <li><a href="/dragonwebsite/terms.html">Terms & Conditions</a></li>
-            <li><a href="/dragonwebsite/safesport.html">USA SafeSport Compliance</a></li>
+            <li><a href="/dragonwebsite/#safesport">USA SafeSport Compliance</a></li>
           </ul>
         </div>
         <div class="footer-section">
