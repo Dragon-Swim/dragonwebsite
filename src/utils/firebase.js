@@ -29,7 +29,8 @@ import {
     where,
     orderBy,
     limit,
-    getDocs
+    getDocs,
+    writeBatch
 } from "firebase/firestore";
 
 // ============================================================
@@ -123,4 +124,5 @@ export {
     orderBy,
     limit,
     getDocs,
+    writeBatch,
 };

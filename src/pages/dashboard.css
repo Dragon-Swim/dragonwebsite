@@ -930,3 +930,101 @@
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* ── CSV Import Modal ── */
+.csv-import-modal {
+    max-width: 640px;
+    width: 95vw;
+}
+
+.csv-import-filename {
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-md);
+}
+
+.csv-import-summary {
+    font-size: var(--fs-sm);
+    margin-bottom: var(--space-md);
+    color: var(--text-primary);
+}
+
+.csv-preview-wrapper {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+}
+
+.csv-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-xs);
+}
+
+.csv-preview-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.csv-preview-table th {
+    padding: 0.5rem;
+    text-align: left;
+    font-weight: var(--fw-semibold);
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+
+.csv-preview-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.csv-preview-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.csv-error-block {
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.csv-error-title {
+    font-weight: var(--fw-semibold);
+    color: var(--color-accent);
+    font-size: var(--fs-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.csv-error-item {
+    font-size: var(--fs-xs);
+    color: #991b1b;
+    margin-bottom: 2px;
+}
+
+.csv-no-valid {
+    color: var(--color-accent);
+    font-weight: var(--fw-semibold);
+    margin-bottom: var(--space-md);
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .csv-error-block {
+    background: #3b1212;
+    border-color: #5c1a1a;
+}
+
+[data-theme="dark"] .csv-error-item {
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .csv-preview-table th {
+    background: var(--bg-input);
+}

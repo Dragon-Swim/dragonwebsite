@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch } from '../utils/firebase.js';
 
 initTheme();
 
@@ -884,7 +884,7 @@ function renderSchedule() {
   return `
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_schedule_weekly')}</h2>
-      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-session-btn">${t('dash_schedule_add')}</button>` : ''}
+      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-session-btn">${t('dash_schedule_add')}</button><button class="btn btn-outline btn-sm" id="import-csv-btn">${t('dash_schedule_import_csv')}</button>` : ''}
     </div>
 
     ${isCoach ? `
@@ -1061,6 +1061,304 @@ function showPasswordModal() {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
+}
+
+// ── CSV Parsing ──
+
+/**
+ * Parse a single CSV line into an array of fields.
+ * Handles basic quoted fields (e.g. "Pool A, Main" as one field).
+ * Strips BOM from the first field if present.
+ */
+function parseCSVLine(line) {
+  const fields = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current.trim());
+  // Strip BOM from first field
+  if (fields.length > 0 && fields[0].charCodeAt(0) === 0xFEFF) {
+    fields[0] = fields[0].slice(1);
+  }
+  return fields;
+}
+
+/**
+ * Parse a CSV string into headers and rows.
+ * Skips empty lines. Expects first line as header.
+ */
+function parseCSV(csvText) {
+  const lines = csvText.split(/\r?\n/);
+  const nonEmpty = lines.filter(line => line.trim().length > 0);
+  if (nonEmpty.length === 0) {
+    return { headers: [], rows: [] };
+  }
+  const headers = parseCSVLine(nonEmpty[0]);
+  const rows = nonEmpty.slice(1).map(line => parseCSVLine(line));
+  return { headers, rows };
+}
+
+/**
+ * Validate a parsed CSV row against the schedule schema.
+ * @param {string[]} row - Array of field values
+ * @param {number} rowNum - 1-based row number for error reporting
+ * @returns {{ valid: boolean, day?: string, startTime?: string, endTime?: string, location?: string, reason?: string, rowNum: number }}
+ */
+function validateScheduleRow(row, rowNum) {
+  if (!row || row.length < 4) {
+    return { valid: false, reason: t('dash_csv_error_too_few_cols'), rowNum };
+  }
+  const [day, startTime, endTime, location] = row.map(f => (f || '').trim());
+
+  if (!day) {
+    return { valid: false, reason: t('dash_csv_error_missing_day'), rowNum };
+  }
+
+  // Case-insensitive day matching against known day names
+  const dayLower = day.toLowerCase();
+  const matchedDayIndex = [0, 1, 2, 3, 4, 5, 6].find(i => getDayName(i).toLowerCase() === dayLower);
+  if (matchedDayIndex === undefined) {
+    return { valid: false, reason: t('dash_csv_error_invalid_day', { day }), rowNum };
+  }
+  const normalizedDay = getDayName(matchedDayIndex);
+
+  if (!startTime) {
+    return { valid: false, reason: t('dash_csv_error_missing_start'), rowNum };
+  }
+  if (!/^\d{1,2}:\d{2}\s*(AM|PM)?$/i.test(startTime)) {
+    return { valid: false, reason: t('dash_csv_error_invalid_time', { field: 'StartTime', value: startTime }), rowNum };
+  }
+
+  if (!endTime) {
+    return { valid: false, reason: t('dash_csv_error_missing_end'), rowNum };
+  }
+  if (!/^\d{1,2}:\d{2}\s*(AM|PM)?$/i.test(endTime)) {
+    return { valid: false, reason: t('dash_csv_error_invalid_time', { field: 'EndTime', value: endTime }), rowNum };
+  }
+
+  return {
+    valid: true,
+    day: normalizedDay,
+    startTime,
+    endTime,
+    location: location || '',
+    rowNum
+  };
+}
+
+// ── CSV Import ──
+
+/**
+ * Show a temporary status banner at the top of the dashboard content.
+ */
+function showImportStatus(message, isError) {
+  const existing = document.getElementById('csv-import-status');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'csv-import-status';
+  el.style.cssText = [
+    'padding: var(--space-md) var(--space-lg)',
+    'border-radius: var(--radius-md)',
+    'margin-bottom: var(--space-lg)',
+    'font-size: var(--fs-sm)',
+    'font-weight: var(--fw-medium)',
+    isError
+      ? 'background: #fef2f2; border: 1px solid #fee2e2; color: #991b1b'
+      : 'background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534'
+  ].join(';');
+  el.textContent = message;
+  const content = document.querySelector('.dash-content');
+  if (content) {
+    content.insertBefore(el, content.firstChild);
+  }
+  setTimeout(() => el.remove(), 8000);
+}
+
+/**
+ * Handle file selection: parse, validate, and show preview modal.
+ */
+async function handleCSVFileSelect(event) {
+  const file = event.target.files?.[0];
+  event.target.remove(); // clean up the temp input
+
+  if (!file) return;
+
+  // Reject non-CSV files (check extension only)
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    showImportStatus(t('dash_csv_error_not_csv'), true);
+    return;
+  }
+
+  // Size check: 500KB max
+  if (file.size > 500000) {
+    showImportStatus(t('dash_csv_error_too_large'), true);
+    return;
+  }
+
+  let text;
+  try {
+    text = await file.text();
+  } catch (err) {
+    console.error('Error reading CSV file:', err);
+    showImportStatus(t('dash_csv_error_unknown'), true);
+    return;
+  }
+
+  if (!text || text.trim().length === 0) {
+    showImportStatus(t('dash_csv_error_empty'), true);
+    return;
+  }
+
+  const { headers, rows } = parseCSV(text);
+
+  // Validate header (case-insensitive)
+  const requiredHeaders = ['day', 'starttime', 'endtime', 'location'];
+  const normalizedHeaders = headers.map(h => h.replace(/\s/g, '').toLowerCase());
+  const headerMatch = requiredHeaders.every(h => normalizedHeaders.includes(h));
+  if (!headerMatch || headers.length < 4) {
+    showImportStatus(t('dash_csv_error_bad_header'), true);
+    return;
+  }
+
+  // Validate rows
+  const validRows = [];
+  const errorRows = [];
+  rows.forEach((row, i) => {
+    const result = validateScheduleRow(row, i + 2); // +2: row 1 is header, arrays are 0-based
+    if (result.valid) {
+      validRows.push({
+        day: result.day,
+        startTime: result.startTime,
+        endTime: result.endTime,
+        location: result.location || ''
+      });
+    } else {
+      errorRows.push({ rowNum: result.rowNum, reason: result.reason });
+    }
+  });
+
+  showCSVImportModal(validRows, errorRows, file.name);
+}
+
+/**
+ * Show the import preview modal with a table of valid rows and any errors.
+ */
+function showCSVImportModal(validRows, errorRows, filename) {
+  const escapedFilename = filename.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const validCount = validRows.length;
+  const errorCount = errorRows.length;
+
+  const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal csv-import-modal">
+      <h3 class="confirm-title">${t('dash_csv_import_title')}</h3>
+      <p class="csv-import-filename">${t('dash_csv_import_file')}: <strong>${escapedFilename}</strong></p>
+      <p class="csv-import-summary">${t('dash_csv_import_summary', { valid: String(validCount), error: String(errorCount) })}</p>
+      ${validRows.length > 0 ? `
+        <div class="csv-preview-wrapper">
+          <table class="csv-preview-table">
+            <thead>
+              <tr>
+                <th>${t('dash_csv_header_day')}</th>
+                <th>${t('dash_csv_header_start')}</th>
+                <th>${t('dash_csv_header_end')}</th>
+                <th>${t('dash_csv_header_location')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${validRows.map(row => `
+                <tr>
+                  <td>${escapeHtml(row.day)}</td>
+                  <td>${escapeHtml(row.startTime)}</td>
+                  <td>${escapeHtml(row.endTime)}</td>
+                  <td>${escapeHtml(row.location || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+      ${errorRows.length > 0 ? `
+        <div class="csv-error-block">
+          <p class="csv-error-title">${t('dash_csv_import_errors')}</p>
+          ${errorRows.map(e => `<p class="csv-error-item">${t('dash_csv_import_row')} ${e.rowNum}: ${escapeHtml(e.reason)}</p>`).join('')}
+        </div>
+      ` : ''}
+      ${validRows.length === 0 ? `
+        <p class="csv-no-valid">${t('dash_csv_import_no_valid')}</p>
+      ` : ''}
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="csv-import-cancel">${t('dash_csv_import_cancel')}</button>
+        ${validRows.length > 0 ? `<button class="btn btn-primary btn-sm" id="csv-import-confirm">${t('dash_csv_import_confirm', { count: String(validCount) })}</button>` : ''}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Event binding
+  overlay.querySelector('#csv-import-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#csv-import-confirm')?.addEventListener('click', async () => {
+    overlay.remove();
+    await importCSVRows(validRows);
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+/**
+ * Batch-write validated rows to Firestore schedules collection.
+ */
+async function importCSVRows(rows) {
+  if (!rows || rows.length === 0) return;
+
+  // Clear any existing status
+  const existing = document.getElementById('csv-import-status');
+  if (existing) existing.remove();
+
+  try {
+    const batch = writeBatch(db);
+    const colRef = collection(db, 'schedules');
+
+    rows.forEach(row => {
+      const docRef = doc(colRef);
+      batch.set(docRef, {
+        day: row.day,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        location: row.location || '',
+        createdAt: new Date()
+      });
+    });
+
+    await batch.commit();
+
+    showImportStatus(t('dash_csv_import_success', { count: String(rows.length) }));
+    // The existing onSnapshot listener auto-refreshes the UI
+  } catch (error) {
+    console.error('CSV import batch write failed:', error);
+
+    if (error.code === 'permission-denied') {
+      showImportStatus(t('dash_csv_error_permission'), true);
+    } else if (error.code === 'unavailable') {
+      showImportStatus(t('dash_csv_error_network'), true);
+    } else {
+      showImportStatus(t('dash_csv_error_unknown') + ' ' + (error.message || ''), true);
+    }
+  }
 }
 
 // ── Events ──
@@ -1478,6 +1776,15 @@ function bindEvents() {
           }
         }
       });
+    });
+
+    // CSV Import
+    document.getElementById('import-csv-btn')?.addEventListener('click', () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.csv';
+      fileInput.addEventListener('change', handleCSVFileSelect);
+      fileInput.click();
     });
   }
 }

@@ -325,6 +325,41 @@ const translations = {
         dash_schedule_delete_confirm: 'Are you sure you want to delete this session?',
         dash_schedule_required_fields: 'Please provide day, start time, and end time.',
 
+        // ── Dashboard — Schedule CSV Import ──
+        dash_schedule_import_csv: 'Import CSV',
+        dash_csv_import_title: 'Import Practice Schedule from CSV',
+        dash_csv_import_file: 'File',
+        dash_csv_import_summary: '{valid} valid session(s), {error} error(s)',
+        dash_csv_import_errors: 'Errors',
+        dash_csv_import_row: 'Row',
+        dash_csv_import_no_valid: 'No valid sessions found. Please correct the errors and try again.',
+        dash_csv_import_confirm: 'Import {count} Session(s)',
+        dash_csv_import_cancel: 'Cancel',
+        dash_csv_import_success: 'Successfully imported {count} practice session(s).',
+
+        // Preview table headers
+        dash_csv_header_day: 'Day',
+        dash_csv_header_start: 'Start Time',
+        dash_csv_header_end: 'End Time',
+        dash_csv_header_location: 'Location',
+
+        // Validation errors
+        dash_csv_error_bad_header: 'CSV file must start with a header row: Day, StartTime, EndTime, Location.',
+        dash_csv_error_empty: 'CSV file is empty.',
+        dash_csv_error_too_few_cols: 'Too few columns (expected: Day, StartTime, EndTime, Location).',
+        dash_csv_error_missing_day: 'Day is missing.',
+        dash_csv_error_invalid_day: 'Invalid day: "{day}". Use Monday through Sunday.',
+        dash_csv_error_missing_start: 'Start time is missing.',
+        dash_csv_error_missing_end: 'End time is missing.',
+        dash_csv_error_invalid_time: 'Invalid {field}: "{value}". Expected format like "5:00 AM" or "17:00".',
+        dash_csv_error_too_large: 'File is too large. Please use files under 500 KB.',
+        dash_csv_error_not_csv: 'Please select a .csv file.',
+
+        // Firestore errors
+        dash_csv_error_permission: 'Permission denied. Only coaches can import schedules.',
+        dash_csv_error_network: 'Network error. Please check your connection and try again.',
+        dash_csv_error_unknown: 'Failed to import CSV.',
+
         // ── Dashboard — Days ──
         dash_day_sunday: 'Sunday',
         dash_day_monday: 'Monday',
@@ -343,9 +378,14 @@ let currentLocale = 'en';
  * @param {string} key - Translation key
  * @returns {string} Translated text
  */
-export function t(key) {
-    const locale = translations[currentLocale];
-    return locale?.[key] ?? key;
+export function t(key, params) {
+    let value = translations[currentLocale]?.[key] ?? key;
+    if (params) {
+        Object.keys(params).forEach(k => {
+            value = value.replace(new RegExp(`\\{${k}\\}`, 'g'), params[k]);
+        });
+    }
+    return value;
 }
 
 /**
