@@ -1,4 +1,4 @@
-import{i as r,t as e}from"./i18n-BG1_MAni.js";import{a as n,r as c}from"./footer-Bl_MiwNH.js";r();n();const l=document.getElementById("app");l.innerHTML=`
+import{i as r,t as e}from"./i18n-DXCkrhfE.js";import{a as n,r as c}from"./footer-ByCGAPtM.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -147,6 +147,50 @@ import{i as r,t as e}from"./i18n-BG1_MAni.js";import{a as n,r as c}from"./footer
     </div>
   </section>
 
+  <!-- SafeSport Compliance Section -->
+  <section class="section safesport-section" id="safesport" style="background: var(--bg-secondary);">
+    <div class="container" style="max-width: 800px;">
+      <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
+        <span class="badge badge-primary">${e("safesport_badge")}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${e("safesport_title")}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+        <p style="color: var(--text-secondary); line-height: 1.8; margin: 0 auto; max-width: 650px;">${e("safesport_intro")}</p>
+      </div>
+      <div class="animate-on-scroll">
+        <div class="safesport-links">
+          <a href="https://www.usaswimming.org/safe-sport/report-a-concern" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Report a Concern</span>
+            <span class="safesport-link-desc">Report misconduct, abuse, or safety violations to USA Swimming</span>
+          </a>
+          <a href="https://www.usaswimming.org/articles-landing-page/2017/04/06/2017-athlete-protection-policies" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Athlete Protection Policy</span>
+            <span class="safesport-link-desc">USA Swimming's MAAPP policies for athlete safety</span>
+          </a>
+          <a href="https://www.usaswimming.org/safe-sport/club-tool-kit#team-templates" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Code of Conduct</span>
+            <span class="safesport-link-desc">Club toolkit with team templates and conduct guidelines</span>
+          </a>
+          <a href="https://safesport.i-sight.com/portal" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Online Reporting Form</span>
+            <span class="safesport-link-desc">Submit a report directly through the SafeSport portal</span>
+          </a>
+          <a href="https://uscenterforsafesport.org/" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Safe Sport</span>
+            <span class="safesport-link-desc">U.S. Center for SafeSport — training, resources, and response</span>
+          </a>
+          <a href="https://www.usaswimming.org/swimmers-parents/parents/safe-sport-for-parents" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Safe Sport for Parents</span>
+            <span class="safesport-link-desc">USA Swimming parent education and SafeSport resources</span>
+          </a>
+          <a href="https://www.usaswimming.org/articles-landing-page/2017/04/05/free-safe-sport-training-for-athletes" target="_blank" rel="noopener" class="safesport-link">
+            <span class="safesport-link-title">Safe Sport for Athletes</span>
+            <span class="safesport-link-desc">Free SafeSport training courses for athletes</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- CTA Section -->
   <section class="cta-section">
     <div class="container text-center animate-on-scroll">
@@ -159,20 +203,20 @@ import{i as r,t as e}from"./i18n-BG1_MAni.js";import{a as n,r as c}from"./footer
     </div>
   </section>
 
-`;c();const d={root:null,rootMargin:"0px",threshold:.15},h=new IntersectionObserver((a,t)=>{a.forEach(s=>{s.isIntersecting&&(s.target.classList.add("animate-visible"),t.unobserve(s.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(a=>{h.observe(a)});function i(a,t,s){return`
-    <div class="card season-card" style="--season-accent: ${s}">
+`;c();const d={root:null,rootMargin:"0px",threshold:.15},p=new IntersectionObserver((s,t)=>{s.forEach(a=>{a.isIntersecting&&(a.target.classList.add("animate-visible"),t.unobserve(a.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(s=>{p.observe(s)});function i(s,t,a){return`
+    <div class="card season-card" style="--season-accent: ${a}">
       <div class="season-emoji">${t}</div>
-      <h3 class="season-name">${e("season_"+a)}</h3>
-      <p class="season-dates">${e("season_"+a+"_dates")}</p>
-      <p class="season-desc">${e("season_"+a+"_desc")}</p>
+      <h3 class="season-name">${e("season_"+s)}</h3>
+      <p class="season-dates">${e("season_"+s+"_dates")}</p>
+      <p class="season-desc">${e("season_"+s+"_desc")}</p>
     </div>
-  `}function o(a,t,s){return`
+  `}function o(s,t,a){return`
     <div class="card team-card text-center">
       <div class="team-img-placeholder" style="width: 120px; height: 120px; border-radius: 50%; background: var(--border-color); margin: 0 auto var(--space-md); overflow: hidden; border: 3px solid var(--color-primary);">
-        <img src="/dragonwebsite/placeholder-coach.jpg" alt="${a}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
+        <img src="/dragonwebsite/placeholder-coach.jpg" alt="${s}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
       </div>
-      <h3 class="team-name" style="font-family: var(--font-display); font-size: var(--fs-lg); margin-bottom: var(--space-xs);">${a}</h3>
+      <h3 class="team-name" style="font-family: var(--font-display); font-size: var(--fs-lg); margin-bottom: var(--space-xs);">${s}</h3>
       <p class="team-role" style="font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--color-accent); margin-bottom: var(--space-sm);">${t}</p>
-      <p class="team-desc" style="font-size: var(--fs-sm); color: var(--text-secondary);">${s}</p>
+      <p class="team-desc" style="font-size: var(--fs-sm); color: var(--text-secondary);">${a}</p>
     </div>
   `}
