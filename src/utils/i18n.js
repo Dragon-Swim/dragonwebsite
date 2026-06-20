@@ -240,6 +240,10 @@ const translations = {
         dash_coach_roster_age: 'Age',
         dash_coach_roster_gender: 'Gender',
         dash_coach_roster_usa_id: 'USA ID',
+        dash_coach_roster_payment_received: 'Payment Received',
+        dash_coach_roster_payment_date: 'Payment Date',
+        dash_coach_roster_payment_yes: 'Yes',
+        dash_coach_roster_payment_no: 'No',
 
         // ── Dashboard — Profile Tab ──
         dash_profile_no_reg: 'No family registration found.',

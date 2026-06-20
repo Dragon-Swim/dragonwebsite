@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ──────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return isAuth() ? userDoc().data.role : null;
+    }
+
+    function isAdmin() {
+      // Email fallback handles bootstrap (first admin doc creation, when userRole() can't read yet).
+      // Short-circuit: if email matches, don't call userRole() which would throw on missing doc.
+      return (isAuth() && request.auth.token.email == 'admin@dragonswim.com')
+          || userRole() == 'admin';
+    }
+
+    function isCoachOrAdmin() {
+      // Same fallback: the admin email counts as coach/admin too
+      return (isAuth() && request.auth.token.email == 'admin@dragonswim.com')
+          || userRole() == 'coach'
+          || userRole() == 'admin';
+    }
+
+    // ── contacts — public contact form submissions ───────────────
+
+    match /contacts/{docId} {
+      // Anyone (even unauthenticated visitors) can submit
+      allow create: if true;
+      // Submissions are private — no public read/update/delete
+      allow read, update, delete: if false;
+    }
+
+    // ── users — profile documents keyed by Auth UID ──────────────
+
+    match /users/{uid} {
+      // Users can read their own profile; admins can read any
+      allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
+
+      // Users create their own profile (normal signup or bootstrap admin)
+      allow create: if isAuth() && request.auth.uid == uid;
+      // Admins can create users with any role (e.g., creating coaches)
+      allow create: if isAdmin();
+
+      // Users can update their own profile but CANNOT change their role
+      allow update: if isAuth() && request.auth.uid == uid
+                    && request.resource.data.role == resource.data.role;
+      // Admins can update any user profile
+      allow update: if isAdmin();
+
+      // User documents cannot be deleted through the client SDK
+      allow delete: if false;
+    }
+
+    // ── registrations — family registration data ─────────────────
+
+    match /registrations/{uid} {
+      // Owners read their own registration; coaches/admins read all
+      allow read: if isAuth() && (request.auth.uid == uid || isCoachOrAdmin());
+
+      // Family owners create/update their own; admin can update any (payment tracking etc.)
+      allow create: if isAuth() && request.auth.uid == uid;
+      allow update: if isAuth() && (request.auth.uid == uid || isAdmin());
+
+      // Soft-delete only (done via update), never hard-delete from client
+      allow delete: if false;
+    }
+
+    // ── coaches — coach roster (admin-managed) ───────────────────
+
+    match /coaches/{docId} {
+      // Self-create during seed/bootstrap (doesn't call isAdmin, avoids get() on missing doc)
+      allow create: if isAuth() && request.auth.uid == docId;
+      // Only admins can read, update, or delete coach docs
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ── meets — swim meets (coach/admin-managed) ─────────────────
+
+    match /meets/{docId} {
+      // All authenticated users can view meets
+      allow read: if isAuth();
+      // Only coaches and admins can create, update, or delete meets
+      allow create, update, delete: if isCoachOrAdmin();
+    }
+
+    // ── schedules — practice schedules (coach/admin-managed) ─────
+
+    match /schedules/{docId} {
+      // All authenticated users can view schedules
+      allow read: if isAuth();
+      // Only coaches and admins can create, update, or delete
+      // (includes CSV batch import via writeBatch)
+      allow create, update, delete: if isCoachOrAdmin();
+    }
+
+    // ── members — test utility only, deny all in production ──────
+
+    match /members/{docId} {
+      allow read, write: if false;
+    }
+  }
+}

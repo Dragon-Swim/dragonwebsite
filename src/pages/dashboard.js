@@ -429,8 +429,9 @@ function getCoachActiveSwimmers() {
   const swimmers = [];
   for (const reg of allRegistrations) {
     if (reg.swimmers) {
-      for (const s of reg.swimmers) {
-        if (!s.deleted) swimmers.push({ ...s, parentName: getParentNameFromReg(reg) });
+      for (let i = 0; i < reg.swimmers.length; i++) {
+        const s = reg.swimmers[i];
+        if (!s.deleted) swimmers.push({ ...s, parentName: getParentNameFromReg(reg), _regId: reg.id, _swimmerIndex: i });
       }
     }
   }
@@ -510,6 +511,24 @@ function renderCoachOverview() {
 
 function renderCoachRoster() {
   const activeSwimmers = getCoachActiveSwimmers();
+  const isAdmin = dbRole === 'admin';
+
+  // Column headers vary by role
+  const headerCells = isAdmin
+    ? `<tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
+        <th style="padding: 1rem;">${t('dash_coach_roster_name')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_age')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_gender')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_payment_received')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_payment_date')}</th>
+      </tr>`
+    : `<tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
+        <th style="padding: 1rem;">${t('dash_coach_roster_name')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_parent')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_age')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_gender')}</th>
+        <th style="padding: 1rem;">${t('dash_coach_roster_usa_id')}</th>
+      </tr>`;
 
   return `
     <div class="dash-panel">
@@ -519,27 +538,60 @@ function renderCoachRoster() {
       <div class="dash-panel-body">
         ${activeSwimmers.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_swimmers')}</p>` : `
         <table style="width: 100%; border-collapse: collapse; text-align: left;">
-          <thead>
-            <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
-              <th style="padding: 1rem;">${t('dash_coach_roster_name')}</th>
-              <th style="padding: 1rem;">${t('dash_coach_roster_parent')}</th>
-              <th style="padding: 1rem;">${t('dash_coach_roster_age')}</th>
-              <th style="padding: 1rem;">${t('dash_coach_roster_gender')}</th>
-              <th style="padding: 1rem;">${t('dash_coach_roster_usa_id')}</th>
-            </tr>
-          </thead>
+          <thead>${headerCells}</thead>
           <tbody>
             ${activeSwimmers.map(s => {
               const age = s.dob ? Math.floor((new Date() - new Date(s.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : '—';
-              return `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 1rem; font-weight: 500;">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</td>
-                  <td style="padding: 1rem;">${s.parentName}</td>
-                  <td style="padding: 1rem;">${age}</td>
-                  <td style="padding: 1rem;">${s.gender || '—'}</td>
-                  <td style="padding: 1rem;">${s.usaSwimmingId || '—'}</td>
-                </tr>
-              `;
+              const paymentYesSelected = s.payment_received === true ? 'selected' : '';
+              const paymentNoSelected = s.payment_received === false ? 'selected' : '';
+              const paymentNotSet = s.payment_received == null ? 'selected' : '';
+              const paymentDate = s.payment_date || '';
+
+              if (isAdmin) {
+                return `
+                  <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 1rem; font-weight: 500;">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</td>
+                    <td style="padding: 1rem;">${age}</td>
+                    <td style="padding: 1rem;">${s.gender || '—'}</td>
+                    <td style="padding: 0.5rem 1rem;">
+                      <select
+                        class="roster-payment-select"
+                        data-reg-id="${s._regId}"
+                        data-swimmer-index="${s._swimmerIndex}"
+                        data-field="payment_received"
+                        onchange="window.__updateSwimmerPayment(this)"
+                        style="width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: var(--fs-sm);"
+                      >
+                        <option value="" ${paymentNotSet}>—</option>
+                        <option value="yes" ${paymentYesSelected}>${t('dash_coach_roster_payment_yes')}</option>
+                        <option value="no" ${paymentNoSelected}>${t('dash_coach_roster_payment_no')}</option>
+                      </select>
+                    </td>
+                    <td style="padding: 0.5rem 1rem;">
+                      <input
+                        type="date"
+                        class="roster-payment-date"
+                        data-reg-id="${s._regId}"
+                        data-swimmer-index="${s._swimmerIndex}"
+                        data-field="payment_date"
+                        value="${paymentDate}"
+                        onchange="window.__updateSwimmerPayment(this)"
+                        style="width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: var(--fs-sm);"
+                      />
+                    </td>
+                  </tr>
+                `;
+              } else {
+                return `
+                  <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 1rem; font-weight: 500;">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</td>
+                    <td style="padding: 1rem;">${s.parentName}</td>
+                    <td style="padding: 1rem;">${age}</td>
+                    <td style="padding: 1rem;">${s.gender || '—'}</td>
+                    <td style="padding: 1rem;">${s.usaSwimmingId || '—'}</td>
+                  </tr>
+                `;
+              }
             }).join('')}
           </tbody>
         </table>
@@ -548,6 +600,61 @@ function renderCoachRoster() {
     </div>
   `;
 }
+
+// ── Inline Payment Field Update (called from roster onchange) ──
+window.__updateSwimmerPayment = async function (el) {
+  // Only admin can modify payment fields
+  if (dbRole !== 'admin') {
+    console.warn('Non-admin attempted to modify payment field — blocked');
+    refreshUI();
+    return;
+  }
+
+  const regId = el.dataset.regId;
+  const swimmerIndex = parseInt(el.dataset.swimmerIndex);
+  const field = el.dataset.field;
+  let value = el.value;
+
+  // Convert payment_received to boolean/null
+  if (field === 'payment_received') {
+    if (value === 'yes') value = true;
+    else if (value === 'no') value = false;
+    else value = null;
+  }
+  // For payment_date, empty string → null
+  if (field === 'payment_date') {
+    value = value || null;
+  }
+
+  // Update local cache immediately for responsive UI
+  const reg = allRegistrations.find(r => r.id === regId);
+  if (reg?.swimmers?.[swimmerIndex]) {
+    reg.swimmers[swimmerIndex] = { ...reg.swimmers[swimmerIndex], [field]: value };
+  }
+
+  // Persist to Firestore
+  try {
+    const regRef = doc(db, 'registrations', regId);
+    const regSnap = await getDoc(regRef);
+    if (!regSnap.exists()) return;
+    const swimmers = [...regSnap.data().swimmers];
+    if (swimmers[swimmerIndex]) {
+      swimmers[swimmerIndex] = { ...swimmers[swimmerIndex], [field]: value };
+      await updateDoc(regRef, { swimmers });
+    }
+  } catch (err) {
+    console.error('Error updating swimmer payment field:', err);
+    // Revert local cache on failure
+    const reg2 = allRegistrations.find(r => r.id === regId);
+    if (reg2?.swimmers?.[swimmerIndex]) {
+      const oldSnap = await getDoc(doc(db, 'registrations', regId));
+      if (oldSnap.exists()) {
+        reg2.swimmers[swimmerIndex] = { ...oldSnap.data().swimmers[swimmerIndex] };
+      }
+    }
+    refreshUI();
+  }
+};
 
 // ── Overview Tab ──
 function renderOverview() {
