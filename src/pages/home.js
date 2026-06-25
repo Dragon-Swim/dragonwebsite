@@ -53,7 +53,7 @@ app.innerHTML = `
           <!-- Central dragon -->
           <div class="hero-central-icon">
             <div class="hero-central-ring"></div>
-            <img src="${import.meta.env.BASE_URL}placeholder-hero.jpg" alt="Dragon" style="width: 110px; height: 110px; border-radius: 50%; object-fit: cover; background: var(--border-color); border: 4px solid var(--bg-card); box-shadow: var(--shadow-lg); position: relative; z-index: 10;" />
+            <img src="${import.meta.env.BASE_URL}logo-light.jpg" alt="Dragon" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; background: var(--border-color); border: 4px solid var(--bg-card); box-shadow: var(--shadow-lg); position: relative; z-index: 10;" />
           </div>
           <!-- Connecting dots -->
           <div class="hero-dot dot-1"></div>

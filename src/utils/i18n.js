@@ -244,6 +244,7 @@ const translations = {
         dash_coach_roster_payment_date: 'Payment Date',
         dash_coach_roster_payment_yes: 'Yes',
         dash_coach_roster_payment_no: 'No',
+        dash_coach_roster_payment_note: '* These columns track swim training fees. Meet entry fees are managed separately in Meet Management.',
 
         // ── Dashboard — Profile Tab ──
         dash_profile_no_reg: 'No family registration found.',
@@ -313,6 +314,25 @@ const translations = {
         dash_meets_no_meets: 'No meets scheduled yet.',
         dash_meets_confirm_delete: 'Are you sure you want to delete this meet?',
         dash_meets_name_date_required: 'Please provide a name, start date, and end date.',
+
+        // ── Meet Entry Fees ──
+        dash_meets_fee: 'Fee',
+        dash_meets_fee_title: 'Meet Entry Fees',
+        dash_meets_fee_no_data: 'No fee data uploaded yet.',
+        dash_meets_fee_upload: 'Upload Fee Spreadsheet',
+        dash_meets_fee_upload_overwrite: 'A fee table already exists. Uploading will replace it.',
+        dash_meets_fee_delete: 'Delete Fee Table',
+        dash_meets_fee_delete_confirm: 'Delete the fee table for this meet?',
+        dash_meets_fee_uploaded_by: 'Uploaded by',
+        dash_meets_fee_name: 'Name',
+        dash_meets_fee_age: 'Age',
+        dash_meets_fee_events: 'Events',
+        dash_meets_fee_indiv_fee: 'Indiv. Fee',
+        dash_meets_fee_relay_fee: 'Relay Fee',
+        dash_meets_fee_total: 'Total',
+        dash_meets_fee_summary_total: 'Total Entry Fees',
+        dash_meets_fee_parse_error: 'Could not parse the spreadsheet. Please use a Hy-Tek Meet Entry Fees report.',
+        dash_meets_fee_close: 'Close',
 
         // ── Dashboard — Schedule ──
         dash_schedule_weekly: 'Weekly Schedule',

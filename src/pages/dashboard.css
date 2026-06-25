@@ -1028,3 +1028,190 @@
 [data-theme="dark"] .csv-preview-table th {
     background: var(--bg-input);
 }
+
+/* ── Roster Payment Note ── */
+.roster-payment-note {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ── Fee Modal ── */
+.fee-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 2rem;
+}
+
+.fee-modal {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.fee-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.fee-modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.fee-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 0.25rem;
+    transition: color 0.15s;
+}
+
+.fee-modal-close:hover {
+    color: var(--text-primary);
+}
+
+.fee-modal-body {
+    padding: 1.5rem 2rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.fee-modal-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.fee-overwrite-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+    flex: 1;
+}
+
+/* ── Fee Summary Cards ── */
+.fee-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.fee-summary-card {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.fee-summary-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.35rem;
+}
+
+.fee-summary-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fee-summary-sub {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.fee-summary-total {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.fee-summary-total .fee-summary-label,
+.fee-summary-total .fee-summary-value,
+.fee-summary-total .fee-summary-sub {
+    color: #fff;
+}
+
+/* ── Fee Table ── */
+.fee-table-wrapper {
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.fee-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.fee-table th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.fee-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.fee-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.fee-table td:last-child,
+.fee-table th:last-child {
+    text-align: right;
+}
+
+/* ── Fee Meta ── */
+.fee-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+/* ── Fee Empty State ── */
+.fee-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+    font-size: 1rem;
+}

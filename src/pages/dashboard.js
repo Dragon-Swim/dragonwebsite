@@ -11,6 +11,8 @@ import './dashboard.css';
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch } from '../utils/firebase.js';
+import * as XLSX from 'xlsx';
+window.XLSX = XLSX;
 
 initTheme();
 
@@ -595,6 +597,7 @@ function renderCoachRoster() {
             }).join('')}
           </tbody>
         </table>
+        ${isAdmin ? `<p class="roster-payment-note">${t('dash_coach_roster_payment_note')}</p>` : ''}
         `}
       </div>
     </div>
@@ -971,6 +974,7 @@ function renderSwimMeets() {
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
               ${!isCoach && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
+              ${isCoach ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${m.name || ''}">${t('dash_meets_fee')}</button>` : ''}
               ${isCoach ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}">${t('dash_meets_edit')}</button>` : ''}
               ${isCoach ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
             </div>
@@ -1468,6 +1472,294 @@ async function importCSVRows(rows) {
   }
 }
 
+// ── Meet Entry Fee Parsing (Hy-Tek Team Manager Report) ──
+async function parseHytekFeeReport(file) {
+  // Use the xlsx library (SheetJS) loaded globally or imported
+  const XLSX = window.XLSX;
+  if (!XLSX) {
+    alert('Excel parser not loaded. Please refresh the page.');
+    return null;
+  }
+
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+  try {
+    // Row 5, col 0: meet name + date
+    const meetNameRaw = rows[5]?.[0] || 'Unknown Meet';
+
+    // Row 7: setup fees
+    const individualEventFee = rows[7]?.[9] || 0;
+    const swimmerSurchargeFee = rows[7]?.[36] || 0;
+
+    // Find header row (contains "Name") to locate swimmer data start
+    let dataStartRow = -1;
+    for (let r = 8; r < rows.length; r++) {
+      if (rows[r] && rows[r][1] === 'Name') {
+        dataStartRow = r + 2; // Skip header row and blank row
+        break;
+      }
+    }
+    if (dataStartRow < 0) dataStartRow = 11; // fallback
+
+    // Parse swimmer entries (every other row from dataStartRow)
+    const swimmers = [];
+    for (let r = dataStartRow; r < rows.length; r += 2) {
+      const nameCell = rows[r]?.[1];
+      if (!nameCell || typeof nameCell !== 'string') break; // end of swimmer list
+
+      // Parse "Name (Age)" format
+      const nameMatch = nameCell.match(/^(.+?)\s*\((\d+)\)\s*$/);
+      const swimmerName = nameMatch ? nameMatch[1].trim() : nameCell.trim();
+      const age = nameMatch ? parseInt(nameMatch[2], 10) : null;
+
+      const ieCount = rows[r]?.[17] || 0;
+      const indivFee = rows[r]?.[23] || 0;
+      const relayFee = rows[r]?.[29] || 0; // col 29 is relay fee numeric
+      const total = rows[r]?.[38] || 0;
+
+      swimmers.push({
+        name: swimmerName,
+        age,
+        individualEvents: ieCount,
+        individualFee: indivFee,
+        relayFee,
+        total,
+      });
+    }
+
+    // Parse summary: find "Team Totals" row
+    let summaryStartRow = -1;
+    for (let r = dataStartRow; r < rows.length; r++) {
+      if (rows[r] && rows[r][9] === 'Team Totals') {
+        summaryStartRow = r;
+        break;
+      }
+    }
+
+    let summary = {
+      individualEntries: 0, individualFee: 0,
+      relayEntries: 0, relayFee: 0,
+      swimmerSurcharge: { count: 0, fee: 0 },
+      teamSurcharge: 0, facilitySurcharge: 0,
+      total: 0,
+    };
+
+    if (summaryStartRow > 0) {
+      // Individual Entries: row+1, col 15=count, col 21=fee
+      summary.individualEntries = rows[summaryStartRow + 1]?.[15] || 0;
+      summary.individualFee = rows[summaryStartRow + 1]?.[21] || 0;
+      // Relay Entries: row+2
+      summary.relayEntries = rows[summaryStartRow + 2]?.[15] || 0;
+      summary.relayFee = rows[summaryStartRow + 2]?.[21] || 0;
+      // Swimmer Surcharge: row+3 (col 7 label, col 15=count, col 21=fee)
+      summary.swimmerSurcharge = {
+        count: rows[summaryStartRow + 3]?.[15] || 0,
+        fee: rows[summaryStartRow + 3]?.[21] || 0,
+      };
+      // Team Surcharge: row+4
+      summary.teamSurcharge = rows[summaryStartRow + 4]?.[21] || 0;
+      // Facility Surcharge: row+5
+      summary.facilitySurcharge = rows[summaryStartRow + 5]?.[21] || 0;
+      // Total: row+6 (col 10 label, col 21=fee)
+      summary.total = rows[summaryStartRow + 6]?.[21] || 0;
+    }
+
+    return {
+      fileName: file.name,
+      meetName: meetNameRaw,
+      setupFees: {
+        individualEventFee,
+        swimmerSurcharge: swimmerSurchargeFee,
+      },
+      swimmers,
+      summary,
+      uploadedAt: new Date(),
+      uploadedBy: currentUser?.email || 'unknown',
+    };
+  } catch (err) {
+    console.error('Error parsing Hy-Tek report:', err);
+    return null;
+  }
+}
+
+// ── Fee Modal ──
+function renderFeeModal(meetId, meetName, feeData) {
+  const hasData = feeData && feeData.swimmers && feeData.swimmers.length > 0;
+
+  let bodyHtml = '';
+  if (hasData) {
+    // Summary cards
+    const s = feeData.summary;
+    bodyHtml += `
+      <div class="fee-summary-grid">
+        <div class="fee-summary-card">
+          <div class="fee-summary-label">Individual Entries</div>
+          <div class="fee-summary-value">${s.individualEntries} events</div>
+          <div class="fee-summary-sub">$${s.individualFee.toLocaleString()}</div>
+        </div>
+        <div class="fee-summary-card">
+          <div class="fee-summary-label">Relay Entries</div>
+          <div class="fee-summary-value">${s.relayEntries} entries</div>
+          <div class="fee-summary-sub">$${s.relayFee.toLocaleString()}</div>
+        </div>
+        <div class="fee-summary-card">
+          <div class="fee-summary-label">Swimmer Surcharge</div>
+          <div class="fee-summary-value">${s.swimmerSurcharge.count} swimmers</div>
+          <div class="fee-summary-sub">$${s.swimmerSurcharge.fee.toLocaleString()}</div>
+        </div>
+        <div class="fee-summary-card fee-summary-total">
+          <div class="fee-summary-label">${t('dash_meets_fee_summary_total')}</div>
+          <div class="fee-summary-value" style="font-size: 1.5rem; font-weight: 700;">$${s.total.toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div class="fee-table-wrapper">
+        <table class="fee-table">
+          <thead>
+            <tr>
+              <th>${t('dash_meets_fee_name')}</th>
+              <th>${t('dash_meets_fee_age')}</th>
+              <th>${t('dash_meets_fee_events')}</th>
+              <th>${t('dash_meets_fee_indiv_fee')}</th>
+              <th>${t('dash_meets_fee_relay_fee')}</th>
+              <th>${t('dash_meets_fee_total')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${feeData.swimmers.map(sw => `
+              <tr>
+                <td>${sw.name}</td>
+                <td>${sw.age != null ? sw.age : '—'}</td>
+                <td>${sw.individualEvents}</td>
+                <td>$${sw.individualFee.toLocaleString()}</td>
+                <td>$${sw.relayFee.toLocaleString()}</td>
+                <td><strong>$${sw.total.toLocaleString()}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="fee-meta">
+        ${t('dash_meets_fee_uploaded_by')}: <strong>${feeData.uploadedBy || '—'}</strong>
+        ${feeData.uploadedAt ? ` &mdash; ${new Date(feeData.uploadedAt.seconds ? feeData.uploadedAt.seconds * 1000 : feeData.uploadedAt).toLocaleString()}` : ''}
+      </div>
+    `;
+  } else {
+    bodyHtml = `<div class="fee-empty">${t('dash_meets_fee_no_data')}</div>`;
+  }
+
+  return `
+    <div class="fee-modal-overlay" id="fee-modal-overlay">
+      <div class="fee-modal">
+        <div class="fee-modal-header">
+          <h2>${t('dash_meets_fee_title')}: ${meetName}</h2>
+          <button class="fee-modal-close" id="fee-modal-close" title="${t('dash_meets_fee_close')}">&times;</button>
+        </div>
+        <div class="fee-modal-body" id="fee-modal-body">
+          ${bodyHtml}
+        </div>
+        <div class="fee-modal-footer">
+          ${hasData ? `<p class="fee-overwrite-hint">${t('dash_meets_fee_upload_overwrite')}</p>` : ''}
+          <input type="file" id="fee-file-input" accept=".xls,.xlsx" style="display:none;">
+          <button class="btn btn-primary btn-sm" id="fee-upload-btn">${t('dash_meets_fee_upload')}</button>
+          ${hasData ? `<button class="btn btn-outline btn-sm" id="fee-delete-btn" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_fee_delete')}</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function showFeeModal(meetId, meetName) {
+  // Fetch meet doc to get feeData
+  let feeData = null;
+  try {
+    const meetSnap = await getDoc(doc(db, 'meets', meetId));
+    if (meetSnap.exists()) {
+      feeData = meetSnap.data().feeData || null;
+    }
+  } catch (err) {
+    console.error('Error fetching meet for fee modal:', err);
+  }
+
+  // Remove existing modal if any
+  const existing = document.getElementById('fee-modal-overlay');
+  if (existing) existing.remove();
+
+  // Inject modal HTML
+  const container = document.createElement('div');
+  container.id = 'fee-modal-container';
+  container.innerHTML = renderFeeModal(meetId, meetName, feeData);
+  document.body.appendChild(container);
+
+  // ── Event bindings ──
+  const overlay = document.getElementById('fee-modal-overlay');
+  const closeBtn = document.getElementById('fee-modal-close');
+  const uploadBtn = document.getElementById('fee-upload-btn');
+  const fileInput = document.getElementById('fee-file-input');
+  const deleteBtn = document.getElementById('fee-delete-btn');
+
+  // Close
+  const closeModal = () => {
+    overlay?.remove();
+    container.remove();
+  };
+  closeBtn?.addEventListener('click', closeModal);
+  overlay?.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  // File upload
+  uploadBtn?.addEventListener('click', () => {
+    fileInput?.click();
+  });
+  fileInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file extension
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['xls', 'xlsx'].includes(ext)) {
+      alert(t('dash_meets_fee_parse_error'));
+      return;
+    }
+
+    const parsed = await parseHytekFeeReport(file);
+    if (!parsed) {
+      alert(t('dash_meets_fee_parse_error'));
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'meets', meetId), { feeData: parsed });
+      closeModal();
+      // Re-open with fresh data
+      showFeeModal(meetId, meetName);
+    } catch (err) {
+      console.error('Error uploading fee data:', err);
+      alert('Failed to upload fee data. Please try again.');
+    }
+  });
+
+  // Delete
+  deleteBtn?.addEventListener('click', async () => {
+    if (confirm(t('dash_meets_fee_delete_confirm'))) {
+      try {
+        await updateDoc(doc(db, 'meets', meetId), { feeData: null });
+        closeModal();
+        showFeeModal(meetId, meetName);
+      } catch (err) {
+        console.error('Error deleting fee data:', err);
+        alert('Failed to delete fee data. Please try again.');
+      }
+    }
+  });
+}
+
 // ── Events ──
 function bindEvents() {
   // Sidebar nav
@@ -1793,6 +2085,13 @@ function bindEvents() {
             console.error("Error deleting meet:", err);
           }
         }
+      });
+    });
+
+    // Meet Entry Fees
+    document.querySelectorAll('.meet-fee-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showFeeModal(btn.dataset.id, btn.dataset.name);
       });
     });
 
