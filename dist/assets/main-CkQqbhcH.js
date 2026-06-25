@@ -1,4 +1,4 @@
-import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer-sSsr9pk9.js";r();n();const l=document.getElementById("app");l.innerHTML=`
+import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer-BsZ6FkZw.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -8,31 +8,31 @@ import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer
         <h1 class="hero-title">${e("hero_title")} <span class="text-gradient">Dragon Swim</span></h1>
         <p class="hero-subtitle">${e("hero_subtitle")}</p>
         <div class="hero-actions">
-          <a href="/dragonwebsite/registration.html" class="btn btn-gradient btn-lg">
+          <a href="/registration.html" class="btn btn-gradient btn-lg">
             ${e("hero_cta")} <span class="btn-arrow">→</span>
           </a>
-          <a href="/dragonwebsite/signin.html" class="btn btn-outline btn-lg">Sign In</a>
+          <a href="/signin.html" class="btn btn-outline btn-lg">Sign In</a>
         </div>
       </div>
       <div class="hero-right">
         <div class="hero-float-grid">
           <!-- Floating feature cards -->
-          <a href="/dragonwebsite/signin.html" class="hero-float-card hfc-2">
+          <a href="/signin.html" class="hero-float-card hfc-2">
             <div class="hfc-icon">🏆</div>
             <div class="hfc-label">Swim Meets</div>
           </a>
-          <a href="/dragonwebsite/signin.html" class="hero-float-card hfc-3">
+          <a href="/signin.html" class="hero-float-card hfc-3">
             <div class="hfc-icon">📅</div>
             <div class="hfc-label">Schedules</div>
           </a>
-          <a href="/dragonwebsite/contact.html" class="hero-float-card hfc-4">
+          <a href="/contact.html" class="hero-float-card hfc-4">
             <div class="hfc-icon">💬</div>
             <div class="hfc-label">Coach Chat</div>
           </a>
           <!-- Central dragon -->
           <div class="hero-central-icon">
             <div class="hero-central-ring"></div>
-            <img src="/dragonwebsite/logo-light.jpg" alt="Dragon" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; background: var(--border-color); border: 4px solid var(--bg-card); box-shadow: var(--shadow-lg); position: relative; z-index: 10;" />
+            <img src="/logo-light.jpg" alt="Dragon" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; background: var(--border-color); border: 4px solid var(--bg-card); box-shadow: var(--shadow-lg); position: relative; z-index: 10;" />
           </div>
           <!-- Connecting dots -->
           <div class="hero-dot dot-1"></div>
@@ -197,8 +197,8 @@ import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer
       <h2 class="cta-title">${e("home_cta_title")}</h2>
       <p class="cta-subtitle">${e("home_cta_subtitle")}</p>
       <div class="cta-actions">
-        <a href="/dragonwebsite/registration.html" class="btn btn-primary btn-lg">${e("hero_cta")} →</a>
-        <a href="/dragonwebsite/contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">${e("home_cta_coach")}</a>
+        <a href="/registration.html" class="btn btn-primary btn-lg">${e("hero_cta")} →</a>
+        <a href="/contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">${e("home_cta_coach")}</a>
       </div>
     </div>
   </section>
@@ -213,7 +213,7 @@ import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer
   `}function o(s,t,a){return`
     <div class="card team-card text-center">
       <div class="team-img-placeholder" style="width: 120px; height: 120px; border-radius: 50%; background: var(--border-color); margin: 0 auto var(--space-md); overflow: hidden; border: 3px solid var(--color-primary);">
-        <img src="/dragonwebsite/placeholder-coach.jpg" alt="${s}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
+        <img src="/placeholder-coach.jpg" alt="${s}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
       </div>
       <h3 class="team-name" style="font-family: var(--font-display); font-size: var(--fs-lg); margin-bottom: var(--space-xs);">${s}</h3>
       <p class="team-role" style="font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--color-accent); margin-bottom: var(--space-sm);">${t}</p>
