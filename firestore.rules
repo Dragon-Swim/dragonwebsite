@@ -102,6 +102,15 @@ service cloud.firestore {
       allow create, update, delete: if isCoachOrAdmin();
     }
 
+    // ── deposits — swimmer deposit tracking (coach/admin-managed) ─
+
+    match /deposits/{docId} {
+      // All authenticated users can view deposits
+      allow read: if isAuth();
+      // Only coaches and admins can create, update, or delete deposits
+      allow create, update, delete: if isCoachOrAdmin();
+    }
+
     // ── members — test utility only, deny all in production ──────
 
     match /members/{docId} {

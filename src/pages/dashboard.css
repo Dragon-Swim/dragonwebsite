@@ -1215,3 +1215,289 @@
     color: var(--text-muted);
     font-size: 1rem;
 }
+
+/* ── Fee Summary Table ── */
+.fee-summary-table-wrapper {
+    overflow-x: auto;
+}
+
+.fee-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.fee-summary-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.fee-summary-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    background: var(--bg-card);
+}
+
+.fee-summary-table th:last-child {
+    text-align: center;
+    width: 120px;
+}
+
+.fee-summary-table td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.fee-summary-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.fee-summary-name {
+    font-weight: 500;
+}
+
+.fee-summary-balance {
+    text-align: right;
+    padding-right: 1rem !important;
+}
+
+.fee-summary-actions {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* ── Negative Balance Highlight ── */
+.fee-summary-negative {
+    background: rgba(220, 53, 69, 0.06);
+}
+
+.fee-summary-negative:hover {
+    background: rgba(220, 53, 69, 0.1) !important;
+}
+
+[data-theme="dark"] .fee-summary-negative {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+[data-theme="dark"] .fee-summary-negative:hover {
+    background: rgba(248, 113, 113, 0.15) !important;
+}
+
+/* ── Deposit Inline Actions ── */
+.fee-deposit-action-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 8px;
+    color: var(--text-primary);
+    transition: all var(--transition-fast);
+    line-height: 1.4;
+}
+
+.fee-deposit-action-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.fee-deposit-add-btn,
+.fee-deposit-save-btn {
+    color: #16A34A;
+    border-color: #16A34A;
+}
+
+.fee-deposit-add-btn:hover,
+.fee-deposit-save-btn:hover {
+    background: rgba(22, 163, 74, 0.1);
+    color: #16A34A;
+}
+
+.fee-deposit-cancel-btn {
+    color: var(--color-accent);
+}
+
+.fee-deposit-edit-btn {
+    font-size: 0.85rem;
+}
+
+.fee-deposit-delete-btn {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.fee-deposit-input {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+
+.fee-deposit-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.2);
+}
+
+/* ── Season Selector ── */
+.season-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.season-selector-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.season-select {
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 140px;
+}
+
+.season-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.2);
+}
+
+/* ── Deposits Table ── */
+.deposits-table-wrapper {
+    overflow-x: auto;
+}
+
+.deposits-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    min-width: 1000px;
+}
+
+.deposits-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.deposits-table th {
+    text-align: left;
+    padding: 0.6rem 0.5rem;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    background: var(--bg-card);
+}
+
+.deposits-table th:last-child {
+    text-align: center;
+    width: 50px;
+}
+
+.deposits-table td {
+    padding: 0.45rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.deposits-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.deposits-name {
+    font-weight: 500;
+}
+
+.deposits-total {
+    text-align: right;
+    padding-right: 0.75rem !important;
+}
+
+.deposits-actions {
+    text-align: center;
+}
+
+.deposits-actions button {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 1px 6px;
+    color: var(--text-secondary);
+    transition: all var(--transition-fast);
+    line-height: 1.5;
+    margin: 0 1px;
+}
+
+.deposits-actions button:hover {
+    background: var(--bg-secondary);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.deposits-save-btn:hover {
+    color: #16A34A !important;
+    border-color: #16A34A !important;
+}
+
+.deposits-cancel-btn:hover {
+    color: var(--color-accent) !important;
+    border-color: var(--color-accent) !important;
+}
+
+.deposits-delete-btn {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+}
+
+.deposits-delete-btn:hover {
+    color: var(--color-accent) !important;
+    border-color: var(--color-accent) !important;
+}
+
+/* ── Deposits Inline Edit Inputs ── */
+.dep-input {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: inherit;
+}
+
+.dep-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.2);
+}

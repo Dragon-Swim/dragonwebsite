@@ -35,6 +35,8 @@ let dbRole = null;
 let familyData = null;
 let familyDataId = null;
 let allRegistrations = [];
+let deposits = [];
+let currentSeason = getDefaultSeason();
 
 const coachRoster = [
   { id: 101, name: 'Alice Thompson', group: 'Competitive', age: 14, rank: 'Regional' },
@@ -146,6 +148,14 @@ function initDataListeners() {
       refreshUI();
     }, (error) => {
       console.error("Error listening to registrations:", error);
+    });
+
+    const qDeposits = query(collection(db, "deposits"), orderBy("swimmerName", "asc"));
+    onSnapshot(qDeposits, (snapshot) => {
+      deposits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      refreshUI();
+    }, (error) => {
+      console.error("Error listening to deposits:", error);
     });
   }
 }
@@ -303,6 +313,12 @@ function renderCoachDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
               <span class="dash-nav-icon">⏱️</span> ${t('dash_coach_schedule_label')}
             </button>
+            <button class="dash-nav-item ${currentTab === 'feesummary' ? 'active' : ''}" data-tab="feesummary">
+              <span class="dash-nav-icon">💰</span> ${t('dash_coach_fee_summary_label')}
+            </button>
+            <button class="dash-nav-item ${currentTab === 'deposits' ? 'active' : ''}" data-tab="deposits">
+              <span class="dash-nav-icon">🏦</span> ${t('dash_coach_deposits_label')}
+            </button>
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
             <span class="dash-nav-label">${t('dash_sidebar_system')}</span>
@@ -374,6 +390,8 @@ function getTabTitle(tab, role = 'swimmer') {
       'roster': t('dash_coach_tab_roster'),
       'meets': t('dash_coach_tab_meets'),
       'schedule': t('dash_coach_tab_schedule'),
+      'feesummary': t('dash_coach_tab_fee_summary'),
+      'deposits': t('dash_coach_tab_deposits'),
     };
     return titles[tab] || t('dash_coach_tab_overview');
   }
@@ -405,6 +423,8 @@ function renderTabContent(tab, role = 'swimmer') {
       case 'roster': return renderCoachRoster();
       case 'meets': return renderSwimMeets();
       case 'schedule': return renderSchedule();
+      case 'feesummary': return renderFeeSummary();
+      case 'deposits': return renderDeposits();
       default: return renderCoachOverview();
     }
   }
@@ -604,7 +624,721 @@ function renderCoachRoster() {
   `;
 }
 
-// ── Inline Payment Field Update (called from roster onchange) ──
+// ── Fee Summary Tab ──
+
+/**
+ * Aggregate meet entry fees across meets for the given season and match with deposits.
+ * Returns a sorted array of swimmer fee summary objects.
+ */
+function buildFeeSummaryData(season) {
+  const normalize = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // Compute deposit total from the new schema: balance + d1 + d2 + d3
+  const depositTotal = (d) => (Number(d.balance) || 0) + (Number(d.deposit1Amount) || 0) + (Number(d.deposit2Amount) || 0) + (Number(d.deposit3Amount) || 0);
+
+  // Aggregate fee data from meets in the selected season
+  const feeMap = new Map();
+
+  for (const meet of swimMeets) {
+    if (meet.season && meet.season !== season) continue; // filter by season
+    const fd = meet.feeData;
+    if (!fd || !fd.swimmers || fd.swimmers.length === 0) continue;
+
+    for (const sw of fd.swimmers) {
+      const key = normalize(sw.name);
+      if (!key) continue;
+
+      const existing = feeMap.get(key);
+      const fee = Number(sw.total) || 0;
+      if (existing) {
+        existing.totalFee += fee;
+        existing.meetCount += 1;
+        existing.meets.push({ meetName: meet.name || 'Unnamed Meet', total: fee });
+        if (sw.name.trim().length > existing.displayName.length) {
+          existing.displayName = sw.name.trim();
+        }
+      } else {
+        feeMap.set(key, {
+          displayName: sw.name.trim(),
+          totalFee: fee,
+          meetCount: 1,
+          meets: [{ meetName: meet.name || 'Unnamed Meet', total: fee }],
+        });
+      }
+    }
+  }
+
+  // Build deposit map for the selected season
+  const depositMap = new Map();
+  for (const d of deposits) {
+    if (d.season && d.season !== season) continue; // filter by season
+    const key = normalize(d.swimmerName);
+    if (!key) continue;
+    depositMap.set(key, { id: d.id, total: depositTotal(d) });
+  }
+
+  // Merge fee and deposit data
+  const result = [];
+
+  for (const [key, feeData] of feeMap) {
+    const dep = depositMap.get(key) || { id: null, total: 0 };
+    result.push({
+      normalizedName: key,
+      displayName: feeData.displayName,
+      totalFee: feeData.totalFee,
+      deposit: dep.total,
+      depositId: dep.id,
+      balance: dep.total - feeData.totalFee,
+      meetCount: feeData.meetCount,
+      meets: feeData.meets,
+    });
+    depositMap.delete(key);
+  }
+
+  // Swimmers with deposits but no fees yet in this season
+  for (const [key, dep] of depositMap) {
+    const origDep = deposits.find(d => normalize(d.swimmerName) === key && d.season === season);
+    result.push({
+      normalizedName: key,
+      displayName: origDep ? origDep.swimmerName : key,
+      totalFee: 0,
+      deposit: dep.total,
+      depositId: dep.id,
+      balance: dep.total,
+      meetCount: 0,
+      meets: [],
+    });
+  }
+
+  // Sort: negative balances first, then by name
+  result.sort((a, b) => {
+    if (a.balance < 0 && b.balance >= 0) return -1;
+    if (a.balance >= 0 && b.balance < 0) return 1;
+    return a.displayName.localeCompare(b.displayName);
+  });
+
+  return result;
+}
+
+function renderFeeSummary() {
+  const summary = buildFeeSummaryData(currentSeason);
+  const totalFees = summary.reduce((sum, s) => sum + s.totalFee, 0);
+  const totalDeposits = summary.reduce((sum, s) => sum + s.deposit, 0);
+  const negativeCount = summary.filter(s => s.balance < 0).length;
+
+  const fmt = (n) => '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const hasData = summary.length > 0;
+
+  return `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
+      ${renderSeasonSelector(currentSeason)}
+      <a class="btn btn-outline btn-sm" id="goto-deposits-link" style="text-decoration: none;">🏦 Manage Deposits</a>
+    </div>
+
+    <div class="dash-stats-row">
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${summary.length}</div>
+        <div class="dash-stat-label">${t('dash_fee_summary_total_swimmers')}</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${fmt(totalFees)}</div>
+        <div class="dash-stat-label">${t('dash_fee_summary_total_fees')}</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${fmt(totalDeposits)}</div>
+        <div class="dash-stat-label">${t('dash_fee_summary_total_deposits')}</div>
+      </div>
+      <div class="dash-stat-card ${negativeCount > 0 ? 'accent' : ''}">
+        <div class="dash-stat-number" style="${negativeCount > 0 ? 'color: var(--color-accent);' : ''}">${negativeCount}</div>
+        <div class="dash-stat-label">${t('dash_fee_summary_negative_count')}</div>
+      </div>
+    </div>
+
+    ${!hasData ? `
+      <div class="dash-panel" style="text-align: center; padding: 3rem 2rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+        <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto;">${t('dash_fee_summary_no_fees')}</p>
+      </div>
+    ` : `
+      <div class="dash-panel">
+        <div class="fee-summary-table-wrapper">
+          <table class="fee-summary-table">
+            <thead>
+              <tr>
+                <th>${t('dash_fee_summary_name')}</th>
+                <th>${t('dash_fee_summary_deposit')}</th>
+                <th>${t('dash_fee_summary_total_fee')}</th>
+                <th>${t('dash_fee_summary_meets')}</th>
+                <th>${t('dash_fee_summary_balance')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${summary.map(s => `
+                <tr class="fee-summary-row ${s.balance < 0 ? 'fee-summary-negative' : ''}">
+                  <td class="fee-summary-name">${escapeHtml(s.displayName)}</td>
+                  <td>${fmt(s.deposit)}</td>
+                  <td>${fmt(s.totalFee)}</td>
+                  <td>${s.meetCount}</td>
+                  <td class="fee-summary-balance" style="font-weight: 700; ${s.balance < 0 ? 'color: var(--color-accent);' : 'color: #16A34A;'}">${fmt(s.balance)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `}
+  `;
+}
+
+// ── Deposits Tab ──
+
+function getDepositsForSeason(season) {
+  return deposits
+    .filter(d => d.season === season)
+    .sort((a, b) => (a.swimmerName || '').localeCompare(b.swimmerName || ''));
+}
+
+function calcDepositTotal(d) {
+  return (Number(d.balance) || 0) + (Number(d.deposit1Amount) || 0) + (Number(d.deposit2Amount) || 0) + (Number(d.deposit3Amount) || 0);
+}
+
+function renderDeposits() {
+  const seasonDeposits = getDepositsForSeason(currentSeason);
+  const fmt = (n) => n != null ? '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+  const fmtDate = (d) => d || '—';
+
+  const hasData = seasonDeposits.length > 0;
+
+  return `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
+      ${renderSeasonSelectorDeposits(currentSeason)}
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button class="btn btn-outline btn-sm" id="deposits-upload-balance-btn">📤 Upload Carry-over Balance</button>
+        <button class="btn btn-outline btn-sm" id="deposits-upload-detail-btn">📤 Upload Deposits</button>
+        <button class="btn btn-outline btn-sm" id="deposits-export-btn">📥 Export CSV</button>
+      </div>
+    </div>
+
+    ${!hasData ? `
+      <div class="dash-panel" style="text-align: center; padding: 3rem 2rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">🏦</div>
+        <p style="color: var(--text-secondary);">
+          No deposit records for ${escapeHtml(currentSeason)}.<br>
+          Upload an Excel file or add swimmers below.
+        </p>
+      </div>
+    ` : `
+      <div class="dash-panel">
+        <div class="deposits-table-wrapper">
+          <table class="deposits-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Balance</th>
+                <th>Deposit 1</th>
+                <th>Date 1</th>
+                <th>Deposit 2</th>
+                <th>Date 2</th>
+                <th>Deposit 3</th>
+                <th>Date 3</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${seasonDeposits.map(d => {
+                const total = calcDepositTotal(d);
+                const rowId = 'dep-row-' + d.id;
+                return `
+                <tr id="${rowId}" class="deposits-row">
+                  <td class="deposits-name">${escapeHtml(d.swimmerName)}</td>
+                  <td class="deposits-balance">
+                    <span class="dep-view">${fmt(d.balance)}</span>
+                    <input class="dep-edit-field dep-input" type="number" value="${d.balance || 0}" step="0.01" style="display:none; width: 90px;" />
+                  </td>
+                  <td class="deposits-d1amt">
+                    <span class="dep-view">${fmt(d.deposit1Amount)}</span>
+                    <input class="dep-edit-field dep-input" type="number" value="${d.deposit1Amount || ''}" step="0.01" style="display:none; width: 90px;" />
+                  </td>
+                  <td class="deposits-d1date">
+                    <span class="dep-view">${fmtDate(d.deposit1Date)}</span>
+                    <input class="dep-edit-field dep-input" type="date" value="${d.deposit1Date || ''}" style="display:none; width: 130px;" />
+                  </td>
+                  <td class="deposits-d2amt">
+                    <span class="dep-view">${fmt(d.deposit2Amount)}</span>
+                    <input class="dep-edit-field dep-input" type="number" value="${d.deposit2Amount || ''}" step="0.01" style="display:none; width: 90px;" />
+                  </td>
+                  <td class="deposits-d2date">
+                    <span class="dep-view">${fmtDate(d.deposit2Date)}</span>
+                    <input class="dep-edit-field dep-input" type="date" value="${d.deposit2Date || ''}" style="display:none; width: 130px;" />
+                  </td>
+                  <td class="deposits-d3amt">
+                    <span class="dep-view">${fmt(d.deposit3Amount)}</span>
+                    <input class="dep-edit-field dep-input" type="number" value="${d.deposit3Amount || ''}" step="0.01" style="display:none; width: 90px;" />
+                  </td>
+                  <td class="deposits-d3date">
+                    <span class="dep-view">${fmtDate(d.deposit3Date)}</span>
+                    <input class="dep-edit-field dep-input" type="date" value="${d.deposit3Date || ''}" style="display:none; width: 130px;" />
+                  </td>
+                  <td class="deposits-total" style="font-weight: 700;">${fmt(total)}</td>
+                  <td class="deposits-actions">
+                    <button class="deposits-edit-btn" data-id="${d.id}">✎</button>
+                    <button class="deposits-save-btn" data-id="${d.id}" style="display:none;">✓</button>
+                    <button class="deposits-cancel-btn" data-id="${d.id}" style="display:none;">✕</button>
+                    <button class="deposits-delete-btn" data-id="${d.id}" data-name="${escapeHtml(d.swimmerName)}" style="color: var(--color-accent);">&times;</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `}
+
+    <div style="margin-top: 1.5rem;">
+      <button class="btn btn-primary btn-sm" id="deposits-add-btn">+ Add Swimmer</button>
+    </div>
+
+    <div id="deposits-add-form" class="dash-panel" style="display: none; margin-top: 1rem; padding: 1.5rem;">
+      <h3 style="margin-bottom: 1rem;">Add Swimmer Deposit Record</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
+        <div class="form-group">
+          <label class="form-label">Swimmer Name</label>
+          <input type="text" id="deposits-add-name" class="form-input" placeholder="Swimmer name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Carry-over Balance ($)</label>
+          <input type="number" id="deposits-add-balance" class="form-input" value="0" min="0" step="0.01" />
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-primary btn-sm" id="deposits-add-save">Save</button>
+          <button class="btn btn-outline btn-sm" id="deposits-add-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSeasonSelectorDeposits(selectedSeason) {
+  const options = getSeasonOptions();
+  const sel = selectedSeason || currentSeason || getDefaultSeason();
+  return `
+    <div class="season-selector">
+      <label class="season-selector-label">${t('dash_season_label')}:</label>
+      <select id="deposits-season-select" class="season-select">
+        ${options.map(s => `<option value="${s}" ${s === sel ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+// ── Carry-over Balance Excel Parser ──
+async function parseCarryOverExcel(file) {
+  const XLSX = window.XLSX;
+  if (!XLSX) { alert('Excel parser not loaded.'); return null; }
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    if (!rows || rows.length < 2) return { valid: [], errors: [{ rowNum: 1, reason: 'File has no data rows.' }] };
+
+    let nameCol = -1, balanceCol = -1, headerRow = -1;
+    for (let r = 0; r < Math.min(10, rows.length); r++) {
+      const row = rows[r]; if (!row) continue;
+      nameCol = -1; balanceCol = -1;
+      for (let c = 0; c < row.length; c++) {
+        const cell = String(row[c] || '').toLowerCase().trim();
+        if (cell.includes('name') || cell.includes('swimmer')) nameCol = c;
+        if (cell.includes('balance')) balanceCol = c;
+      }
+      if (nameCol >= 0 && balanceCol >= 0) { headerRow = r; break; }
+    }
+    if (headerRow < 0) return { valid: [], errors: [{ rowNum: 0, reason: 'Expected columns: Name, Balance.' }] };
+
+    const valid = [], errors = [];
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.every(c => c == null || String(c).trim() === '')) continue;
+      const name = String(row[nameCol] || '').trim();
+      if (!name) { errors.push({ rowNum: r + 1, reason: 'Missing name.' }); continue; }
+      const bal = Number(row[balanceCol]);
+      if (isNaN(bal) || bal < 0) { errors.push({ rowNum: r + 1, reason: `Invalid balance for "${name}": ${row[balanceCol]}` }); continue; }
+      valid.push({ swimmerName: name, balance: bal });
+    }
+    return { valid, errors };
+  } catch (err) { console.error('Error parsing carry-over Excel:', err); return null; }
+}
+
+function showCarryOverImportModal(validRows, errors, filename) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal csv-import-modal">
+      <h3 class="confirm-title">Import Carry-over Balance</h3>
+      <p class="csv-import-filename">File: <strong>${escapeHtml(filename)}</strong></p>
+      <p class="csv-import-summary">${validRows.length} record(s), ${errors.length} error(s)</p>
+      <p style="font-size: 0.85rem; color: var(--color-accent); margin-bottom: 0.75rem;">⚠ This will <strong>overwrite</strong> existing balance values for matching swimmers in season <strong>${escapeHtml(currentSeason)}</strong>.</p>
+      ${validRows.length > 0 ? `
+        <div class="csv-preview-wrapper">
+          <table class="csv-preview-table">
+            <thead><tr><th>Name</th><th>Balance</th></tr></thead>
+            <tbody>${validRows.map(r => `<tr><td>${escapeHtml(r.swimmerName)}</td><td>$${Number(r.balance).toLocaleString(undefined, {minimumFractionDigits:2})}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>` : ''}
+      ${errors.length > 0 ? `<div class="csv-error-block"><p class="csv-error-title">Errors</p>${errors.map(e => `<p class="csv-error-item">Row ${e.rowNum}: ${escapeHtml(e.reason)}</p>`).join('')}</div>` : ''}
+      ${validRows.length === 0 ? '<p class="csv-no-valid">No valid records found.</p>' : ''}
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="carryover-import-cancel">Cancel</button>
+        ${validRows.length > 0 ? '<button class="btn btn-primary btn-sm" id="carryover-import-confirm">Import</button>' : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#carryover-import-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#carryover-import-confirm')?.addEventListener('click', async () => {
+    overlay.remove();
+    await importCarryOverRows(validRows);
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function importCarryOverRows(rows) {
+  if (!rows || rows.length === 0) return;
+  const normalize = (n) => (n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  try {
+    const batch = writeBatch(db);
+    // For each uploaded row, find existing deposit doc for this swimmer+season or create new
+    for (const row of rows) {
+      const existing = deposits.find(d => d.season === currentSeason && normalize(d.swimmerName) === normalize(row.swimmerName));
+      if (existing) {
+        batch.update(doc(db, 'deposits', existing.id), { balance: Number(row.balance), updatedAt: new Date(), updatedBy: currentUser?.email || 'unknown' });
+      } else {
+        const newRef = doc(collection(db, 'deposits'));
+        batch.set(newRef, {
+          swimmerName: row.swimmerName, season: currentSeason, balance: Number(row.balance),
+          deposit1Amount: null, deposit1Date: null, deposit2Amount: null, deposit2Date: null, deposit3Amount: null, deposit3Date: null,
+          updatedAt: new Date(), updatedBy: currentUser?.email || 'unknown',
+        });
+      }
+    }
+    await batch.commit();
+    showImportStatus(`Updated balance for ${rows.length} swimmer(s) in ${currentSeason}.`);
+  } catch (error) { console.error('Carry-over import failed:', error); showImportStatus('Failed to import: ' + (error.message || ''), true); }
+}
+
+// ── Deposit Detail Excel Parser ──
+async function parseDepositDetailExcel(file) {
+  const XLSX = window.XLSX;
+  if (!XLSX) { alert('Excel parser not loaded.'); return null; }
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    if (!rows || rows.length < 2) return { valid: [], errors: [{ rowNum: 1, reason: 'File has no data rows.' }] };
+
+    // Find header columns: Name, and deposit/amount/date columns
+    let nameCol = -1;
+    const dCols = {}; // deposit1Amount, deposit1Date, deposit2Amount, deposit2Date, deposit3Amount, deposit3Date
+    let headerRow = -1;
+
+    for (let r = 0; r < Math.min(10, rows.length); r++) {
+      const row = rows[r]; if (!row) continue;
+      let foundName = -1;
+      const tempCols = {};
+      for (let c = 0; c < row.length; c++) {
+        const cell = String(row[c] || '').toLowerCase().trim();
+        if (cell.includes('name') || cell.includes('swimmer')) {
+          foundName = c;
+        } else {
+          // Match deposit N amount/date patterns
+          if (/deposit\s*1.*amount/i.test(cell) || /d1\s*.*amt/i.test(cell)) tempCols.deposit1Amount = c;
+          else if (/deposit\s*1.*date/i.test(cell) || /d1\s*.*date/i.test(cell)) tempCols.deposit1Date = c;
+          else if (/deposit\s*2.*amount/i.test(cell) || /d2\s*.*amt/i.test(cell)) tempCols.deposit2Amount = c;
+          else if (/deposit\s*2.*date/i.test(cell) || /d2\s*.*date/i.test(cell)) tempCols.deposit2Date = c;
+          else if (/deposit\s*3.*amount/i.test(cell) || /d3\s*.*amt/i.test(cell)) tempCols.deposit3Amount = c;
+          else if (/deposit\s*3.*date/i.test(cell) || /d3\s*.*date/i.test(cell)) tempCols.deposit3Date = c;
+        }
+      }
+      if (foundName >= 0) { nameCol = foundName; Object.assign(dCols, tempCols); headerRow = r; break; }
+    }
+
+    if (headerRow < 0) return { valid: [], errors: [{ rowNum: 0, reason: 'Expected a header row with "Name" column.' }] };
+
+    const valid = [], errors = [];
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.every(c => c == null || String(c).trim() === '')) continue;
+      const name = String(row[nameCol] || '').trim();
+      if (!name) { errors.push({ rowNum: r + 1, reason: 'Missing name.' }); continue; }
+
+      const record = { swimmerName: name };
+      for (const [key, col] of Object.entries(dCols)) {
+        if (col >= 0 && col < row.length) {
+          const val = row[col];
+          if (key.includes('Amount')) record[key] = val != null ? Number(val) : null;
+          else record[key] = val ? String(val).trim() : null;
+        }
+      }
+      valid.push(record);
+    }
+    return { valid, errors };
+  } catch (err) { console.error('Error parsing deposit detail Excel:', err); return null; }
+}
+
+function showDepositDetailImportModal(validRows, errors, filename) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal csv-import-modal" style="max-width: 900px;">
+      <h3 class="confirm-title">Import Deposit Details</h3>
+      <p class="csv-import-filename">File: <strong>${escapeHtml(filename)}</strong></p>
+      <p class="csv-import-summary">${validRows.length} record(s), ${errors.length} error(s)</p>
+      <p style="font-size: 0.85rem; color: var(--color-accent); margin-bottom: 0.75rem;">⚠ This will <strong>overwrite</strong> existing deposit fields for matching swimmers in season <strong>${escapeHtml(currentSeason)}</strong>.</p>
+      ${validRows.length > 0 ? `
+        <div class="csv-preview-wrapper" style="max-height: 350px;">
+          <table class="csv-preview-table" style="font-size: 0.75rem;">
+            <thead><tr><th>Name</th><th>D1 Amt</th><th>D1 Date</th><th>D2 Amt</th><th>D2 Date</th><th>D3 Amt</th><th>D3 Date</th></tr></thead>
+            <tbody>${validRows.map(r => `<tr>
+              <td>${escapeHtml(r.swimmerName)}</td>
+              <td>${r.deposit1Amount != null ? '$' + Number(r.deposit1Amount).toFixed(2) : '—'}</td>
+              <td>${r.deposit1Date || '—'}</td>
+              <td>${r.deposit2Amount != null ? '$' + Number(r.deposit2Amount).toFixed(2) : '—'}</td>
+              <td>${r.deposit2Date || '—'}</td>
+              <td>${r.deposit3Amount != null ? '$' + Number(r.deposit3Amount).toFixed(2) : '—'}</td>
+              <td>${r.deposit3Date || '—'}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>` : ''}
+      ${errors.length > 0 ? `<div class="csv-error-block"><p class="csv-error-title">Errors</p>${errors.map(e => `<p class="csv-error-item">Row ${e.rowNum}: ${escapeHtml(e.reason)}</p>`).join('')}</div>` : ''}
+      ${validRows.length === 0 ? '<p class="csv-no-valid">No valid records found.</p>' : ''}
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="detail-import-cancel">Cancel</button>
+        ${validRows.length > 0 ? '<button class="btn btn-primary btn-sm" id="detail-import-confirm">Import</button>' : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#detail-import-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#detail-import-confirm')?.addEventListener('click', async () => {
+    overlay.remove();
+    await importDepositDetailRows(validRows);
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function importDepositDetailRows(rows) {
+  if (!rows || rows.length === 0) return;
+  const normalize = (n) => (n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  try {
+    const batch = writeBatch(db);
+    for (const row of rows) {
+      const existing = deposits.find(d => d.season === currentSeason && normalize(d.swimmerName) === normalize(row.swimmerName));
+      const updateData = {
+        updatedAt: new Date(),
+        updatedBy: currentUser?.email || 'unknown',
+      };
+      // Only set fields present in the row
+      if ('deposit1Amount' in row) updateData.deposit1Amount = row.deposit1Amount;
+      if ('deposit1Date' in row) updateData.deposit1Date = row.deposit1Date;
+      if ('deposit2Amount' in row) updateData.deposit2Amount = row.deposit2Amount;
+      if ('deposit2Date' in row) updateData.deposit2Date = row.deposit2Date;
+      if ('deposit3Amount' in row) updateData.deposit3Amount = row.deposit3Amount;
+      if ('deposit3Date' in row) updateData.deposit3Date = row.deposit3Date;
+
+      if (existing) {
+        batch.update(doc(db, 'deposits', existing.id), updateData);
+      } else {
+        const newRef = doc(collection(db, 'deposits'));
+        batch.set(newRef, {
+          swimmerName: row.swimmerName, season: currentSeason, balance: 0,
+          deposit1Amount: null, deposit1Date: null, deposit2Amount: null, deposit2Date: null, deposit3Amount: null, deposit3Date: null,
+          ...updateData,
+        });
+      }
+    }
+    await batch.commit();
+    showImportStatus(`Updated deposit details for ${rows.length} swimmer(s) in ${currentSeason}.`);
+  } catch (error) { console.error('Deposit detail import failed:', error); showImportStatus('Failed to import: ' + (error.message || ''), true); }
+}
+
+// ── Deposits Inline Edit Handlers ──
+function bindDepositsInlineEvents() {
+  // Edit button
+  document.querySelectorAll('.deposits-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      toggleDepositsRowEdit(row, true);
+    });
+  });
+
+  // Save button
+  document.querySelectorAll('.deposits-save-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const row = btn.closest('tr');
+      if (!id || !row) return;
+
+      const getVal = (selector) => {
+        const el = row.querySelector(selector);
+        return el ? el.value : null;
+      };
+
+      const balance = parseFloat(getVal('.deposits-balance .dep-edit-field')) || 0;
+      const d1a = getVal('.deposits-d1amt .dep-edit-field');
+      const d1d = getVal('.deposits-d1date .dep-edit-field');
+      const d2a = getVal('.deposits-d2amt .dep-edit-field');
+      const d2d = getVal('.deposits-d2date .dep-edit-field');
+      const d3a = getVal('.deposits-d3amt .dep-edit-field');
+      const d3d = getVal('.deposits-d3date .dep-edit-field');
+
+      try {
+        await updateDoc(doc(db, 'deposits', id), {
+          balance,
+          deposit1Amount: d1a ? parseFloat(d1a) : null,
+          deposit1Date: d1d || null,
+          deposit2Amount: d2a ? parseFloat(d2a) : null,
+          deposit2Date: d2d || null,
+          deposit3Amount: d3a ? parseFloat(d3a) : null,
+          deposit3Date: d3d || null,
+          updatedAt: new Date(),
+          updatedBy: currentUser?.email || 'unknown',
+        });
+        // onSnapshot will auto-refresh
+      } catch (err) {
+        console.error('Error saving deposit:', err);
+        alert('Failed to save deposit.');
+      }
+    });
+  });
+
+  // Cancel button
+  document.querySelectorAll('.deposits-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      toggleDepositsRowEdit(row, false);
+    });
+  });
+
+  // Delete button
+  document.querySelectorAll('.deposits-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      if (!id) return;
+      if (!confirm(`Delete deposit record for ${name}?`)) return;
+      try {
+        await deleteDoc(doc(db, 'deposits', id));
+      } catch (err) {
+        console.error('Error deleting deposit:', err);
+        alert('Failed to delete deposit.');
+      }
+    });
+  });
+}
+
+function toggleDepositsRowEdit(row, editing) {
+  if (!row) return;
+  const views = row.querySelectorAll('.dep-view');
+  const fields = row.querySelectorAll('.dep-edit-field');
+  const editBtn = row.querySelector('.deposits-edit-btn');
+  const saveBtn = row.querySelector('.deposits-save-btn');
+  const cancelBtn = row.querySelector('.deposits-cancel-btn');
+  const deleteBtn = row.querySelector('.deposits-delete-btn');
+
+  views.forEach(el => el.style.display = editing ? 'none' : '');
+  fields.forEach(el => el.style.display = editing ? '' : 'none');
+  if (editBtn) editBtn.style.display = editing ? 'none' : '';
+  if (saveBtn) saveBtn.style.display = editing ? '' : 'none';
+  if (cancelBtn) cancelBtn.style.display = editing ? '' : 'none';
+  if (deleteBtn) deleteBtn.style.display = editing ? 'none' : '';
+}
+
+// ── Deposits CSV Export ──
+function exportDepositsCSV() {
+  const seasonDeposits = getDepositsForSeason(currentSeason);
+  const headers = ['Name', 'Balance', 'Deposit 1 Amount', 'Deposit 1 Date', 'Deposit 2 Amount', 'Deposit 2 Date', 'Deposit 3 Amount', 'Deposit 3 Date', 'Total'];
+  const rows = seasonDeposits.map(d => [
+    d.swimmerName || '',
+    d.balance || 0,
+    d.deposit1Amount || '',
+    d.deposit1Date || '',
+    d.deposit2Amount || '',
+    d.deposit2Date || '',
+    d.deposit3Amount || '',
+    d.deposit3Date || '',
+    calcDepositTotal(d),
+  ]);
+
+  const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+  const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dragon-deposits-${currentSeason}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── Helper: HTML escape ──
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+// ── Season Helpers ──
+
+/** Infer the current swim season from today's date. New season starts in September. */
+function getDefaultSeason() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 1-12
+  if (month >= 9) {
+    return `${year}-${year + 1}`;
+  } else {
+    return `${year - 1}-${year}`;
+  }
+}
+
+/** Collect unique seasons from meets, deposits, and auto-generate nearby seasons. */
+function getSeasonOptions() {
+  const seasons = new Set();
+
+  // From data
+  for (const m of swimMeets) {
+    if (m.season) seasons.add(m.season);
+  }
+  for (const d of deposits) {
+    if (d.season) seasons.add(d.season);
+  }
+
+  // Auto-generate: from 2025-2026 up to baseYear + 2
+  const now = new Date();
+  const baseYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  const minYear = 2025;
+  for (let y = Math.max(minYear, baseYear - 1); y <= baseYear + 2; y++) {
+    seasons.add(`${y}-${y + 1}`);
+  }
+
+  return Array.from(seasons).sort().reverse(); // newest first
+}
+
+/** Render a <select> dropdown for season, with a label. */
+function renderSeasonSelector(selectedSeason) {
+  const options = getSeasonOptions();
+  const sel = selectedSeason || currentSeason || getDefaultSeason();
+  return `
+    <div class="season-selector">
+      <label class="season-selector-label">${t('dash_season_label')}:</label>
+      <select id="season-select" class="season-select">
+        ${options.map(s => `<option value="${s}" ${s === sel ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
 window.__updateSwimmerPayment = async function (el) {
   // Only admin can modify payment fields
   if (dbRole !== 'admin') {
@@ -951,6 +1685,9 @@ function renderSwimMeets() {
           <input type="date" id="meet-start-date" class="form-input" title="${t('dash_meets_start_date_placeholder')}">
           <input type="date" id="meet-end-date" class="form-input" title="${t('dash_meets_end_date_placeholder')}">
           <input type="text" id="meet-location" placeholder="${t('dash_meets_location_placeholder')}" class="form-input">
+          <select id="meet-season" class="form-input">
+            ${getSeasonOptions().map(s => `<option value="${s}" ${s === currentSeason ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
         </div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
           <button class="btn btn-primary btn-sm" id="save-meet-btn">${t('dash_meets_save')}</button>
@@ -975,7 +1712,7 @@ function renderSwimMeets() {
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
               ${!isCoach && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
               ${isCoach ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${m.name || ''}">${t('dash_meets_fee')}</button>` : ''}
-              ${isCoach ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}">${t('dash_meets_edit')}</button>` : ''}
+              ${isCoach ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}" data-season="${m.season || currentSeason}">${t('dash_meets_edit')}</button>` : ''}
               ${isCoach ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
             </div>
           </div>
@@ -2023,6 +2760,7 @@ function bindEvents() {
       const startDate = document.getElementById('meet-start-date').value;
       const endDate = document.getElementById('meet-end-date').value;
       const location = document.getElementById('meet-location').value.trim();
+      const season = document.getElementById('meet-season')?.value || currentSeason;
 
       if (!name || !startDate || !endDate) {
         alert(t('dash_meets_name_date_required'));
@@ -2037,6 +2775,7 @@ function bindEvents() {
             startDate,
             endDate,
             location,
+            season,
           });
         } else {
           // Add new meet
@@ -2045,6 +2784,7 @@ function bindEvents() {
             startDate,
             endDate,
             location,
+            season,
             status: 'Open',
             createdAt: new Date()
           });
@@ -2066,6 +2806,8 @@ function bindEvents() {
         document.getElementById('meet-start-date').value = btn.dataset.start;
         document.getElementById('meet-end-date').value = btn.dataset.end;
         document.getElementById('meet-location').value = btn.dataset.location;
+        const seasonEl = document.getElementById('meet-season');
+        if (seasonEl) seasonEl.value = btn.dataset.season || currentSeason;
         meetForm.style.display = 'block';
         meetForm.scrollIntoView({ behavior: 'smooth' });
       });
@@ -2192,6 +2934,98 @@ function bindEvents() {
       fileInput.addEventListener('change', handleCSVFileSelect);
       fileInput.click();
     });
+
+    // ── Fee Summary — Season Selector ──
+    document.getElementById('season-select')?.addEventListener('change', (e) => {
+      currentSeason = e.target.value;
+      refreshUI();
+    });
+
+    // ── Fee Summary — Goto Deposits ──
+    document.getElementById('goto-deposits-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      currentTab = 'deposits';
+      refreshUI();
+    });
+
+    // ── Deposits — Season Selector ──
+    document.getElementById('deposits-season-select')?.addEventListener('change', (e) => {
+      currentSeason = e.target.value;
+      refreshUI();
+    });
+
+    // ── Deposits — Add Swimmer ──
+    document.getElementById('deposits-add-btn')?.addEventListener('click', () => {
+      document.getElementById('deposits-add-form').style.display = 'block';
+      document.getElementById('deposits-add-form').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('deposits-add-cancel')?.addEventListener('click', () => {
+      document.getElementById('deposits-add-form').style.display = 'none';
+      document.getElementById('deposits-add-name').value = '';
+      document.getElementById('deposits-add-balance').value = '';
+    });
+
+    document.getElementById('deposits-add-save')?.addEventListener('click', async () => {
+      const name = document.getElementById('deposits-add-name').value.trim();
+      const balance = parseFloat(document.getElementById('deposits-add-balance').value) || 0;
+      if (!name) { alert('Swimmer name is required.'); return; }
+      try {
+        await addDoc(collection(db, 'deposits'), {
+          swimmerName: name,
+          season: currentSeason,
+          balance,
+          deposit1Amount: null, deposit1Date: null,
+          deposit2Amount: null, deposit2Date: null,
+          deposit3Amount: null, deposit3Date: null,
+          updatedAt: new Date(),
+          updatedBy: currentUser?.email || 'unknown',
+        });
+        document.getElementById('deposits-add-form').style.display = 'none';
+        document.getElementById('deposits-add-name').value = '';
+        document.getElementById('deposits-add-balance').value = '';
+      } catch (err) { console.error('Error adding deposit:', err); alert('Failed to add deposit.'); }
+    });
+
+    // ── Deposits — Upload Carry-over Balance ──
+    document.getElementById('deposits-upload-balance-btn')?.addEventListener('click', () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.xls,.xlsx';
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        e.target.remove();
+        if (!file) return;
+        const result = await parseCarryOverExcel(file);
+        if (!result) { alert(t('dash_fee_summary_deposit_parse_error')); return; }
+        showCarryOverImportModal(result.valid, result.errors || [], file.name);
+      });
+      fileInput.click();
+    });
+
+    // ── Deposits — Upload Deposit Detail ──
+    document.getElementById('deposits-upload-detail-btn')?.addEventListener('click', () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.xls,.xlsx';
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        e.target.remove();
+        if (!file) return;
+        const result = await parseDepositDetailExcel(file);
+        if (!result) { alert(t('dash_fee_summary_deposit_parse_error')); return; }
+        showDepositDetailImportModal(result.valid, result.errors || [], file.name);
+      });
+      fileInput.click();
+    });
+
+    // ── Deposits — Export CSV ──
+    document.getElementById('deposits-export-btn')?.addEventListener('click', () => {
+      exportDepositsCSV();
+    });
+
+    // ── Deposits — Inline Edit / Delete ──
+    bindDepositsInlineEvents();
   }
 }
 
