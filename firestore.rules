@@ -102,6 +102,15 @@ service cloud.firestore {
       allow create, update, delete: if isCoachOrAdmin();
     }
 
+    // ── families — pre-authorized family emails (public read for signup check) ─
+
+    match /families/{docId} {
+      // Anyone can check if their email is authorized (used during sign-up)
+      allow read: if true;
+      // Only admins can add/remove authorized families
+      allow create, update, delete: if isAdmin();
+    }
+
     // ── deposits — swimmer deposit tracking (coach/admin-managed) ─
 
     match /deposits/{docId} {

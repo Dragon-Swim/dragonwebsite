@@ -16,9 +16,10 @@ import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import { downloadAdminCSV, ADMIN_COLUMNS } from '../utils/csv.js';
+import { t } from '../utils/i18n.js';
 import {
   auth, db, doc, getDoc, setDoc, collection, onSnapshot,
-  query, orderBy, onAuthStateChanged, signOut,
+  query, orderBy, where, getDocs, onAuthStateChanged, signOut, addDoc, deleteDoc,
 } from '../utils/firebase.js';
 
 initTheme();
@@ -70,6 +71,9 @@ function render() {
           <button class="admin-nav-item ${currentTab === 'create' ? 'active' : ''}" data-tab="create">
             ➕ Create Coach
           </button>
+          <button class="admin-nav-item ${currentTab === 'family' ? 'active' : ''}" data-tab="family">
+            👪 Add Family
+          </button>
           <button class="admin-nav-item ${currentTab === 'manage' ? 'active' : ''}" data-tab="manage">
             👥 Manage Coaches
           </button>
@@ -85,10 +89,10 @@ function render() {
 
       <main class="admin-main">
         <header class="admin-topbar">
-          <h1 class="admin-page-title">${currentTab === 'create' ? 'Create Coach Account' : currentTab === 'manage' ? 'Manage Coaches' : 'Export Data'}</h1>
+          <h1 class="admin-page-title">${currentTab === 'create' ? 'Create Coach Account' : currentTab === 'manage' ? 'Manage Coaches' : currentTab === 'family' ? 'Pre-authorize Family' : 'Export Data'}</h1>
         </header>
         <div class="admin-content">
-          ${currentTab === 'create' ? renderCreateForm() : currentTab === 'manage' ? renderManageView() : renderExportView()}
+          ${currentTab === 'create' ? renderCreateForm() : currentTab === 'manage' ? renderManageView() : currentTab === 'family' ? renderFamilyView() : renderExportView()}
         </div>
       </main>
     </div>
@@ -155,6 +159,49 @@ function renderManageView() {
             </tr>
           </thead>
           <tbody id="coach-table-body">
+            <tr><td colspan="5" class="admin-empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderFamilyView() {
+  return `
+    <div class="admin-panel">
+      <h3>${t('admin_family_title')}</h3>
+      <p class="admin-hint">${t('admin_family_hint')}</p>
+      <form id="family-form" class="admin-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="family-email">${t('admin_family_email')}</label>
+            <input class="form-input" type="email" id="family-email" placeholder="parent@example.com" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="family-name">${t('admin_family_name')}</label>
+            <input class="form-input" type="text" id="family-name" placeholder="e.g. John Chen" />
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="add-family-btn">${t('admin_family_add_btn')}</button>
+        <p id="family-form-message" class="admin-form-message"></p>
+      </form>
+    </div>
+
+    <div class="admin-panel" style="margin-top: 2rem;">
+      <h3>${t('admin_family_list_title')}</h3>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="family-table-body">
             <tr><td colspan="5" class="admin-empty">Loading...</td></tr>
           </tbody>
         </table>
@@ -332,6 +379,96 @@ function bindEvents() {
       }
       btn.disabled = false;
     });
+  }
+
+  // ── Add Family Form ──
+  const familyForm = document.getElementById('family-form');
+  if (familyForm) {
+    familyForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById('family-form-message');
+      const btn = document.getElementById('add-family-btn');
+      const email = document.getElementById('family-email').value.trim();
+      const parentName = document.getElementById('family-name').value.trim() || null;
+
+      if (!email) {
+        msgEl.textContent = 'Email is required.';
+        msgEl.className = 'admin-form-message error';
+        return;
+      }
+
+      btn.disabled = true;
+      msgEl.textContent = '';
+
+      try {
+        // Check if email already exists
+        const existingSnap = await getDocs(query(collection(db, 'families'), where('email', '==', email)));
+        if (!existingSnap.empty) {
+          throw new Error(t('admin_family_already_exists'));
+        }
+
+        await addDoc(collection(db, 'families'), {
+          email,
+          parentName,
+          status: 'pending',
+          registeredUid: null,
+          createdBy: currentUser.uid,
+          createdAt: new Date(),
+        });
+
+        msgEl.textContent = `"${parentName || email}" added successfully.`;
+        msgEl.className = 'admin-form-message success';
+        familyForm.reset();
+      } catch (err) {
+        msgEl.textContent = `Error: ${err.message}`;
+        msgEl.className = 'admin-form-message error';
+      }
+      btn.disabled = false;
+    });
+  }
+
+  // ── Live Family List ──
+  if (currentTab === 'family') {
+    const tbody = document.getElementById('family-table-body');
+    if (tbody) {
+      const qFam = query(collection(db, 'families'), orderBy('createdAt', 'desc'));
+      onSnapshot(qFam, (snapshot) => {
+        const rows = snapshot.docs.map(docSnap => {
+          const d = docSnap.data();
+          const date = d.createdAt?.toDate?.() || new Date(d.createdAt);
+          const statusLabel = d.status === 'registered' ? t('admin_family_status_registered') : t('admin_family_status_pending');
+          const statusClass = d.status === 'registered' ? 'admin-status-active' : 'admin-status-pending';
+          return `
+            <tr>
+              <td>${d.email || '—'}</td>
+              <td>${d.parentName || '—'}</td>
+              <td><span class="admin-status ${statusClass}">${statusLabel}</span></td>
+              <td>${date.toLocaleDateString()}</td>
+              <td><button class="btn btn-outline btn-sm family-delete-btn" data-id="${docSnap.id}" data-email="${d.email || ''}" style="color: var(--color-accent);">${t('admin_family_delete')}</button></td>
+            </tr>
+          `;
+        }).join('');
+
+        tbody.innerHTML = rows || '<tr><td colspan="5" class="admin-empty">No families authorized yet.</td></tr>';
+
+        // Bind delete buttons
+        tbody.querySelectorAll('.family-delete-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const email = btn.dataset.email;
+            if (!confirm(t('admin_family_delete_confirm') + '\n\n' + email)) return;
+            try {
+              await deleteDoc(doc(db, 'families', id));
+            } catch (err) {
+              console.error('Error deleting family:', err);
+              alert('Failed to delete: ' + err.message);
+            }
+          });
+        });
+      }, (err) => {
+        tbody.innerHTML = `<tr><td colspan="5" class="admin-empty">Error loading: ${err.message}</td></tr>`;
+      });
+    }
   }
 
   // Live coach list (only when manage tab is active)

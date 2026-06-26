@@ -18,8 +18,14 @@ import {
   signInWithPopup,
   googleProvider,
   sendPasswordResetEmail,
+  signOut,
   doc,
-  setDoc
+  setDoc,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+  collection,
 } from '../utils/firebase.js';
 
 import { initTheme } from '../components/theme-toggle.js';
@@ -194,6 +200,14 @@ function bindEvents() {
           throw new Error('Passwords do not match.');
         }
 
+        // Pre-auth check: only allow registration for pre-authorized family emails
+        const familiesSnap = await getDocs(
+          query(collection(db, 'families'), where('email', '==', email.toLowerCase().trim()))
+        );
+        if (familiesSnap.empty) {
+          throw new Error(t('signup_unauthorized'));
+        }
+
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
@@ -201,6 +215,13 @@ function bindEvents() {
           email: email,
           role: "swimmer",
           createdAt: new Date()
+        });
+
+        // Mark family as registered
+        const familyDoc = familiesSnap.docs[0];
+        await updateDoc(doc(db, 'families', familyDoc.id), {
+          status: 'registered',
+          registeredUid: user.uid,
         });
 
         window.location.href = import.meta.env.BASE_URL + 'registration.html';
@@ -239,8 +260,28 @@ function bindEvents() {
     errorEl.style.display = 'none';
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email;
 
-      // Attempt to save to firestore - use setDoc with merge:true so we don't overwrite if they exist
+      // Pre-auth check for Google sign-in (only for new users)
+      const familiesSnap = await getDocs(
+        query(collection(db, 'families'), where('email', '==', email.toLowerCase().trim()))
+      );
+      if (familiesSnap.empty) {
+        // Not authorized — sign out and show error
+        await signOut(auth);
+        throw new Error(t('signup_unauthorized_google'));
+      }
+
+      // Mark family as registered if still pending
+      const familyDoc = familiesSnap.docs[0];
+      if (familyDoc.data().status === 'pending') {
+        await updateDoc(doc(db, 'families', familyDoc.id), {
+          status: 'registered',
+          registeredUid: result.user.uid,
+        });
+      }
+
+      // Save/update user profile
       await setDoc(doc(db, "users", result.user.uid), {
         username: result.user.displayName || "Google User",
         email: result.user.email,

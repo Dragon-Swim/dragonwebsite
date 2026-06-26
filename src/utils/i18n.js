@@ -429,6 +429,24 @@ const translations = {
         dash_coach_deposits_label: 'Deposits',
         dash_coach_tab_deposits: 'Deposits',
 
+        // ── Admin — Families ──
+        admin_family_tab: 'Add Family',
+        admin_family_title: 'Pre-authorize Family Registration',
+        admin_family_hint: 'Add email addresses that are allowed to register. Only these families can create accounts.',
+        admin_family_email: 'Email *',
+        admin_family_name: 'Parent Name (optional)',
+        admin_family_add_btn: 'Add Family',
+        admin_family_list_title: 'Authorized Families',
+        admin_family_status_pending: 'pending',
+        admin_family_status_registered: 'registered',
+        admin_family_delete: 'Delete',
+        admin_family_delete_confirm: 'Remove this family authorization? They will no longer be able to register.',
+        admin_family_already_exists: 'This email is already authorized.',
+
+        // ── Sign In — Family Auth ──
+        signup_unauthorized: 'This email is not authorized to register. Please contact the team administrator.',
+        signup_unauthorized_google: 'Your Google account is not authorized to register. Please contact the team administrator.',
+
         // ── Dashboard — Days ──
         dash_day_sunday: 'Sunday',
         dash_day_monday: 'Monday',
