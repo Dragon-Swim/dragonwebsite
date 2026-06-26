@@ -1,4 +1,4 @@
-import{i as r,t as e}from"./i18n-DxFiCXjI.js";import{a as n,r as c}from"./footer-DW7Wf5O4.js";r();n();const l=document.getElementById("app");l.innerHTML=`
+import{i as r,t as e}from"./i18n-6jdL3vyQ.js";import{a as n,r as c}from"./footer-BwENUkcq.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
