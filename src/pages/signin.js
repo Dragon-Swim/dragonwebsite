@@ -106,6 +106,19 @@ function render() {
                 </div>
               </div>
               ${isSignUp ? `
+                <div class="password-strength-meter" id="pw-strength" style="display:none;">
+                  <div class="password-strength-rules">
+                    <span class="password-strength-rule" data-rule="length"><span class="rule-icon">❌</span> 8+ chars</span>
+                    <span class="password-strength-rule" data-rule="upper"><span class="rule-icon">❌</span> A-Z</span>
+                    <span class="password-strength-rule" data-rule="lower"><span class="rule-icon">❌</span> a-z</span>
+                    <span class="password-strength-rule" data-rule="digit"><span class="rule-icon">❌</span> 0-9</span>
+                    <span class="password-strength-rule" data-rule="special"><span class="rule-icon">❌</span> !@#$</span>
+                  </div>
+                  <div class="password-strength-bar">
+                    <div class="password-strength-bar-fill" id="pw-bar-fill" style="width: 0%;"></div>
+                  </div>
+                  <div class="password-strength-label" id="pw-label"></div>
+                </div>
                 <div class="form-group">
                   <label class="form-label" for="auth-confirm">${t('signup_confirm')}</label>
                   <div class="password-group">
@@ -174,6 +187,47 @@ function bindEvents() {
     });
   });
 
+  // ── Password Strength Meter ──
+  function updatePasswordStrength(pw) {
+    const meter = document.getElementById('pw-strength');
+    const bar = document.getElementById('pw-bar-fill');
+    const label = document.getElementById('pw-label');
+    if (!meter || !bar || !label) return;
+
+    if (!pw) {
+      meter.style.display = 'none';
+      return;
+    }
+    meter.style.display = 'block';
+
+    const rules = {
+      length: pw.length >= 8,
+      upper: /[A-Z]/.test(pw),
+      lower: /[a-z]/.test(pw),
+      digit: /[0-9]/.test(pw),
+      special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw),
+    };
+
+    let passed = 0;
+    for (const [rule, ok] of Object.entries(rules)) {
+      const el = document.querySelector(`.password-strength-rule[data-rule="${rule}"]`);
+      if (!el) continue;
+      const icon = el.querySelector('.rule-icon');
+      if (ok) { icon.textContent = '✅'; el.style.color = '#16A34A'; passed++; }
+      else    { icon.textContent = '❌'; el.style.color = ''; }
+    }
+
+    const pct = (passed / 5) * 100;
+    bar.style.width = pct + '%';
+    if (passed <= 2)      { bar.style.background = '#DC2626'; label.textContent = 'Weak'; label.style.color = '#DC2626'; }
+    else if (passed <= 4) { bar.style.background = '#F59E0B'; label.textContent = 'Fair'; label.style.color = '#F59E0B'; }
+    else                  { bar.style.background = '#16A34A'; label.textContent = 'Strong'; label.style.color = '#16A34A'; }
+  }
+
+  document.getElementById('auth-password')?.addEventListener('input', (e) => {
+    updatePasswordStrength(e.target.value);
+  });
+
   // Toggle sign-in / sign-up
   document.getElementById('toggle-auth')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -199,6 +253,19 @@ function bindEvents() {
         const confirm = document.getElementById('auth-confirm').value;
         if (password !== confirm) {
           throw new Error('Passwords do not match.');
+        }
+
+        // Password strength check
+        const pwRules = {
+          length: password.length >= 8,
+          upper: /[A-Z]/.test(password),
+          lower: /[a-z]/.test(password),
+          digit: /[0-9]/.test(password),
+          special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+        };
+        const pwPassed = Object.values(pwRules).filter(Boolean).length;
+        if (pwPassed < 5) {
+          throw new Error('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
         }
 
         const normalizedEmail = email.toLowerCase().trim();

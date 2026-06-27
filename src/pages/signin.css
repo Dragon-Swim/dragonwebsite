@@ -161,3 +161,52 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
 }
+
+/* ── Password Strength Meter ── */
+.password-strength-meter {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.password-strength-rules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.password-strength-rule {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--text-muted);
+}
+
+.password-strength-rule .rule-icon {
+    font-size: 0.7rem;
+    width: 14px;
+    text-align: center;
+}
+
+.password-strength-bar {
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    overflow: hidden;
+    transition: width 0.3s ease;
+}
+
+.password-strength-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease, background 0.3s ease;
+}
+
+.password-strength-label {
+    margin-top: 0.35rem;
+    font-weight: 600;
+    font-size: 0.75rem;
+}
