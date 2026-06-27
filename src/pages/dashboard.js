@@ -815,6 +815,7 @@ function renderFeeSummary() {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
       ${renderSeasonSelector(currentSeason)}
       <a class="btn btn-outline btn-sm" id="goto-deposits-link" style="text-decoration: none;">🏦 Manage Deposits</a>
+      <button class="btn btn-outline btn-sm" id="fee-summary-export-btn">📥 Export CSV</button>
     </div>
 
     <div class="dash-stats-row">
@@ -1395,6 +1396,30 @@ function exportDepositsCSV() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function exportFeeSummaryCSV() {
+  const summary = buildFeeSummaryData(currentSeason);
+  const headers = ['Swimmer', 'Deposit', 'Total Meet Fee', 'Meets', 'Balance'];
+  const rows = summary.map(s => [
+    s.displayName,
+    s.deposit,
+    s.totalFee,
+    s.meetCount,
+    s.balance,
+  ]);
+
+  const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+  const csv = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dragon-fee-summary-${currentSeason}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
   URL.revokeObjectURL(url);
 }
 
@@ -3086,6 +3111,11 @@ function bindEvents() {
         icon.classList.toggle('expanded', isExpanded);
         icon.textContent = isExpanded ? '▼' : '▶';
       }
+    });
+
+    // ── Fee Summary — Export CSV ──
+    document.getElementById('fee-summary-export-btn')?.addEventListener('click', () => {
+      exportFeeSummaryCSV();
     });
 
     // ── Deposits — Season Selector ──
