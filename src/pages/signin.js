@@ -275,6 +275,14 @@ function bindEvents() {
           const userCredential = await signInWithEmailAndPassword(auth, email, password);
           const normalizedEmail = email.toLowerCase().trim();
 
+          // Check user role first — coach/admin go directly to dashboard
+          const userDocSnap = await getDoc(doc(db, 'users', userCredential.user.uid));
+          const userRole = userDocSnap.exists() ? userDocSnap.data().role : null;
+          if (userRole === 'coach' || userRole === 'admin') {
+            window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+            return;
+          }
+
           // Check own registration first
           const regSnap = await getDoc(doc(db, 'registrations', userCredential.user.uid));
           if (regSnap.exists()) {
