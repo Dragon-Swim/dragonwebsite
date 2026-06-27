@@ -13,7 +13,7 @@ import './registration.css';
 import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
-import { auth, db, doc, setDoc, onAuthStateChanged } from '../utils/firebase.js';
+import { auth, db, doc, setDoc, getDocs, query, where, updateDoc, collection, onAuthStateChanged } from '../utils/firebase.js';
 import { t } from '../utils/i18n.js';
 
 initTheme();
@@ -312,6 +312,10 @@ function bindEvents() {
       phone: document.getElementById('emergency-phone').value.trim(),
     };
 
+    // Build parentEmails for spouse access lookup
+    const parentEmails = [parent.email.toLowerCase().trim()];
+    if (spouse && spouse.email) parentEmails.push(spouse.email.toLowerCase().trim());
+
     try {
       await setDoc(doc(db, 'registrations', currentUser.uid), {
         parent,
@@ -319,6 +323,8 @@ function bindEvents() {
         swimmers,
         emergencyContact,
         notes: document.getElementById('reg-notes').value.trim() || null,
+        parentEmails,
+        editors: [currentUser.uid],
         createdAt: new Date()
       });
 
@@ -354,12 +360,40 @@ function renumberSwimmers() {
   if (firstRemove) firstRemove.style.display = cards.length > 1 ? '' : 'none';
 }
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = import.meta.env.BASE_URL + 'signin.html?mode=signup';
     return;
   }
   currentUser = user;
+
+  // If this user already owns a registration, go to dashboard
+  const ownSnap = await getDoc(doc(db, 'registrations', user.uid));
+  if (ownSnap.exists()) {
+    window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+    return;
+  }
+
+  // Check if spouse registered this family — user's email in parentEmails
+  if (user.email) {
+    const q = query(
+      collection(db, 'registrations'),
+      where('parentEmails', 'array-contains', user.email.toLowerCase().trim())
+    );
+    const spouseSnap = await getDocs(q);
+    if (!spouseSnap.empty) {
+      const regDoc = spouseSnap.docs[0];
+      const data = regDoc.data();
+      const editors = data.editors || [];
+      if (!editors.includes(user.uid)) {
+        editors.push(user.uid);
+        await updateDoc(doc(db, 'registrations', regDoc.id), { editors });
+      }
+      window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+      return;
+    }
+  }
+
   render();
   renderFooter();
 });

@@ -240,11 +240,17 @@ const translations = {
         dash_coach_roster_age: 'Age',
         dash_coach_roster_gender: 'Gender',
         dash_coach_roster_usa_id: 'USA ID',
+        dash_coach_roster_pmt1_amt: 'Pmt 1 ($)',
+        dash_coach_roster_pmt1_date: 'Date 1',
+        dash_coach_roster_pmt2_amt: 'Pmt 2 ($)',
+        dash_coach_roster_pmt2_date: 'Date 2',
+        dash_coach_roster_pmt3_amt: 'Pmt 3 ($)',
+        dash_coach_roster_pmt3_date: 'Date 3',
         dash_coach_roster_payment_received: 'Payment Received',
         dash_coach_roster_payment_date: 'Payment Date',
         dash_coach_roster_payment_yes: 'Yes',
         dash_coach_roster_payment_no: 'No',
-        dash_coach_roster_payment_note: '* These columns track swim training fees. Meet entry fees are managed separately in Meet Management.',
+        dash_coach_roster_payment_note: '* These columns track swim training fees per season (up to 3 installments). Meet entry fees are managed separately in Meet Management and Fee Summary.',
 
         // ── Dashboard — Profile Tab ──
         dash_profile_no_reg: 'No family registration found.',

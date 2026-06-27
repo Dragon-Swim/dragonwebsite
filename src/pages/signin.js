@@ -21,6 +21,7 @@ import {
   signOut,
   doc,
   setDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -200,36 +201,97 @@ function bindEvents() {
           throw new Error('Passwords do not match.');
         }
 
-        // Pre-auth check: only allow registration for pre-authorized family emails
-        const familiesSnap = await getDocs(
-          query(collection(db, 'families'), where('email', '==', email.toLowerCase().trim()))
+        const normalizedEmail = email.toLowerCase().trim();
+
+        // Check both coaches and families whitelists
+        const coachesSnap = await getDocs(
+          query(collection(db, 'coaches'), where('email', '==', normalizedEmail))
         );
-        if (familiesSnap.empty) {
+        const familiesSnap = await getDocs(
+          query(collection(db, 'families'), where('email', '==', normalizedEmail))
+        );
+
+        // Determine role and whitelist source
+        let userRole = null;
+        let whitelistDoc = null;
+        let whitelistCollection = null;
+
+        if (!coachesSnap.empty) {
+          whitelistDoc = coachesSnap.docs[0];
+          whitelistCollection = 'coaches';
+          userRole = whitelistDoc.data().role || 'coach';
+        } else if (!familiesSnap.empty) {
+          whitelistDoc = familiesSnap.docs[0];
+          whitelistCollection = 'families';
+          userRole = 'swimmer';
+        }
+
+        if (!whitelistDoc) {
           throw new Error(t('signup_unauthorized'));
         }
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
+        // Save user role
         await setDoc(doc(db, "users", user.uid), {
           email: email,
-          role: "swimmer",
+          role: userRole,
           createdAt: new Date()
         });
 
-        // Mark family as registered
-        const familyDoc = familiesSnap.docs[0];
-        await updateDoc(doc(db, 'families', familyDoc.id), {
-          status: 'registered',
+        // Mark whitelist entry as registered
+        await updateDoc(doc(db, whitelistCollection, whitelistDoc.id), {
+          status: whitelistCollection === 'coaches' ? 'active' : 'registered',
           registeredUid: user.uid,
         });
 
-        window.location.href = import.meta.env.BASE_URL + 'registration.html';
+        // Coaches go directly to dashboard
+        if (userRole === 'coach' || userRole === 'admin') {
+          window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+        } else {
+          // Swimmer: check if spouse already registered this family
+          const spouseQ = query(
+            collection(db, 'registrations'),
+            where('parentEmails', 'array-contains', normalizedEmail)
+          );
+          const spouseSnap = await getDocs(spouseQ);
+          if (!spouseSnap.empty) {
+            // Already registered by spouse — add as editor, go to dashboard
+            const regDoc = spouseSnap.docs[0];
+            const editors = regDoc.data().editors || [];
+            if (!editors.includes(user.uid)) {
+              editors.push(user.uid);
+              await updateDoc(doc(db, 'registrations', regDoc.id), { editors });
+            }
+            window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+          } else {
+            window.location.href = import.meta.env.BASE_URL + 'registration.html';
+          }
+        }
       } else {
         // Sign In
         try {
-          await signInWithEmailAndPassword(auth, email, password);
-          window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const normalizedEmail = email.toLowerCase().trim();
+
+          // Check own registration first
+          const regSnap = await getDoc(doc(db, 'registrations', userCredential.user.uid));
+          if (regSnap.exists()) {
+            window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+          } else {
+            // Check if spouse registered — email in parentEmails
+            const spouseQ = query(
+              collection(db, 'registrations'),
+              where('parentEmails', 'array-contains', normalizedEmail)
+            );
+            const spouseSnap = await getDocs(spouseQ);
+            if (!spouseSnap.empty) {
+              window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+            } else {
+              window.location.href = import.meta.env.BASE_URL + 'registration.html';
+            }
+          }
         } catch (error) {
           if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
             throw new Error('Wrong password. Please try again.');
@@ -261,22 +323,41 @@ function bindEvents() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const email = result.user.email;
+      const normalizedEmail = email.toLowerCase().trim();
 
-      // Pre-auth check for Google sign-in (only for new users)
-      const familiesSnap = await getDocs(
-        query(collection(db, 'families'), where('email', '==', email.toLowerCase().trim()))
+      // Check both coaches and families whitelists
+      const coachesSnap = await getDocs(
+        query(collection(db, 'coaches'), where('email', '==', normalizedEmail))
       );
-      if (familiesSnap.empty) {
+      const familiesSnap = await getDocs(
+        query(collection(db, 'families'), where('email', '==', normalizedEmail))
+      );
+
+      // Determine role and whitelist source
+      let userRole = null;
+      let whitelistDoc = null;
+      let whitelistCollection = null;
+
+      if (!coachesSnap.empty) {
+        whitelistDoc = coachesSnap.docs[0];
+        whitelistCollection = 'coaches';
+        userRole = whitelistDoc.data().role || 'coach';
+      } else if (!familiesSnap.empty) {
+        whitelistDoc = familiesSnap.docs[0];
+        whitelistCollection = 'families';
+        userRole = 'swimmer';
+      }
+
+      if (!whitelistDoc) {
         // Not authorized — sign out and show error
         await signOut(auth);
         throw new Error(t('signup_unauthorized_google'));
       }
 
-      // Mark family as registered if still pending
-      const familyDoc = familiesSnap.docs[0];
-      if (familyDoc.data().status === 'pending') {
-        await updateDoc(doc(db, 'families', familyDoc.id), {
-          status: 'registered',
+      // Mark as active/registered if still pending
+      if (whitelistDoc.data().status === 'pending') {
+        await updateDoc(doc(db, whitelistCollection, whitelistDoc.id), {
+          status: whitelistCollection === 'coaches' ? 'active' : 'registered',
           registeredUid: result.user.uid,
         });
       }
@@ -285,11 +366,39 @@ function bindEvents() {
       await setDoc(doc(db, "users", result.user.uid), {
         username: result.user.displayName || "Google User",
         email: result.user.email,
-        role: "swimmer",
+        role: userRole,
         lastLoginAt: new Date()
       }, { merge: true });
 
-      window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+      // Coaches go to dashboard; swimmers check registrations
+      if (userRole === 'coach' || userRole === 'admin') {
+        window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+      } else {
+        // Check own registration first
+        const regSnap = await getDoc(doc(db, 'registrations', result.user.uid));
+        if (regSnap.exists()) {
+          window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+        } else {
+          // Check if spouse registered — email in parentEmails
+          const spouseQ = query(
+            collection(db, 'registrations'),
+            where('parentEmails', 'array-contains', normalizedEmail)
+          );
+          const spouseSnap = await getDocs(spouseQ);
+          if (!spouseSnap.empty) {
+            // Add as editor, go to dashboard
+            const regDoc = spouseSnap.docs[0];
+            const editors = regDoc.data().editors || [];
+            if (!editors.includes(result.user.uid)) {
+              editors.push(result.user.uid);
+              await updateDoc(doc(db, 'registrations', regDoc.id), { editors });
+            }
+            window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+          } else {
+            window.location.href = import.meta.env.BASE_URL + 'registration.html';
+          }
+        }
+      }
     } catch (error) {
       console.error(error);
       if (error.code === 'auth/popup-closed-by-user') {

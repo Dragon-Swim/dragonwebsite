@@ -89,7 +89,7 @@ function render() {
 
       <main class="admin-main">
         <header class="admin-topbar">
-          <h1 class="admin-page-title">${currentTab === 'create' ? 'Create Coach Account' : currentTab === 'manage' ? 'Manage Coaches' : currentTab === 'family' ? 'Pre-authorize Family' : 'Export Data'}</h1>
+          <h1 class="admin-page-title">${currentTab === 'create' ? 'Pre-authorize Coach' : currentTab === 'manage' ? 'Manage Coaches' : currentTab === 'family' ? 'Pre-authorize Family' : 'Export Data'}</h1>
         </header>
         <div class="admin-content">
           ${currentTab === 'create' ? renderCreateForm() : currentTab === 'manage' ? renderManageView() : currentTab === 'family' ? renderFamilyView() : renderExportView()}
@@ -105,25 +105,17 @@ function render() {
 function renderCreateForm() {
   return `
     <div class="admin-panel">
-      <h3>New Coach</h3>
-      <p class="admin-hint">Fill in the coach's details. The account will be created immediately.</p>
+      <h3>Pre-authorize Coach</h3>
+      <p class="admin-hint">Add a coach's email to the whitelist. They will create their own account and set their own password when they sign up. For Gmail addresses, they can use Google sign-in directly.</p>
       <form id="coach-form" class="admin-form">
-        <div class="form-group">
-          <label class="form-label" for="coach-email">Email *</label>
-          <input class="form-input" type="email" id="coach-email" placeholder="coach@example.com" required />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="coach-name">Display Name *</label>
-          <input class="form-input" type="text" id="coach-name" placeholder="e.g. Coach Thompson" required />
-        </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label" for="coach-password">Temporary Password *</label>
-            <input class="form-input" type="password" id="coach-password" placeholder="••••••••" required />
+            <label class="form-label" for="coach-email">Email *</label>
+            <input class="form-input" type="email" id="coach-email" placeholder="coach@example.com" required />
           </div>
           <div class="form-group">
-            <label class="form-label" for="coach-confirm">Confirm Password *</label>
-            <input class="form-input" type="password" id="coach-confirm" placeholder="••••••••" required />
+            <label class="form-label" for="coach-name">Display Name (optional)</label>
+            <input class="form-input" type="text" id="coach-name" placeholder="e.g. Coach Thompson" />
           </div>
         </div>
         <div class="form-group">
@@ -133,7 +125,7 @@ function renderCreateForm() {
             <option value="admin">Admin Coach (can manage coaches)</option>
           </select>
         </div>
-        <button type="submit" class="btn btn-primary" id="create-coach-btn">Create Coach</button>
+        <button type="submit" class="btn btn-primary" id="create-coach-btn">Add Coach</button>
         <p id="coach-form-message" class="admin-form-message"></p>
       </form>
     </div>
@@ -156,10 +148,11 @@ function renderManageView() {
               <th>Role</th>
               <th>Status</th>
               <th>Created</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="coach-table-body">
-            <tr><td colspan="5" class="admin-empty">Loading...</td></tr>
+            <tr><td colspan="6" class="admin-empty">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -286,32 +279,20 @@ function bindEvents() {
     window.location.href = import.meta.env.BASE_URL + 'signin.html';
   });
 
-  // Create coach form
-  const form = document.getElementById('coach-form');
-  if (form) {
-    form.addEventListener('submit', async (e) => {
+  // Create coach form (pre-authorization)
+  const coachForm = document.getElementById('coach-form');
+  if (coachForm) {
+    coachForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const msgEl = document.getElementById('coach-form-message');
       const btn = document.getElementById('create-coach-btn');
 
       const email = document.getElementById('coach-email').value.trim();
-      const displayName = document.getElementById('coach-name').value.trim();
-      const password = document.getElementById('coach-password').value;
-      const confirm = document.getElementById('coach-confirm').value;
+      const displayName = document.getElementById('coach-name').value.trim() || null;
       const role = document.getElementById('coach-role').value;
 
-      if (!email || !displayName || !password) {
-        msgEl.textContent = 'Please fill in all required fields.';
-        msgEl.className = 'admin-form-message error';
-        return;
-      }
-      if (password !== confirm) {
-        msgEl.textContent = 'Passwords do not match.';
-        msgEl.className = 'admin-form-message error';
-        return;
-      }
-      if (password.length < 6) {
-        msgEl.textContent = 'Password must be at least 6 characters.';
+      if (!email) {
+        msgEl.textContent = 'Email is required.';
         msgEl.className = 'admin-form-message error';
         return;
       }
@@ -320,59 +301,30 @@ function bindEvents() {
       msgEl.textContent = '';
 
       try {
-        // 1. Create Firebase Auth account via REST API (password never touches Firestore)
-        const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-        const authResp = await fetch(
-          `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password, returnSecureToken: false }),
-          }
-        );
-
-        if (!authResp.ok) {
-          const errData = await authResp.json();
-          const code = errData.error?.message || 'UNKNOWN';
-          // Map common Firebase Auth errors to user-friendly messages
-          const messages = {
-            EMAIL_EXISTS: 'A user with this email already exists.',
-            WEAK_PASSWORD: 'Password must be at least 6 characters.',
-            INVALID_EMAIL: 'Invalid email address.',
-            OPERATION_NOT_ALLOWED: 'New accounts are currently disabled. Contact support.',
-          };
-          throw new Error(messages[code] || `Auth error: ${code}`);
+        // Check for duplicates in coaches and families
+        const existingCoach = await getDocs(query(collection(db, 'coaches'), where('email', '==', email)));
+        if (!existingCoach.empty) {
+          throw new Error('A coach with this email already exists.');
+        }
+        const existingFamily = await getDocs(query(collection(db, 'families'), where('email', '==', email)));
+        if (!existingFamily.empty) {
+          throw new Error('This email is already in the family whitelist.');
         }
 
-        const authData = await authResp.json();
-        const uid = authData.localId;
-        if (!uid) {
-          throw new Error('Auth account created but no UID returned. Please check the response.');
-        }
-
-        // 2. Store role in Firestore users collection (dashboard reads this for role detection)
-        await setDoc(doc(db, 'users', uid), {
+        // Add to coaches collection as a pre-authorization (same pattern as families)
+        await addDoc(collection(db, 'coaches'), {
           email,
           displayName,
           role,
+          status: 'pending',
+          registeredUid: null,
           createdBy: currentUser.uid,
           createdAt: new Date(),
         });
 
-        // 3. Store coach profile in coaches collection (admin panel reads this for management)
-        await setDoc(doc(db, 'coaches', uid), {
-          uid,
-          email,
-          displayName,
-          role,
-          status: 'active',
-          createdBy: currentUser.uid,
-          createdAt: new Date(),
-        });
-
-        msgEl.textContent = `Coach "${displayName}" (${email}) added successfully.`;
+        msgEl.textContent = `Coach "${displayName || email}" added to whitelist. They can now sign up with this email.`;
         msgEl.className = 'admin-form-message success';
-        form.reset();
+        coachForm.reset();
       } catch (err) {
         msgEl.textContent = `Error: ${err.message}`;
         msgEl.className = 'admin-form-message error';
@@ -486,21 +438,39 @@ function bindEvents() {
         const date = d.createdAt?.toDate?.() || new Date(d.createdAt);
         const roleLabel = d.role === 'admin' ? 'Admin Coach' : 'Coach';
         const roleClass = d.role === 'admin' ? 'admin-role-admin' : 'admin-role-coach';
+        const statusLabel = d.status === 'active' ? 'active' : 'pending';
+        const statusClass = d.status === 'active' ? 'admin-status-active' : 'admin-status-pending';
         return `
           <tr>
             <td>${d.email || '—'}</td>
             <td>${d.displayName || '—'}</td>
             <td><span class="admin-role-badge ${roleClass}">${roleLabel}</span></td>
-            <td><span class="admin-status admin-status-${d.status}">${d.status}</span></td>
+            <td><span class="admin-status ${statusClass}">${statusLabel}</span></td>
             <td>${date.toLocaleDateString()}</td>
+            <td><button class="btn btn-outline btn-sm coach-delete-btn" data-id="${docSnap.id}" data-email="${d.email || ''}" style="color: var(--color-accent);">Delete</button></td>
           </tr>
         `;
       }).join('');
 
-      tbody.innerHTML = rows || '<tr><td colspan="5" class="admin-empty">No coaches yet.</td></tr>';
+      tbody.innerHTML = rows || '<tr><td colspan="6" class="admin-empty">No coaches yet.</td></tr>';
       pendingBadge.textContent = `${pending} pending`;
+
+      // Bind delete buttons
+      tbody.querySelectorAll('.coach-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const email = btn.dataset.email;
+          if (!confirm('Remove this coach authorization?\n\n' + email)) return;
+          try {
+            await deleteDoc(doc(db, 'coaches', id));
+          } catch (err) {
+            console.error('Error deleting coach:', err);
+            alert('Failed to delete: ' + err.message);
+          }
+        });
+      });
     }, (err) => {
-      tbody.innerHTML = `<tr><td colspan="5" class="admin-empty">Error loading: ${err.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="admin-empty">Error loading: ${err.message}</td></tr>`;
     });
   }
 

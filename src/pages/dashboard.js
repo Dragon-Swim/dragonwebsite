@@ -162,11 +162,37 @@ function initDataListeners() {
 
 async function fetchFamilyData() {
   if (!currentUser) return;
-  const ref = doc(db, "registrations", currentUser.uid);
+
+  // Primary: lookup by own UID
+  const ref = doc(db, 'registrations', currentUser.uid);
   const snap = await getDoc(ref);
   if (snap.exists()) {
     familyDataId = snap.id;
     familyData = snap.data();
+    return;
+  }
+
+  // Fallback: spouse access — search by email in parentEmails
+  if (currentUser.email) {
+    const q = query(
+      collection(db, 'registrations'),
+      where('parentEmails', 'array-contains', currentUser.email.toLowerCase().trim())
+    );
+    const qSnap = await getDocs(q);
+    if (!qSnap.empty) {
+      const regDoc = qSnap.docs[0];
+      familyDataId = regDoc.id;
+      familyData = regDoc.data();
+
+      // Auto-add current user as editor for future access
+      const editors = familyData.editors || [];
+      if (!editors.includes(currentUser.uid)) {
+        editors.push(currentUser.uid);
+        await updateDoc(doc(db, 'registrations', familyDataId), { editors }).catch(() => {});
+        familyData.editors = editors;
+      }
+      return;
+    }
   }
 }
 
@@ -538,11 +564,15 @@ function renderCoachRoster() {
   // Column headers vary by role
   const headerCells = isAdmin
     ? `<tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
-        <th style="padding: 1rem;">${t('dash_coach_roster_name')}</th>
-        <th style="padding: 1rem;">${t('dash_coach_roster_age')}</th>
-        <th style="padding: 1rem;">${t('dash_coach_roster_gender')}</th>
-        <th style="padding: 1rem;">${t('dash_coach_roster_payment_received')}</th>
-        <th style="padding: 1rem;">${t('dash_coach_roster_payment_date')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_name')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_age')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_gender')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_pmt1_amt')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_pmt1_date')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_pmt2_amt')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_pmt2_date')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_pmt3_amt')}</th>
+        <th style="padding: 0.5rem;">${t('dash_coach_roster_pmt3_date')}</th>
       </tr>`
     : `<tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
         <th style="padding: 1rem;">${t('dash_coach_roster_name')}</th>
@@ -552,54 +582,104 @@ function renderCoachRoster() {
         <th style="padding: 1rem;">${t('dash_coach_roster_usa_id')}</th>
       </tr>`;
 
+  // Helper to get payment value for current season
+  function pval(s, field) {
+    const payments = s.payments || {};
+    const seasonData = payments[currentSeason] || {};
+    return seasonData[field] != null ? seasonData[field] : '';
+  }
+
+  const inputStyle = 'width: 95%; padding: 0.3rem 0.35rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: 0.75rem;';
+
   return `
     <div class="dash-panel">
-      <div class="dash-panel-header" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3 class="dash-panel-title">${t('dash_coach_roster_title')} (${activeSwimmers.length} athletes)</h3>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+        <h3 class="dash-panel-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">${t('dash_coach_roster_title')} (${activeSwimmers.length} athletes)</h3>
+        ${renderSeasonSelectorRoster(currentSeason)}
       </div>
       <div class="dash-panel-body">
         ${activeSwimmers.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_swimmers')}</p>` : `
-        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+        <div class="roster-table-wrapper" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.8rem; min-width: ${isAdmin ? '950px' : 'auto'};">
           <thead>${headerCells}</thead>
           <tbody>
             ${activeSwimmers.map(s => {
               const age = s.dob ? Math.floor((new Date() - new Date(s.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : '—';
-              const paymentYesSelected = s.payment_received === true ? 'selected' : '';
-              const paymentNoSelected = s.payment_received === false ? 'selected' : '';
-              const paymentNotSet = s.payment_received == null ? 'selected' : '';
-              const paymentDate = s.payment_date || '';
 
               if (isAdmin) {
                 return `
                   <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 1rem; font-weight: 500;">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</td>
-                    <td style="padding: 1rem;">${age}</td>
-                    <td style="padding: 1rem;">${s.gender || '—'}</td>
-                    <td style="padding: 0.5rem 1rem;">
-                      <select
-                        class="roster-payment-select"
+                    <td style="padding: 0.4rem 0.5rem; font-weight: 500; white-space: nowrap;">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</td>
+                    <td style="padding: 0.4rem 0.5rem;">${age}</td>
+                    <td style="padding: 0.4rem 0.5rem;">${s.gender || '—'}</td>
+                    <td style="padding: 0.2rem 0.3rem;">
+                      <input type="number" step="0.01" min="0"
+                        class="roster-pmt-input"
                         data-reg-id="${s._regId}"
                         data-swimmer-index="${s._swimmerIndex}"
-                        data-field="payment_received"
+                        data-field="amount1"
+                        data-season="${currentSeason}"
+                        value="${pval(s, 'amount1')}"
                         onchange="window.__updateSwimmerPayment(this)"
-                        style="width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: var(--fs-sm);"
-                      >
-                        <option value="" ${paymentNotSet}>—</option>
-                        <option value="yes" ${paymentYesSelected}>${t('dash_coach_roster_payment_yes')}</option>
-                        <option value="no" ${paymentNoSelected}>${t('dash_coach_roster_payment_no')}</option>
-                      </select>
+                        placeholder="0.00"
+                        style="${inputStyle}" />
                     </td>
-                    <td style="padding: 0.5rem 1rem;">
-                      <input
-                        type="date"
-                        class="roster-payment-date"
+                    <td style="padding: 0.2rem 0.3rem;">
+                      <input type="date"
+                        class="roster-pmt-input"
                         data-reg-id="${s._regId}"
                         data-swimmer-index="${s._swimmerIndex}"
-                        data-field="payment_date"
-                        value="${paymentDate}"
+                        data-field="date1"
+                        data-season="${currentSeason}"
+                        value="${pval(s, 'date1')}"
                         onchange="window.__updateSwimmerPayment(this)"
-                        style="width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: var(--fs-sm);"
-                      />
+                        style="${inputStyle}" />
+                    </td>
+                    <td style="padding: 0.2rem 0.3rem;">
+                      <input type="number" step="0.01" min="0"
+                        class="roster-pmt-input"
+                        data-reg-id="${s._regId}"
+                        data-swimmer-index="${s._swimmerIndex}"
+                        data-field="amount2"
+                        data-season="${currentSeason}"
+                        value="${pval(s, 'amount2')}"
+                        onchange="window.__updateSwimmerPayment(this)"
+                        placeholder="0.00"
+                        style="${inputStyle}" />
+                    </td>
+                    <td style="padding: 0.2rem 0.3rem;">
+                      <input type="date"
+                        class="roster-pmt-input"
+                        data-reg-id="${s._regId}"
+                        data-swimmer-index="${s._swimmerIndex}"
+                        data-field="date2"
+                        data-season="${currentSeason}"
+                        value="${pval(s, 'date2')}"
+                        onchange="window.__updateSwimmerPayment(this)"
+                        style="${inputStyle}" />
+                    </td>
+                    <td style="padding: 0.2rem 0.3rem;">
+                      <input type="number" step="0.01" min="0"
+                        class="roster-pmt-input"
+                        data-reg-id="${s._regId}"
+                        data-swimmer-index="${s._swimmerIndex}"
+                        data-field="amount3"
+                        data-season="${currentSeason}"
+                        value="${pval(s, 'amount3')}"
+                        onchange="window.__updateSwimmerPayment(this)"
+                        placeholder="0.00"
+                        style="${inputStyle}" />
+                    </td>
+                    <td style="padding: 0.2rem 0.3rem;">
+                      <input type="date"
+                        class="roster-pmt-input"
+                        data-reg-id="${s._regId}"
+                        data-swimmer-index="${s._swimmerIndex}"
+                        data-field="date3"
+                        data-season="${currentSeason}"
+                        value="${pval(s, 'date3')}"
+                        onchange="window.__updateSwimmerPayment(this)"
+                        style="${inputStyle}" />
                     </td>
                   </tr>
                 `;
@@ -617,6 +697,7 @@ function renderCoachRoster() {
             }).join('')}
           </tbody>
         </table>
+        </div>
         ${isAdmin ? `<p class="roster-payment-note">${t('dash_coach_roster_payment_note')}</p>` : ''}
         `}
       </div>
@@ -927,6 +1008,19 @@ function renderSeasonSelectorDeposits(selectedSeason) {
     <div class="season-selector">
       <label class="season-selector-label">${t('dash_season_label')}:</label>
       <select id="deposits-season-select" class="season-select">
+        ${options.map(s => `<option value="${s}" ${s === sel ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function renderSeasonSelectorRoster(selectedSeason) {
+  const options = getSeasonOptions();
+  const sel = selectedSeason || currentSeason || getDefaultSeason();
+  return `
+    <div class="season-selector">
+      <label class="season-selector-label">${t('dash_season_label')}:</label>
+      <select id="roster-season-select" class="season-select">
         ${options.map(s => `<option value="${s}" ${s === sel ? 'selected' : ''}>${s}</option>`).join('')}
       </select>
     </div>
@@ -1350,23 +1444,26 @@ window.__updateSwimmerPayment = async function (el) {
   const regId = el.dataset.regId;
   const swimmerIndex = parseInt(el.dataset.swimmerIndex);
   const field = el.dataset.field;
+  const season = el.dataset.season || currentSeason;
   let value = el.value;
 
-  // Convert payment_received to boolean/null
-  if (field === 'payment_received') {
-    if (value === 'yes') value = true;
-    else if (value === 'no') value = false;
-    else value = null;
-  }
-  // For payment_date, empty string → null
-  if (field === 'payment_date') {
+  // Amount fields: convert empty to null; date fields: empty string → null
+  if (field.startsWith('amount')) {
+    value = value === '' ? null : parseFloat(value);
+    if (value != null && (isNaN(value) || value < 0)) value = null;
+  } else if (field.startsWith('date')) {
     value = value || null;
   }
 
   // Update local cache immediately for responsive UI
   const reg = allRegistrations.find(r => r.id === regId);
   if (reg?.swimmers?.[swimmerIndex]) {
-    reg.swimmers[swimmerIndex] = { ...reg.swimmers[swimmerIndex], [field]: value };
+    const swimmer = reg.swimmers[swimmerIndex];
+    const payments = { ...(swimmer.payments || {}) };
+    const seasonData = { ...(payments[season] || {}) };
+    seasonData[field] = value;
+    payments[season] = seasonData;
+    reg.swimmers[swimmerIndex] = { ...swimmer, payments };
   }
 
   // Persist to Firestore
@@ -1376,7 +1473,12 @@ window.__updateSwimmerPayment = async function (el) {
     if (!regSnap.exists()) return;
     const swimmers = [...regSnap.data().swimmers];
     if (swimmers[swimmerIndex]) {
-      swimmers[swimmerIndex] = { ...swimmers[swimmerIndex], [field]: value };
+      const sw = swimmers[swimmerIndex];
+      const payments = { ...(sw.payments || {}) };
+      const seasonData = { ...(payments[season] || {}) };
+      seasonData[field] = value;
+      payments[season] = seasonData;
+      swimmers[swimmerIndex] = { ...sw, payments };
       await updateDoc(regRef, { swimmers });
     }
   } catch (err) {
@@ -2950,6 +3052,12 @@ function bindEvents() {
 
     // ── Deposits — Season Selector ──
     document.getElementById('deposits-season-select')?.addEventListener('change', (e) => {
+      currentSeason = e.target.value;
+      refreshUI();
+    });
+
+    // ── Roster — Season Selector ──
+    document.getElementById('roster-season-select')?.addEventListener('change', (e) => {
       currentSeason = e.target.value;
       refreshUI();
     });

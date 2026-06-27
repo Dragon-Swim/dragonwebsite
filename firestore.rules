@@ -63,24 +63,30 @@ service cloud.firestore {
     // ── registrations — family registration data ─────────────────
 
     match /registrations/{uid} {
-      // Owners read their own registration; coaches/admins read all
-      allow read: if isAuth() && (request.auth.uid == uid || isCoachOrAdmin());
+      // Any authenticated user can read (needed for spouse email lookup)
+      allow read: if isAuth();
 
-      // Family owners create/update their own; admin can update any (payment tracking etc.)
+      // Owner creates their own; admin can create any
       allow create: if isAuth() && request.auth.uid == uid;
-      allow update: if isAuth() && (request.auth.uid == uid || isAdmin());
+
+      // Owner, editors (spouse), and admin can update
+      allow update: if isAuth() && (
+        request.auth.uid == uid ||
+        request.auth.uid in resource.data.editors ||
+        isAdmin()
+      );
 
       // Soft-delete only (done via update), never hard-delete from client
       allow delete: if false;
     }
 
-    // ── coaches — coach roster (admin-managed) ───────────────────
+    // ── coaches — pre-authorized coach emails (public read for signup check) ─
 
     match /coaches/{docId} {
-      // Self-create during seed/bootstrap (doesn't call isAdmin, avoids get() on missing doc)
-      allow create: if isAuth() && request.auth.uid == docId;
-      // Only admins can read, update, or delete coach docs
-      allow read, update, delete: if isAdmin();
+      // Anyone can check if their email is authorized (used during sign-up)
+      allow read: if true;
+      // Only admins can create, update, or delete coach docs
+      allow create, update, delete: if isAdmin();
     }
 
     // ── meets — swim meets (coach/admin-managed) ─────────────────
