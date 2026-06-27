@@ -1396,6 +1396,7 @@ function exportDepositsCSV() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function exportFeeSummaryCSV() {
@@ -1419,7 +1420,6 @@ function exportFeeSummaryCSV() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-}
   URL.revokeObjectURL(url);
 }
 
