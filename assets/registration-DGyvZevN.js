@@ -1,4 +1,4 @@
-import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_RfItd.js";import{o as h,g as u,e as c,q as _,w as E,c as I,i as B,u as q,b as S,m as N}from"./firebase-CorBctTj.js";y();w();let p=1,g=null;const A=document.getElementById("app");function v(){return`
+import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_RfItd.js";import{o as h,h as _,g as u,e as c,q as E,w as I,c as B,i as q,u as S,b as N,m as A}from"./firebase-CorBctTj.js";y();w();let p=1,g=null;const D=document.getElementById("app");function v(){return`
     <option value="" disabled selected>Select...</option>
     <option value="male">${t("reg_gender_male")}</option>
     <option value="female">${t("reg_gender_female")}</option>
@@ -27,7 +27,7 @@ import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_R
         </div>
       `:""}
     </div>
-  `}function D(){return`
+  `}function k(){return`
     <div class="form-section">
       <h2 class="subsection-title">${t("reg_parent_title")}</h2>
       ${f("parent")}
@@ -113,7 +113,7 @@ import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_R
         <div class="form-group"></div>
       </div>
     </div>
-  `}function k(){return`
+  `}function L(){return`
     <div class="form-section">
       <h2 class="subsection-title">${t("reg_swimmers_title")}</h2>
       <div id="swimmers-container">
@@ -121,7 +121,7 @@ import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_R
       </div>
       <button type="button" class="btn-add-swimmer" id="btn-add-swimmer">${t("reg_swimmer_add")}</button>
     </div>
-  `}function L(){return`
+  `}function C(){return`
     <div class="form-section">
       <h2 class="subsection-title">${t("reg_emergency_title")}</h2>
       <div class="form-row">
@@ -135,7 +135,7 @@ import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_R
         </div>
       </div>
     </div>
-  `}function C(){A.innerHTML=`
+  `}function j(){D.innerHTML=`
     <section class="section">
       <div class="container" style="max-width: 800px;">
 
@@ -146,9 +146,9 @@ import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_R
         </div>
 
         <div class="reg-form-wrapper" id="reg-form-wrapper">
-          ${D()}
           ${k()}
           ${L()}
+          ${C()}
 
           <div class="form-section">
             <div class="form-group">
@@ -167,4 +167,4 @@ import{i as y,t}from"./i18n-DIN1ScE8.js";import{a as w,r as $}from"./footer-Cg_R
 
       </div>
     </section>
-  `,j()}function j(){document.getElementById("has-spouse").addEventListener("change",s=>{document.getElementById("spouse-section").style.display=s.target.checked?"block":"none"}),document.getElementById("btn-add-swimmer").addEventListener("click",()=>{p++,document.getElementById("swimmers-container").insertAdjacentHTML("beforeend",b(p)),e()});function e(){document.querySelectorAll(".btn-remove-swimmer").forEach(s=>{s.replaceWith(s.cloneNode(!0)),s=document.querySelector(`[data-remove="${s.dataset.remove}"]`),s&&s.addEventListener("click",()=>{const r=document.querySelector(`.swimmer-card[data-swimmer="${s.dataset.remove}"]`);r&&r.remove(),F()})})}e(),document.getElementById("reg-submit").addEventListener("click",async()=>{const s=document.getElementById("reg-submit");s.disabled=!0;const r={firstName:document.getElementById("parent-first").value.trim(),lastName:document.getElementById("parent-last").value.trim(),middleName:document.getElementById("parent-middle").value.trim()||null,gender:document.getElementById("parent-gender").value,phone:document.getElementById("parent-phone").value.trim(),email:document.getElementById("parent-email").value.trim(),address:document.getElementById("parent-address").value.trim()};let l=null;document.getElementById("has-spouse").checked&&(l={firstName:document.getElementById("spouse-first").value.trim(),lastName:document.getElementById("spouse-last").value.trim(),middleName:document.getElementById("spouse-middle").value.trim()||null,gender:document.getElementById("spouse-gender").value||null,phone:document.getElementById("spouse-phone").value.trim()||null,email:document.getElementById("spouse-email").value.trim()||null});const i=[];document.querySelectorAll(".swimmer-card").forEach(n=>{const o=n.dataset.swimmer;i.push({firstName:document.getElementById(`swimmer-${o}-first`).value.trim(),lastName:document.getElementById(`swimmer-${o}-last`).value.trim(),middleName:document.getElementById(`swimmer-${o}-middle`).value.trim()||null,gender:document.getElementById(`swimmer-${o}-gender`).value,dob:document.getElementById(`swimmer-${o}-dob`).value,usaSwimmingId:document.getElementById(`swimmer-${o}-usaId`).value.trim()||null,joinDate:document.getElementById(`swimmer-${o}-joinDate`).value||null})});const a={name:document.getElementById("emergency-name").value.trim(),phone:document.getElementById("emergency-phone").value.trim()},d=[r.email.toLowerCase().trim()];l&&l.email&&d.push(l.email.toLowerCase().trim());try{await N(u(c,"registrations",g.uid),{parent:r,spouse:l,swimmers:i,emergencyContact:a,notes:document.getElementById("reg-notes").value.trim()||null,parentEmails:d,editors:[g.uid],createdAt:new Date}),document.getElementById("reg-form-wrapper").querySelectorAll(".form-section, #reg-submit").forEach(n=>n.style.display="none"),document.getElementById("reg-success").style.display="flex"}catch(n){console.error("Failed to submit registration:",n),alert("Failed to submit registration. Please try again."),s.disabled=!1}})}function F(){const e=document.querySelectorAll(".swimmer-card");e.forEach((r,l)=>{const i=l+1;r.dataset.swimmer=i,r.querySelector(".swimmer-label").textContent=`Swimmer #${i}`;const m=r.querySelector(".btn-remove-swimmer");m&&(m.dataset.remove=i,m.style.display=e.length>1?"":"none"),r.querySelectorAll("input, select").forEach(a=>{const d=a.id;a.id=d.replace(/swimmer-\d+-/,`swimmer-${i}-`)})});const s=document.querySelector('.swimmer-card[data-swimmer="1"] .btn-remove-swimmer');s&&(s.style.display=e.length>1?"":"none")}h(S,async e=>{if(!e){window.location.href="/signin.html?mode=signup";return}if(g=e,(await getDoc(u(c,"registrations",e.uid))).exists()){window.location.href="/dashboard.html";return}if(e.email){const r=_(I(c,"registrations"),E("parentEmails","array-contains",e.email.toLowerCase().trim())),l=await B(r);if(!l.empty){const i=l.docs[0],a=i.data().editors||[];a.includes(e.uid)||(a.push(e.uid),await q(u(c,"registrations",i.id),{editors:a})),window.location.href="/dashboard.html";return}}C(),$()});
+  `,F()}function F(){document.getElementById("has-spouse").addEventListener("change",s=>{document.getElementById("spouse-section").style.display=s.target.checked?"block":"none"}),document.getElementById("btn-add-swimmer").addEventListener("click",()=>{p++,document.getElementById("swimmers-container").insertAdjacentHTML("beforeend",b(p)),e()});function e(){document.querySelectorAll(".btn-remove-swimmer").forEach(s=>{s.replaceWith(s.cloneNode(!0)),s=document.querySelector(`[data-remove="${s.dataset.remove}"]`),s&&s.addEventListener("click",()=>{const r=document.querySelector(`.swimmer-card[data-swimmer="${s.dataset.remove}"]`);r&&r.remove(),T()})})}e(),document.getElementById("reg-submit").addEventListener("click",async()=>{const s=document.getElementById("reg-submit");s.disabled=!0;const r={firstName:document.getElementById("parent-first").value.trim(),lastName:document.getElementById("parent-last").value.trim(),middleName:document.getElementById("parent-middle").value.trim()||null,gender:document.getElementById("parent-gender").value,phone:document.getElementById("parent-phone").value.trim(),email:document.getElementById("parent-email").value.trim(),address:document.getElementById("parent-address").value.trim()};let l=null;document.getElementById("has-spouse").checked&&(l={firstName:document.getElementById("spouse-first").value.trim(),lastName:document.getElementById("spouse-last").value.trim(),middleName:document.getElementById("spouse-middle").value.trim()||null,gender:document.getElementById("spouse-gender").value||null,phone:document.getElementById("spouse-phone").value.trim()||null,email:document.getElementById("spouse-email").value.trim()||null});const i=[];document.querySelectorAll(".swimmer-card").forEach(n=>{const o=n.dataset.swimmer;i.push({firstName:document.getElementById(`swimmer-${o}-first`).value.trim(),lastName:document.getElementById(`swimmer-${o}-last`).value.trim(),middleName:document.getElementById(`swimmer-${o}-middle`).value.trim()||null,gender:document.getElementById(`swimmer-${o}-gender`).value,dob:document.getElementById(`swimmer-${o}-dob`).value,usaSwimmingId:document.getElementById(`swimmer-${o}-usaId`).value.trim()||null,joinDate:document.getElementById(`swimmer-${o}-joinDate`).value||null})});const a={name:document.getElementById("emergency-name").value.trim(),phone:document.getElementById("emergency-phone").value.trim()},d=[r.email.toLowerCase().trim()];l&&l.email&&d.push(l.email.toLowerCase().trim());try{await A(u(c,"registrations",g.uid),{parent:r,spouse:l,swimmers:i,emergencyContact:a,notes:document.getElementById("reg-notes").value.trim()||null,parentEmails:d,editors:[g.uid],createdAt:new Date}),document.getElementById("reg-form-wrapper").querySelectorAll(".form-section, #reg-submit").forEach(n=>n.style.display="none"),document.getElementById("reg-success").style.display="flex"}catch(n){console.error("Failed to submit registration:",n),alert("Failed to submit registration. Please try again."),s.disabled=!1}})}function T(){const e=document.querySelectorAll(".swimmer-card");e.forEach((r,l)=>{const i=l+1;r.dataset.swimmer=i,r.querySelector(".swimmer-label").textContent=`Swimmer #${i}`;const m=r.querySelector(".btn-remove-swimmer");m&&(m.dataset.remove=i,m.style.display=e.length>1?"":"none"),r.querySelectorAll("input, select").forEach(a=>{const d=a.id;a.id=d.replace(/swimmer-\d+-/,`swimmer-${i}-`)})});const s=document.querySelector('.swimmer-card[data-swimmer="1"] .btn-remove-swimmer');s&&(s.style.display=e.length>1?"":"none")}h(N,async e=>{if(!e){window.location.href="/signin.html?mode=signup";return}if(g=e,(await _(u(c,"registrations",e.uid))).exists()){window.location.href="/dashboard.html";return}if(e.email){const r=E(B(c,"registrations"),I("parentEmails","array-contains",e.email.toLowerCase().trim())),l=await q(r);if(!l.empty){const i=l.docs[0],a=i.data().editors||[];a.includes(e.uid)||(a.push(e.uid),await S(u(c,"registrations",i.id),{editors:a})),window.location.href="/dashboard.html";return}}j(),$()});
