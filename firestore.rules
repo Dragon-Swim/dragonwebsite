@@ -69,10 +69,11 @@ service cloud.firestore {
       // Owner creates their own; admin can create any
       allow create: if isAuth() && request.auth.uid == uid;
 
-      // Owner, editors (spouse), and admin can update
+      // Owner, editors (spouse), parentEmails match, and admin can update
       allow update: if isAuth() && (
         request.auth.uid == uid ||
         request.auth.uid in resource.data.editors ||
+        request.auth.token.email in resource.data.parentEmails ||
         isAdmin()
       );
 
@@ -85,8 +86,19 @@ service cloud.firestore {
     match /coaches/{docId} {
       // Anyone can check if their email is authorized (used during sign-up)
       allow read: if true;
-      // Only admins can create, update, or delete coach docs
-      allow create, update, delete: if isAdmin();
+      // Only admins can create or delete coach docs
+      allow create, delete: if isAdmin();
+      // Admin: full update. Authorized user: only status + registeredUid.
+      allow update: if isAdmin() || (
+        isAuth() &&
+        request.auth.token.email != null &&
+        request.auth.token.email == resource.data.email &&
+        // lock down: non-admin can only change status and registeredUid
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.displayName == resource.data.displayName &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.createdBy == resource.data.createdBy
+      );
     }
 
     // ── meets — swim meets (coach/admin-managed) ─────────────────
@@ -114,7 +126,17 @@ service cloud.firestore {
       // Anyone can check if their email is authorized (used during sign-up)
       allow read: if true;
       // Only admins can add/remove authorized families
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      // Admin: full update. Authorized user: only status + registeredUid.
+      allow update: if isAdmin() || (
+        isAuth() &&
+        request.auth.token.email != null &&
+        request.auth.token.email == resource.data.email &&
+        // lock down: non-admin can only change status and registeredUid
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.parentName == resource.data.parentName &&
+        request.resource.data.createdBy == resource.data.createdBy
+      );
     }
 
     // ── deposits — swimmer deposit tracking (coach/admin-managed) ─

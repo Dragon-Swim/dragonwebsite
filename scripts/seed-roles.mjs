@@ -1,10 +1,35 @@
 /**
- * Quick seed: create admin + coach user docs via Firebase SDK (emulator)
- * Usage: node scripts/seed-roles.mjs
+ * Quick seed: create admin + coach records via Firebase SDK (emulator).
+ * Updated for pre-auth coach flow (June 2026).
+ *
+ * Usage:
+ *   node scripts/seed-roles.mjs
+ *
+ * What this creates:
+ *   - Admin: Auth account + users/{uid} doc + coaches/ doc
+ *   - Coach: Auth account + users/{uid} doc + coaches/ doc
+ *   - Coach whitelist follows new pre-auth pattern (addDoc, not UID-keyed)
  */
+
 import { initializeApp } from "firebase/app";
-import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator, doc, setDoc } from "firebase/firestore";
+import {
+  getAuth,
+  connectAuthEmulator,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import {
+  getFirestore,
+  connectFirestoreEmulator,
+  doc,
+  setDoc,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+} from "firebase/firestore";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -40,55 +65,86 @@ connectFirestoreEmulator(db, "127.0.0.1", 8080);
 
 console.log("Connected to emulators\n");
 
-const accounts = [
-  { email: "admin@dragonswim.com", password: "admin1234", displayName: "Admin", role: "admin" },
-  { email: "coach.thompson@dragonswim.com", password: "coach1234", displayName: "Coach Thompson", role: "coach" },
-];
-
-for (const acct of accounts) {
-  let uid = null;
-
-  // Try creating first; if already exists, sign in to get the uid
+// ── Helper ───────────────────────────────────────────────────────
+async function createOrSignIn(email, password) {
+  let uid;
   try {
-    const userCred = await createUserWithEmailAndPassword(auth, acct.email, acct.password);
-    uid = userCred.user.uid;
-    console.log(`Created: ${acct.email} (uid: ${uid})`);
+    uid = (await createUserWithEmailAndPassword(auth, email, password)).user.uid;
+    console.log(`  Auth created: ${email}  (uid: ${uid})`);
   } catch (e) {
     if (e.code === "auth/email-already-exists" || e.code === "auth/email-already-in-use") {
-      try {
-        const userCred = await signInWithEmailAndPassword(auth, acct.email, acct.password);
-        uid = userCred.user.uid;
-        console.log(`Signed in: ${acct.email} (uid: ${uid})`);
-      } catch (e2) {
-        console.log(`Failed to sign in as ${acct.email}: ${e2.message}`);
-        continue;
-      }
+      uid = (await signInWithEmailAndPassword(auth, email, password)).user.uid;
+      console.log(`  Auth signed in: ${email}  (uid: ${uid})`);
     } else {
-      console.log(`Error creating ${acct.email}: ${e.code || e.message}`);
-      continue;
+      console.log(`  Error: ${email} — ${e.code || e.message}`);
+      return null;
     }
   }
-
-  // Write user doc (for dashboard role detection)
-  await setDoc(doc(db, "users", uid), {
-    email: acct.email,
-    displayName: acct.displayName,
-    role: acct.role,
-    createdAt: new Date(),
-  });
-  console.log(`User doc written: users/${uid} (${acct.role})`);
-
-  // Write coach doc (for admin panel "Manage Coaches" list)
-  await setDoc(doc(db, "coaches", uid), {
-    uid,
-    email: acct.email,
-    displayName: acct.displayName,
-    role: acct.role,
-    status: 'active',
-    createdBy: 'seed',
-    createdAt: new Date(),
-  });
-  console.log(`Coach doc written: coaches/${uid}`);
+  return uid;
 }
 
-console.log("\nDone - refresh the browser and try logging in again.");
+// ── Step 1: Create admin ─────────────────────────────────────────
+console.log("── Admin ──");
+
+// Create admin auth + users doc
+const adminUid = await createOrSignIn("admin@dragonswim.com", "admin1234");
+await setDoc(doc(db, "users", adminUid), {
+  email: "admin@dragonswim.com",
+  displayName: "Admin",
+  role: "admin",
+  createdAt: new Date(),
+});
+console.log(`  users/${adminUid} written`);
+
+// Admin creates own coaches doc (already signed in as admin)
+const adminCoachRef = await addDoc(collection(db, "coaches"), {
+  email: "admin@dragonswim.com",
+  displayName: "Admin",
+  role: "admin",
+  status: "active",
+  registeredUid: adminUid,
+  createdBy: "seed",
+  createdAt: new Date(),
+});
+console.log(`  coaches/${adminCoachRef.id} written`);
+
+// ── Step 2: Create coach ─────────────────────────────────────────
+console.log("\n── Coach Thompson ──");
+
+// Create coach auth + users doc (coach creates their own user profile)
+const coachUid = await createOrSignIn("coach.thompson@dragonswim.com", "coach1234");
+if (!coachUid) {
+  console.log("  Skipped — could not create coach");
+} else {
+  await setDoc(doc(db, "users", coachUid), {
+    email: "coach.thompson@dragonswim.com",
+    displayName: "Coach Thompson",
+    role: "coach",
+    createdAt: new Date(),
+  });
+  console.log(`  users/${coachUid} written`);
+
+  // Switch back to admin to create the coach whitelist entry
+  await signInWithEmailAndPassword(auth, "admin@dragonswim.com", "admin1234");
+
+  const coachRef = await addDoc(collection(db, "coaches"), {
+    email: "coach.thompson@dragonswim.com",
+    displayName: "Coach Thompson",
+    role: "coach",
+    status: "active",
+    registeredUid: coachUid,
+    createdBy: "seed",
+    createdAt: new Date(),
+  });
+  console.log(`  coaches/${coachRef.id} written (status: active)`);
+}
+
+console.log("\nDone — refresh the browser and try logging in again.");
+console.log("\nAccounts:");
+console.log("  admin@dragonswim.com          / admin1234");
+console.log("  coach.thompson@dragonswim.com / coach1234");
+
+console.log("Done — refresh the browser and try logging in again.");
+console.log("\nAccounts:");
+console.log("  admin@dragonswim.com          / admin1234");
+console.log("  coach.thompson@dragonswim.com / coach1234");
