@@ -23,13 +23,6 @@ service cloud.firestore {
           || userRole() == 'admin';
     }
 
-    function isCoachOrAdmin() {
-      // Same fallback: the admin email counts as coach/admin too
-      return (isAuth() && request.auth.token.email == 'admin@dragonswim.com')
-          || userRole() == 'coach'
-          || userRole() == 'admin';
-    }
-
     // ── contacts — public contact form submissions ───────────────
 
     match /contacts/{docId} {
@@ -101,23 +94,23 @@ service cloud.firestore {
       );
     }
 
-    // ── meets — swim meets (coach/admin-managed) ─────────────────
+    // ── meets — swim meets (admin-managed, coach read-only) ─────
 
     match /meets/{docId} {
       // All authenticated users can view meets
       allow read: if isAuth();
-      // Only coaches and admins can create, update, or delete meets
-      allow create, update, delete: if isCoachOrAdmin();
+      // Only admins can create, update, or delete meets
+      allow create, update, delete: if isAdmin();
     }
 
-    // ── schedules — practice schedules (coach/admin-managed) ─────
+    // ── schedules — practice schedules (admin-managed, coach read-only) ─
 
     match /schedules/{docId} {
       // All authenticated users can view schedules
       allow read: if isAuth();
-      // Only coaches and admins can create, update, or delete
+      // Only admins can create, update, or delete
       // (includes CSV batch import via writeBatch)
-      allow create, update, delete: if isCoachOrAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     // ── families — pre-authorized family emails (public read for signup check) ─
@@ -145,7 +138,7 @@ service cloud.firestore {
       // All authenticated users can view deposits
       allow read: if isAuth();
       // Only coaches and admins can create, update, or delete deposits
-      allow create, update, delete: if isCoachOrAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     // ── members — test utility only, deny all in production ──────

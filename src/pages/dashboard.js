@@ -339,12 +339,14 @@ function renderCoachDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
               <span class="dash-nav-icon">⏱️</span> ${t('dash_coach_schedule_label')}
             </button>
+            ${dbRole === 'admin' ? `
             <button class="dash-nav-item ${currentTab === 'feesummary' ? 'active' : ''}" data-tab="feesummary">
               <span class="dash-nav-icon">💰</span> ${t('dash_coach_fee_summary_label')}
             </button>
             <button class="dash-nav-item ${currentTab === 'deposits' ? 'active' : ''}" data-tab="deposits">
               <span class="dash-nav-icon">🏦</span> ${t('dash_coach_deposits_label')}
             </button>
+            ` : ''}
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
             <span class="dash-nav-label">${t('dash_sidebar_system')}</span>
@@ -1817,15 +1819,15 @@ function renderSwimPlans() {
 
 // ── Swim Meets Tab ──
 function renderSwimMeets() {
-  const isCoach = userRole === 'coach';
+  const canEdit = dbRole === 'admin';
 
   return `
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_meets_upcoming')}</h2>
-      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-meet-btn">${t('dash_meets_add')}</button>` : ''}
+      ${canEdit ? `<button class="btn btn-primary btn-sm" id="add-meet-btn">${t('dash_meets_add')}</button>` : ''}
     </div>
 
-    ${isCoach ? `
+    ${canEdit ? `
       <div id="add-meet-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
         <h3 style="margin-bottom: 1rem;" id="meet-form-title">${t('dash_meets_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
@@ -1858,10 +1860,10 @@ function renderSwimMeets() {
               <span>📍 ${m.location}</span>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-              ${!isCoach && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
-              ${isCoach ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${m.name || ''}">${t('dash_meets_fee')}</button>` : ''}
-              ${isCoach ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}" data-season="${m.season || currentSeason}">${t('dash_meets_edit')}</button>` : ''}
-              ${isCoach ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
+              ${userRole !== 'coach' && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
+              ${canEdit ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${m.name || ''}">${t('dash_meets_fee')}</button>` : ''}
+              ${canEdit ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}" data-season="${m.season || currentSeason}">${t('dash_meets_edit')}</button>` : ''}
+              ${canEdit ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
             </div>
           </div>
         </div>
@@ -1872,7 +1874,7 @@ function renderSwimMeets() {
 
 // ── Schedule Tab ──
 function renderSchedule() {
-  const isCoach = userRole === 'coach';
+  const canEdit = dbRole === 'admin';
   const dayNames = [0, 1, 2, 3, 4, 5, 6].map(i => getDayName(i));
   // Week starts Monday
   const scheduleDays = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
@@ -1880,10 +1882,10 @@ function renderSchedule() {
   return `
     <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_schedule_weekly')}</h2>
-      ${isCoach ? `<button class="btn btn-primary btn-sm" id="add-session-btn">${t('dash_schedule_add')}</button><button class="btn btn-outline btn-sm" id="import-csv-btn">${t('dash_schedule_import_csv')}</button>` : ''}
+      ${canEdit ? `<button class="btn btn-primary btn-sm" id="add-session-btn">${t('dash_schedule_add')}</button><button class="btn btn-outline btn-sm" id="import-csv-btn">${t('dash_schedule_import_csv')}</button>` : ''}
     </div>
 
-    ${isCoach ? `
+    ${canEdit ? `
       <div id="add-session-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
         <h3 style="margin-bottom: 1rem;" id="session-form-title">${t('dash_schedule_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
@@ -1915,7 +1917,7 @@ function renderSchedule() {
                   <div class="dash-schedule-time">${s.startTime} – ${s.endTime}</div>
                   <div class="dash-schedule-focus">${s.location || ''}</div>
                   <div class="dash-schedule-meta" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
-                    ${isCoach ? `
+                    ${canEdit ? `
                       <button class="edit-session" data-id="${s.id}" data-day="${s.day}" data-start="${s.startTime || ''}" data-end="${s.endTime || ''}" data-location="${s.location || ''}" style="background: none; border: none; font-size: 1rem; cursor: pointer; color: var(--color-primary); padding: 0 5px;" title="Edit">✎</button>
                       <button class="delete-session" data-id="${s.id}" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--color-accent); padding: 0 5px;" title="Delete">&times;</button>
                     ` : ''}
