@@ -13,7 +13,7 @@ import './registration.css';
 import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
-import { auth, db, doc, setDoc, getDocs, query, where, updateDoc, collection, onAuthStateChanged } from '../utils/firebase.js';
+import { auth, db, doc, setDoc, getDoc, getDocs, query, where, updateDoc, collection, onAuthStateChanged } from '../utils/firebase.js';
 import { t } from '../utils/i18n.js';
 
 initTheme();

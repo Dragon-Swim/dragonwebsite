@@ -1293,6 +1293,84 @@
     background: rgba(248, 113, 113, 0.15) !important;
 }
 
+/* ── Fee Summary Expandable Rows ── */
+.fee-summary-table .fee-summary-main-row {
+    cursor: pointer;
+    user-select: none;
+}
+
+.fee-summary-expand-icon {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+}
+
+.fee-summary-expand-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.fee-summary-detail-row {
+    display: none;
+}
+
+.fee-summary-detail-row.expanded {
+    display: table-row;
+}
+
+.fee-summary-detail-row td {
+    padding: 0;
+    border-bottom: none;
+}
+
+.fee-summary-detail-cell {
+    padding: 0.25rem 1rem 0.75rem 2.5rem !important;
+    background: var(--bg-secondary);
+}
+
+.fee-summary-mini-table {
+    width: auto;
+    min-width: 340px;
+    font-size: 0.8rem;
+    border-collapse: collapse;
+}
+
+.fee-summary-mini-table td {
+    padding: 0.25rem 1rem 0.25rem 0;
+    border-bottom: 1px dotted var(--border-color);
+    vertical-align: middle;
+}
+
+.fee-summary-mini-table .mini-meet-name {
+    color: var(--text-secondary);
+}
+
+.fee-summary-mini-table .mini-meet-fee {
+    text-align: right;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.fee-summary-mini-table .mini-meet-total {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fee-summary-mini-table .mini-meet-total td {
+    border-bottom: none;
+    padding-top: 0.35rem;
+}
+
+.fee-summary-main-row.expanded-row {
+    border-bottom: none;
+}
+
+.fee-summary-main-row.expanded-row td {
+    border-bottom: none;
+}
+
 /* ── Deposit Inline Actions ── */
 .fee-deposit-action-btn {
     background: none;

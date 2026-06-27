@@ -847,6 +847,7 @@ function renderFeeSummary() {
           <table class="fee-summary-table">
             <thead>
               <tr>
+                <th style="width: 28px;"></th>
                 <th>${t('dash_fee_summary_name')}</th>
                 <th>${t('dash_fee_summary_deposit')}</th>
                 <th>${t('dash_fee_summary_total_fee')}</th>
@@ -855,14 +856,34 @@ function renderFeeSummary() {
               </tr>
             </thead>
             <tbody>
-              ${summary.map(s => `
-                <tr class="fee-summary-row ${s.balance < 0 ? 'fee-summary-negative' : ''}">
+              ${summary.map((s, idx) => `
+                <tr class="fee-summary-main-row fee-summary-row ${s.balance < 0 ? 'fee-summary-negative' : ''}"
+                    data-fee-index="${idx}" ${s.meets && s.meets.length > 0 ? 'title="Click to see meet details"' : ''}>
+                  <td><span class="fee-summary-expand-icon">${s.meets && s.meets.length > 0 ? '▶' : ''}</span></td>
                   <td class="fee-summary-name">${escapeHtml(s.displayName)}</td>
                   <td>${fmt(s.deposit)}</td>
                   <td>${fmt(s.totalFee)}</td>
                   <td>${s.meetCount}</td>
                   <td class="fee-summary-balance" style="font-weight: 700; ${s.balance < 0 ? 'color: var(--color-accent);' : 'color: #16A34A;'}">${fmt(s.balance)}</td>
                 </tr>
+                ${s.meets && s.meets.length > 0 ? `
+                <tr class="fee-summary-detail-row" data-fee-detail="${idx}">
+                  <td colspan="6" class="fee-summary-detail-cell">
+                    <table class="fee-summary-mini-table">
+                      ${s.meets.map(m => `
+                        <tr>
+                          <td class="mini-meet-name">${escapeHtml(m.meetName)}</td>
+                          <td class="mini-meet-fee">${fmt(m.total)}</td>
+                        </tr>
+                      `).join('')}
+                      <tr class="mini-meet-total">
+                        <td>${t('dash_fee_summary_total_fee')}</td>
+                        <td class="mini-meet-fee">${fmt(s.totalFee)}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                ` : ''}
               `).join('')}
             </tbody>
           </table>
@@ -3048,6 +3069,23 @@ function bindEvents() {
       e.preventDefault();
       currentTab = 'deposits';
       refreshUI();
+    });
+
+    // ── Fee Summary — Expand/Collapse Meet Details ──
+    document.querySelector('.fee-summary-table tbody')?.addEventListener('click', (e) => {
+      const row = e.target.closest('.fee-summary-main-row');
+      if (!row) return;
+      const idx = row.dataset.feeIndex;
+      const detailRow = document.querySelector(`.fee-summary-detail-row[data-fee-detail="${idx}"]`);
+      if (!detailRow) return;
+
+      const icon = row.querySelector('.fee-summary-expand-icon');
+      const isExpanded = detailRow.classList.toggle('expanded');
+      row.classList.toggle('expanded-row', isExpanded);
+      if (icon) {
+        icon.classList.toggle('expanded', isExpanded);
+        icon.textContent = isExpanded ? '▼' : '▶';
+      }
     });
 
     // ── Deposits — Season Selector ──
