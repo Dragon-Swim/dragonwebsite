@@ -21,7 +21,7 @@ import {
 initTheme();
 
 let currentUser = null;
-let currentTab = 'create';
+let currentTab = 'coach';
 let allRegistrations = [];
 
 const app = document.getElementById('app');
@@ -63,14 +63,11 @@ function render() {
           <h2>Admin Panel</h2>
         </div>
         <nav class="admin-nav">
-          <button class="admin-nav-item ${currentTab === 'create' ? 'active' : ''}" data-tab="create">
-            ➕ Create Coach
+          <button class="admin-nav-item ${currentTab === 'coach' ? 'active' : ''}" data-tab="coach">
+            👥 Add Coach
           </button>
           <button class="admin-nav-item ${currentTab === 'family' ? 'active' : ''}" data-tab="family">
             👪 Add Family
-          </button>
-          <button class="admin-nav-item ${currentTab === 'manage' ? 'active' : ''}" data-tab="manage">
-            👥 Manage Coaches
           </button>
           <button class="admin-nav-item ${currentTab === 'export' ? 'active' : ''}" data-tab="export">
             📥 Export Data
@@ -84,10 +81,10 @@ function render() {
 
       <main class="admin-main">
         <header class="admin-topbar">
-          <h1 class="admin-page-title">${currentTab === 'create' ? 'Pre-authorize Coach' : currentTab === 'manage' ? 'Manage Coaches' : currentTab === 'family' ? 'Pre-authorize Family' : 'Export Data'}</h1>
+          <h1 class="admin-page-title">${currentTab === 'coach' ? 'Add Coach' : currentTab === 'family' ? 'Add Family' : 'Export Data'}</h1>
         </header>
         <div class="admin-content">
-          ${currentTab === 'create' ? renderCreateForm() : currentTab === 'manage' ? renderManageView() : currentTab === 'family' ? renderFamilyView() : renderExportView()}
+          ${currentTab === 'coach' ? renderCoachView() : currentTab === 'family' ? renderFamilyView() : renderExportView()}
         </div>
       </main>
     </div>
@@ -96,11 +93,11 @@ function render() {
   bindEvents();
 }
 
-function renderCreateForm() {
+function renderCoachView() {
   return `
     <div class="admin-panel">
       <h3>Pre-authorize Coach</h3>
-      <p class="admin-hint">Add a coach's email to the whitelist. They will create their own account and set their own password when they sign up. For Gmail addresses, they can use Google sign-in directly.</p>
+      <p class="admin-hint">Add a coach's email to the whitelist. They will create their own account and set their own password when they sign up.</p>
       <form id="coach-form" class="admin-form">
         <div class="form-row">
           <div class="form-group">
@@ -123,16 +120,12 @@ function renderCreateForm() {
         <p id="coach-form-message" class="admin-form-message"></p>
       </form>
     </div>
-  `;
-}
 
-function renderManageView() {
-  return `
-    <div class="admin-panel">
+    <div class="admin-panel" style="margin-top: 2rem;">
       <div class="admin-panel-header">
-        <h3>All Coach Accounts</h3>
+        <h3>All Coaches</h3>
         <span class="admin-badge" id="pending-count">0 pending</span>
-    </div>
+      </div>
       <div class="admin-table-wrapper">
         <table class="admin-table">
           <thead>
@@ -454,7 +447,7 @@ function bindEvents() {
   }
 
   // Live coach list (only when manage tab is active)
-  if (currentTab === 'manage') {
+  if (currentTab === 'coach') {
     const tbody = document.getElementById('coach-table-body');
     const pendingBadge = document.getElementById('pending-count');
     if (!tbody) return;
