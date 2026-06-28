@@ -513,11 +513,13 @@ function bindEvents() {
         }
       }
     } catch (error) {
-      console.error(error);
+      console.error('Google sign-in error:', error.code, error.message);
       if (error.code === 'auth/popup-closed-by-user') {
-        showError('Sign-in popup closed before completion.');
+        showError('Sign-in popup was closed before completing. Please try again.');
       } else if (error.code === 'auth/cancelled-popup-request') {
-        // Do nothing, another popup was opened
+        showError('Google sign-in was cancelled. This may be due to a popup blocker, or the domain may not be authorized in Firebase Console (Authentication > Settings > Authorized domains).');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        showError('This domain is not authorized for Google sign-in. Please add it in Firebase Console > Authentication > Settings > Authorized domains.');
       } else {
         showError(error.message || 'Google sign in failed');
       }
