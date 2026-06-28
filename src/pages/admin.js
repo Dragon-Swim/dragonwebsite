@@ -8,13 +8,9 @@
 import '../styles/reset.css';
 import '../styles/variables.css';
 import '../styles/global.css';
-import '../styles/navbar.css';
-import '../styles/footer.css';
 import './admin.css';
 
 import { initTheme } from '../components/theme-toggle.js';
-import { renderNavbar } from '../components/navbar.js';
-import { renderFooter } from '../components/footer.js';
 import { downloadAdminCSV, ADMIN_COLUMNS } from '../utils/csv.js';
 import { t } from '../utils/i18n.js';
 import {
@@ -23,7 +19,6 @@ import {
 } from '../utils/firebase.js';
 
 initTheme();
-renderNavbar();
 
 let currentUser = null;
 let currentTab = 'create';
@@ -99,7 +94,6 @@ function render() {
   `;
 
   bindEvents();
-  renderFooter();
 }
 
 function renderCreateForm() {
