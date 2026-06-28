@@ -14,7 +14,7 @@ import { initTheme } from '../components/theme-toggle.js';
 import { downloadAdminCSV, ADMIN_COLUMNS } from '../utils/csv.js';
 import { t } from '../utils/i18n.js';
 import {
-  auth, db, doc, getDoc, setDoc, collection, onSnapshot,
+  auth, db, doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
   query, orderBy, where, getDocs, onAuthStateChanged, signOut, addDoc, deleteDoc,
 } from '../utils/firebase.js';
 
@@ -456,6 +456,12 @@ function bindEvents() {
           const email = btn.dataset.email;
           if (!confirm('Remove this coach authorization?\n\n' + email)) return;
           try {
+            // Mark the user's role as removed so they lose access
+            const coachSnap = await getDoc(doc(db, 'coaches', id));
+            const registeredUid = coachSnap.exists() ? coachSnap.data().registeredUid : null;
+            if (registeredUid) {
+              await updateDoc(doc(db, 'users', registeredUid), { role: 'removed' }).catch(() => {});
+            }
             await deleteDoc(doc(db, 'coaches', id));
           } catch (err) {
             console.error('Error deleting coach:', err);

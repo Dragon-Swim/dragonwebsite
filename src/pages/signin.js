@@ -345,6 +345,19 @@ function bindEvents() {
           // Check user role first — coach/admin go directly to dashboard
           const userDocSnap = await getDoc(doc(db, 'users', userCredential.user.uid));
           const userRole = userDocSnap.exists() ? userDocSnap.data().role : null;
+
+          // Removed coach: re-check whitelist — may have been re-added
+          if (userRole === 'removed') {
+            const removedSnap = await getDocs(query(collection(db, 'coaches'), where('email', '==', normalizedEmail)));
+            if (!removedSnap.empty) {
+              const restoredRole = removedSnap.docs[0].data().role || 'coach';
+              await updateDoc(doc(db, 'users', userCredential.user.uid), { role: restoredRole });
+              window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+              return;
+            }
+            throw new Error('Your coach access has been revoked. Please contact admin@dragonswim.com.');
+          }
+
           if (userRole === 'coach' || userRole === 'admin') {
             window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
             return;
