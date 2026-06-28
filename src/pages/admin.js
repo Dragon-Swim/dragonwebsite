@@ -404,6 +404,42 @@ function bindEvents() {
             const email = btn.dataset.email;
             if (!confirm(t('admin_family_delete_confirm') + '\n\n' + email)) return;
             try {
+              // Check if this family has a spouse in the same registration
+              const famDelSnap = await getDoc(doc(db, 'families', id));
+              const famRegisteredUid = famDelSnap.exists() ? famDelSnap.data().registeredUid : null;
+
+              const regQ = query(collection(db, 'registrations'), where('parentEmails', 'array-contains', email));
+              const regSnap = await getDocs(regQ);
+              let spouseEmails = [];
+              if (!regSnap.empty) {
+                const regData = regSnap.docs[0].data();
+                spouseEmails = (regData.parentEmails || []).filter(e => e !== email && e !== '');
+              }
+
+              // If spouse has a whitelist entry, ask admin
+              for (const spouseEmail of spouseEmails) {
+                const spouseFamSnap = await getDocs(query(collection(db, 'families'), where('email', '==', spouseEmail)));
+                if (!spouseFamSnap.empty) {
+                  const alsoDelete = confirm(
+                    'This family has another parent: ' + spouseEmail + '\n\n' +
+                    'Their whitelist entry is still active. Remove them too?\n\n' +
+                    'OK = Remove both  |  Cancel = Remove only ' + email
+                  );
+                  if (alsoDelete) {
+                    for (const d of spouseFamSnap.docs) {
+                      const sUid = d.data().registeredUid;
+                      if (sUid) await updateDoc(doc(db, 'users', sUid), { role: 'removed' }).catch(() => {});
+                      await deleteDoc(doc(db, 'families', d.id));
+                    }
+                  }
+                  break;
+                }
+              }
+
+              // Remove this user
+              if (famRegisteredUid) {
+                await updateDoc(doc(db, 'users', famRegisteredUid), { role: 'removed' }).catch(() => {});
+              }
               await deleteDoc(doc(db, 'families', id));
             } catch (err) {
               console.error('Error deleting family:', err);

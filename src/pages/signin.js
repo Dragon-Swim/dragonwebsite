@@ -346,16 +346,41 @@ function bindEvents() {
           const userDocSnap = await getDoc(doc(db, 'users', userCredential.user.uid));
           const userRole = userDocSnap.exists() ? userDocSnap.data().role : null;
 
-          // Removed coach: re-check whitelist — may have been re-added
+          // Removed: re-check both whitelists — may have been re-added
           if (userRole === 'removed') {
-            const removedSnap = await getDocs(query(collection(db, 'coaches'), where('email', '==', normalizedEmail)));
-            if (!removedSnap.empty) {
-              const restoredRole = removedSnap.docs[0].data().role || 'coach';
+            const removedCoachSnap = await getDocs(query(collection(db, 'coaches'), where('email', '==', normalizedEmail)));
+            const removedFamSnap = await getDocs(query(collection(db, 'families'), where('email', '==', normalizedEmail)));
+            if (!removedCoachSnap.empty) {
+              const restoredRole = removedCoachSnap.docs[0].data().role || 'coach';
               await updateDoc(doc(db, 'users', userCredential.user.uid), { role: restoredRole });
               window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
               return;
             }
-            throw new Error('Your coach access has been revoked. Please contact admin@dragonswim.com.');
+            if (!removedFamSnap.empty) {
+              await updateDoc(doc(db, 'users', userCredential.user.uid), { role: 'swimmer' });
+              // Continue to registration check below (may already have one)
+              const removedRegSnap = await getDoc(doc(db, 'registrations', userCredential.user.uid));
+              if (removedRegSnap.exists()) {
+                window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+                return;
+              }
+              // Check spouse registration
+              const removedSpouseQ = query(collection(db, 'registrations'), where('parentEmails', 'array-contains', normalizedEmail));
+              const removedSpouseSnap = await getDocs(removedSpouseQ);
+              if (!removedSpouseSnap.empty) {
+                const spouseReg = removedSpouseSnap.docs[0];
+                const spouseEditors = spouseReg.data().editors || [];
+                if (!spouseEditors.includes(userCredential.user.uid)) {
+                  spouseEditors.push(userCredential.user.uid);
+                  await updateDoc(doc(db, 'registrations', spouseReg.id), { editors: spouseEditors });
+                }
+                window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
+                return;
+              }
+              window.location.href = import.meta.env.BASE_URL + 'registration.html';
+              return;
+            }
+            throw new Error('Your access has been revoked. Please contact admin@dragonswim.com.');
           }
 
           if (userRole === 'coach' || userRole === 'admin') {
