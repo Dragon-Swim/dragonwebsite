@@ -181,17 +181,6 @@ import{i as r,t as e}from"./i18n-DIN1ScE8.js";import{a as n,r as c}from"./footer
     </div>
   </section>
 
-  <!-- CTA Section -->
-  <section class="cta-section">
-    <div class="container text-center animate-on-scroll">
-      <h2 class="cta-title">${e("home_cta_title")}</h2>
-      <p class="cta-subtitle">${e("home_cta_subtitle")}</p>
-      <div class="cta-actions">
-        <a href="/registration.html" class="btn btn-primary btn-lg">${e("hero_cta")} →</a>
-      </div>
-    </div>
-  </section>
-
 `;c();const d={root:null,rootMargin:"0px",threshold:.15},p=new IntersectionObserver((s,t)=>{s.forEach(a=>{a.isIntersecting&&(a.target.classList.add("animate-visible"),t.unobserve(a.target))})},d);document.querySelectorAll(".animate-on-scroll").forEach(s=>{p.observe(s)});function i(s,t,a){return`
     <div class="card season-card" style="--season-accent: ${a}">
       <div class="season-emoji">${t}</div>
