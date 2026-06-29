@@ -28,12 +28,6 @@ app.innerHTML = `
         <div class="hero-badge badge badge-primary">🏊 Year-Round Competitive Swimming</div>
         <h1 class="hero-title">${t('hero_title')} <span class="text-gradient">Dragon Swim</span></h1>
         <p class="hero-subtitle">${t('hero_subtitle')}</p>
-        <div class="hero-actions">
-          <a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-gradient btn-lg">
-            ${t('hero_cta')} <span class="btn-arrow">→</span>
-          </a>
-          <a href="${import.meta.env.BASE_URL}signin.html" class="btn btn-outline btn-lg">Sign In</a>
-        </div>
       </div>
       <div class="hero-right">
         <div class="hero-float-grid">
