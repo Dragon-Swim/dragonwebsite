@@ -1,4 +1,4 @@
-import{i as r,t as e}from"./i18n-DIN1ScE8.js";import{a as n,r as c}from"./footer-Cg_RfItd.js";r();n();const l=document.getElementById("app");l.innerHTML=`
+import{i as r,t as e}from"./i18n-DIN1ScE8.js";import{a as n,r as c}from"./footer-BdAPnbv4.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -24,10 +24,6 @@ import{i as r,t as e}from"./i18n-DIN1ScE8.js";import{a as n,r as c}from"./footer
           <a href="/signin.html" class="hero-float-card hfc-3">
             <div class="hfc-icon">📅</div>
             <div class="hfc-label">Schedules</div>
-          </a>
-          <a href="/contact.html" class="hero-float-card hfc-4">
-            <div class="hfc-icon">💬</div>
-            <div class="hfc-label">Coach Chat</div>
           </a>
           <!-- Central dragon -->
           <div class="hero-central-icon">
@@ -198,7 +194,6 @@ import{i as r,t as e}from"./i18n-DIN1ScE8.js";import{a as n,r as c}from"./footer
       <p class="cta-subtitle">${e("home_cta_subtitle")}</p>
       <div class="cta-actions">
         <a href="/registration.html" class="btn btn-primary btn-lg">${e("hero_cta")} →</a>
-        <a href="/contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">${e("home_cta_coach")}</a>
       </div>
     </div>
   </section>
