@@ -28,6 +28,12 @@ export function renderFooter() {
             <li><a href="${import.meta.env.BASE_URL}#safesport">USA SafeSport Compliance</a></li>
           </ul>
         </div>
+        <div class="footer-section">
+          <h4 class="footer-heading">${t('footer_contact')}</h4>
+          <ul class="footer-list">
+            <li>${t('contact_email_address')}</li>
+          </ul>
+        </div>
       </div>
       <div class="footer-bottom">
         <p>${t('footer_rights')}</p>
