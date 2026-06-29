@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch } from '../utils/firebase.js';
+import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
 window.XLSX = XLSX;
 
