@@ -202,17 +202,6 @@ app.innerHTML = `
     </div>
   </section>
 
-  <!-- CTA Section -->
-  <section class="cta-section">
-    <div class="container text-center animate-on-scroll">
-      <h2 class="cta-title">${t('home_cta_title')}</h2>
-      <p class="cta-subtitle">${t('home_cta_subtitle')}</p>
-      <div class="cta-actions">
-        <a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-primary btn-lg">${t('hero_cta')} →</a>
-      </div>
-    </div>
-  </section>
-
 `;
 
 renderFooter();
