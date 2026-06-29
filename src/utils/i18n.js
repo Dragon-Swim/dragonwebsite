@@ -449,6 +449,24 @@ const translations = {
         admin_family_delete_confirm: 'Remove this family authorization? They will no longer be able to register.',
         admin_family_already_exists: 'This email is already authorized.',
 
+        // ── Admin — Family Excel Upload ──
+        admin_family_upload_btn: 'Upload Excel',
+        admin_family_upload_title: 'Import Families from Excel',
+        admin_family_upload_file: 'File',
+        admin_family_upload_summary: 'Found {total} rows. {new} new, {updated} updated, {conflict} conflicts, {skipped} skipped.',
+        admin_family_upload_conflicts_title: '⚠️ Conflicts — Please Fix',
+        admin_family_upload_conflict_hint: 'These rows have email matches but different names. Fix the Excel file and re-upload.',
+        admin_family_upload_no_conflicts: 'No conflicts detected. Ready to import.',
+        admin_family_upload_confirm: 'Import {count} Families',
+        admin_family_upload_cancel: 'Cancel',
+        admin_family_upload_success: 'Successfully imported {count} families.',
+        admin_family_upload_error: 'Failed to import. Please try again.',
+        admin_family_upload_parse_error: 'Could not parse the Excel file. Make sure it has "email" and "name" columns.',
+        admin_family_upload_empty: 'No data rows found in the file.',
+        admin_family_conflict_col_email: 'Email',
+        admin_family_conflict_col_excel_name: 'Name in Excel',
+        admin_family_conflict_col_existing_name: 'Name in System',
+
         // ── Sign In — Family Auth ──
         signup_unauthorized: 'This email is not authorized to register. Please contact the team administrator.',
         signup_unauthorized_google: 'Your Google account is not authorized to register. Please contact the team administrator.',

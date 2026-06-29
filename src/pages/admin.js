@@ -10,6 +10,9 @@ import '../styles/variables.css';
 import '../styles/global.css';
 import './admin.css';
 
+import * as XLSX from 'xlsx';
+window.XLSX = XLSX;
+
 import { initTheme } from '../components/theme-toggle.js';
 import { downloadAdminCSV, ADMIN_COLUMNS } from '../utils/csv.js';
 import { t } from '../utils/i18n.js';
@@ -166,6 +169,11 @@ function renderFamilyView() {
         <button type="submit" class="btn btn-primary" id="add-family-btn">${t('admin_family_add_btn')}</button>
         <p id="family-form-message" class="admin-form-message"></p>
       </form>
+      <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+        <p class="admin-hint">Or upload an Excel file (.xls/.xlsx) with columns: <strong>email</strong>, <strong>name</strong></p>
+        <button class="btn btn-outline btn-sm" id="family-upload-btn">📤 ${t('admin_family_upload_btn')}</button>
+        <p id="family-upload-message" class="admin-form-message"></p>
+      </div>
     </div>
 
     <div class="admin-panel" style="margin-top: 2rem;">
@@ -366,6 +374,18 @@ function bindEvents() {
     });
   }
 
+  // ── Family Excel Upload ──
+  const uploadBtn = document.getElementById('family-upload-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.xls,.xlsx';
+      fileInput.addEventListener('change', handleFamilyExcelUpload);
+      fileInput.click();
+    });
+  }
+
   // ── Live Family List ──
   if (currentTab === 'family') {
     const tbody = document.getElementById('family-table-body');
@@ -540,5 +560,333 @@ function bindEvents() {
         setTimeout(() => { msg.textContent = ''; msg.className = 'admin-form-message'; }, 3000);
       }
     });
+  }
+}
+
+// ══════════════════════════════════════════════
+//  Family Excel Upload — Core Functions
+// ══════════════════════════════════════════════
+
+/**
+ * Parse the selected Excel file, compare against existing families,
+ * and show the import modal with results.
+ */
+async function handleFamilyExcelUpload(event) {
+  const file = event.target.files?.[0];
+  event.target.remove();
+
+  if (!file) return;
+
+  const msgEl = document.getElementById('family-upload-message');
+  if (msgEl) { msgEl.textContent = ''; msgEl.className = 'admin-form-message'; }
+
+  const XLSX = window.XLSX;
+  if (!XLSX) {
+    if (msgEl) { msgEl.textContent = 'Excel parser not loaded. Please refresh the page.'; msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  // Parse Excel
+  let rows;
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  } catch (err) {
+    console.error('Excel parse error:', err);
+    if (msgEl) { msgEl.textContent = t('admin_family_upload_parse_error'); msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  if (!rows || rows.length < 2) {
+    if (msgEl) { msgEl.textContent = t('admin_family_upload_empty'); msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  // Find header row and column indices
+  const header = rows[0];
+  if (!header) {
+    if (msgEl) { msgEl.textContent = t('admin_family_upload_parse_error'); msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  const emailCol = header.findIndex(h => h && String(h).toLowerCase().trim() === 'email');
+  const nameCol = header.findIndex(h => h && String(h).toLowerCase().trim() === 'name');
+
+  if (emailCol === -1) {
+    if (msgEl) { msgEl.textContent = t('admin_family_upload_parse_error'); msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  // Parse data rows (skip header)
+  const parsedRows = [];
+  const seenEmails = new Set();
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) continue;
+
+    const email = row[emailCol] ? String(row[emailCol]).trim() : '';
+    const name = nameCol !== -1 && row[nameCol] ? String(row[nameCol]).trim() : '';
+
+    if (!email) continue;
+
+    // Basic email validation
+    if (!email.includes('@') || !email.includes('.')) {
+      parsedRows.push({ email, name, rowNum: i + 1, error: 'Invalid email format' });
+      continue;
+    }
+
+    // Duplicate within Excel
+    const emailLower = email.toLowerCase();
+    if (seenEmails.has(emailLower)) {
+      parsedRows.push({ email, name, rowNum: i + 1, error: 'Duplicate email in file' });
+      continue;
+    }
+    seenEmails.add(emailLower);
+
+    parsedRows.push({ email, name, rowNum: i + 1 });
+  }
+
+  if (parsedRows.length === 0) {
+    if (msgEl) { msgEl.textContent = t('admin_family_upload_empty'); msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  // Fetch existing families
+  let existingFamilies = [];
+  try {
+    const snap = await getDocs(collection(db, 'families'));
+    existingFamilies = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error('Error fetching families:', err);
+    if (msgEl) { msgEl.textContent = t('admin_family_upload_error'); msgEl.className = 'admin-form-message error'; }
+    return;
+  }
+
+  // Build a map for quick lookup (email lower → doc)
+  const existingMap = new Map();
+  for (const fam of existingFamilies) {
+    existingMap.set((fam.email || '').toLowerCase(), fam);
+  }
+
+  // Check conflicts
+  const results = checkFamilyConflicts(parsedRows, existingMap);
+
+  // Show modal
+  showFamilyImportModal(results, file.name);
+}
+
+/**
+ * Classify each Excel row against existing families.
+ * @param {Array} rows - Parsed Excel rows [{email, name, rowNum, error?}]
+ * @param {Map} existingMap - Map of email (lowercase) → family doc
+ * @returns {{new: Array, update: Array, conflict: Array, skip: Array, errors: Array}}
+ */
+function checkFamilyConflicts(rows, existingMap) {
+  const result = {
+    new: [],      // email not in system → can add
+    update: [],   // email exists, no name in system, has name in Excel → update name
+    conflict: [], // email exists, name differs → flag for review
+    skip: [],     // email exists, name matches → no-op
+    errors: [],   // parse errors (invalid email, duplicate, etc.)
+  };
+
+  for (const row of rows) {
+    if (row.error) {
+      result.errors.push(row);
+      continue;
+    }
+
+    const emailLower = row.email.toLowerCase();
+    const existing = existingMap.get(emailLower);
+
+    if (!existing) {
+      result.new.push(row);
+      continue;
+    }
+
+    const existingName = (existing.parentName || '').trim();
+    const excelName = (row.name || '').trim();
+
+    if (!excelName && !existingName) {
+      // Both have no name — skip
+      result.skip.push(row);
+    } else if (existingName.toLowerCase() === excelName.toLowerCase()) {
+      // Names match (case-insensitive) — skip
+      result.skip.push(row);
+    } else if (!existingName && excelName) {
+      // System has no name, Excel has name — update
+      result.update.push({ ...row, existingId: existing.id });
+    } else {
+      // Names differ — conflict
+      result.conflict.push({
+        ...row,
+        existingId: existing.id,
+        existingName: existingName,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Render the import results modal with summary counts, conflict table, and action buttons.
+ */
+function showFamilyImportModal(results, filename) {
+  const { new: newRows, update: updateRows, conflict: conflictRows, skip: skipRows, errors: errorRows } = results;
+  const total = newRows.length + updateRows.length + conflictRows.length + skipRows.length + errorRows.length;
+  const hasConflicts = conflictRows.length > 0;
+  const hasWork = (newRows.length + updateRows.length) > 0;
+
+  const escapeHtml = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  // Build status badge HTML for each category
+  const renderBadge = (label, cls) => `<span class="status-badge ${cls}">${label}</span>`;
+
+  // Build all-rows preview table (compact)
+  const allRows = [
+    ...newRows.map(r => ({ ...r, status: 'new' })),
+    ...updateRows.map(r => ({ ...r, status: 'updated' })),
+    ...conflictRows.map(r => ({ ...r, status: 'conflict' })),
+    ...skipRows.map(r => ({ ...r, status: 'skipped' })),
+    ...errorRows.map(r => ({ ...r, status: 'error' })),
+  ];
+
+  const previewTableHtml = allRows.length > 0 ? `
+    <div class="family-preview-table-wrapper">
+      <table class="family-preview-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Email</th>
+            <th>${t('admin_family_conflict_col_excel_name')}</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${allRows.map(r => `
+            <tr>
+              <td>${r.rowNum || '—'}</td>
+              <td>${escapeHtml(r.email)}</td>
+              <td>${escapeHtml(r.name || '—')}</td>
+              <td>${renderBadge(r.status, r.status)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
+  // Conflict details table (only when conflicts exist)
+  const conflictTableHtml = hasConflicts ? `
+    <div class="family-conflict-block">
+      <p class="family-conflict-title">${t('admin_family_upload_conflicts_title')}</p>
+      <p class="family-conflict-hint">${t('admin_family_upload_conflict_hint')}</p>
+      <div class="family-conflict-table-wrapper">
+        <table class="family-conflict-table">
+          <thead>
+            <tr>
+              <th>${t('admin_family_conflict_col_email')}</th>
+              <th>${t('admin_family_conflict_col_excel_name')}</th>
+              <th>${t('admin_family_conflict_col_existing_name')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${conflictRows.map(r => `
+              <tr>
+                <td>${escapeHtml(r.email)}</td>
+                <td>${escapeHtml(r.name || '—')}</td>
+                <td>${escapeHtml(r.existingName || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ` : '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal family-import-modal">
+      <h3 class="confirm-title">${t('admin_family_upload_title')}</h3>
+      <p class="family-import-filename">${t('admin_family_upload_file')}: <strong>${escapeHtml(filename)}</strong></p>
+
+      <div class="family-summary">
+        <span class="family-summary-item new">${t('admin_family_upload_summary', { total: String(total), new: String(newRows.length), updated: String(updateRows.length), conflict: String(conflictRows.length), skipped: String(skipRows.length) })}</span>
+        ${errorRows.length > 0 ? `<span class="family-summary-item conflict">⚠ ${errorRows.length} errors</span>` : ''}
+      </div>
+
+      ${conflictTableHtml}
+
+      ${hasConflicts
+        ? `<p class="confirm-warning" style="text-align: center;">${t('admin_family_upload_conflict_hint')}</p>`
+        : `<p style="text-align: center; color: #16A34A; font-weight: var(--fw-semibold); margin-bottom: 1rem;">✅ ${t('admin_family_upload_no_conflicts')}</p>`
+      }
+
+      ${previewTableHtml}
+
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="family-import-cancel">${t('admin_family_upload_cancel')}</button>
+        ${hasWork && !hasConflicts ? `<button class="btn btn-primary btn-sm" id="family-import-confirm">${t('admin_family_upload_confirm', { count: String(newRows.length + updateRows.length) })}</button>` : ''}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Event binding
+  overlay.querySelector('#family-import-cancel')?.addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#family-import-confirm')?.addEventListener('click', async () => {
+    overlay.remove();
+    await batchImportFamilies(results);
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+/**
+ * Batch-write new and updated families to Firestore.
+ */
+async function batchImportFamilies(results) {
+  const { new: newRows, update: updateRows } = results;
+  const total = newRows.length + updateRows.length;
+  const msgEl = document.getElementById('family-upload-message');
+
+  if (total === 0) return;
+
+  try {
+    // Add new families
+    for (const row of newRows) {
+      await addDoc(collection(db, 'families'), {
+        email: row.email,
+        parentName: row.name || null,
+        status: 'pending',
+        registeredUid: null,
+        createdBy: currentUser?.uid || null,
+        createdAt: new Date(),
+      });
+    }
+
+    // Update families with missing names
+    for (const row of updateRows) {
+      await updateDoc(doc(db, 'families', row.existingId), {
+        parentName: row.name,
+      });
+    }
+
+    if (msgEl) {
+      msgEl.textContent = t('admin_family_upload_success', { count: String(total) });
+      msgEl.className = 'admin-form-message success';
+    }
+  } catch (err) {
+    console.error('Batch import error:', err);
+    if (msgEl) {
+      msgEl.textContent = t('admin_family_upload_error');
+      msgEl.className = 'admin-form-message error';
+    }
   }
 }
