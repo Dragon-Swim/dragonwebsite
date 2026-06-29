@@ -7,12 +7,6 @@ import{i as r,t as e}from"./i18n-DIN1ScE8.js";import{a as n,r as c}from"./footer
         <div class="hero-badge badge badge-primary">🏊 Year-Round Competitive Swimming</div>
         <h1 class="hero-title">${e("hero_title")} <span class="text-gradient">Dragon Swim</span></h1>
         <p class="hero-subtitle">${e("hero_subtitle")}</p>
-        <div class="hero-actions">
-          <a href="/registration.html" class="btn btn-gradient btn-lg">
-            ${e("hero_cta")} <span class="btn-arrow">→</span>
-          </a>
-          <a href="/signin.html" class="btn btn-outline btn-lg">Sign In</a>
-        </div>
       </div>
       <div class="hero-right">
         <div class="hero-float-grid">
