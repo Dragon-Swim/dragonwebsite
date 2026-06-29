@@ -139,8 +139,6 @@ function initDataListeners() {
     console.error("Error listening to schedules:", error);
   });
 
-  fetchFamilyData();
-
   if (userRole === 'coach') {
     const qRegistrations = query(collection(db, "registrations"), orderBy("createdAt", "desc"));
     onSnapshot(qRegistrations, (snapshot) => {
@@ -169,30 +167,44 @@ async function fetchFamilyData() {
   if (snap.exists()) {
     familyDataId = snap.id;
     familyData = snap.data();
+    console.log('fetchFamilyData: found own registration', snap.id);
     return;
   }
 
   // Fallback: spouse access — search by email in parentEmails
   if (currentUser.email) {
-    const q = query(
-      collection(db, 'registrations'),
-      where('parentEmails', 'array-contains', currentUser.email.toLowerCase().trim())
-    );
-    const qSnap = await getDocs(q);
-    if (!qSnap.empty) {
-      const regDoc = qSnap.docs[0];
-      familyDataId = regDoc.id;
-      familyData = regDoc.data();
+    const searchEmail = currentUser.email.toLowerCase().trim();
+    console.log('fetchFamilyData: looking for spouse access with email:', searchEmail);
+    try {
+      const q = query(
+        collection(db, 'registrations'),
+        where('parentEmails', 'array-contains', searchEmail)
+      );
+      const qSnap = await getDocs(q);
+      console.log('fetchFamilyData: spouse query returned', qSnap.size, 'docs');
+      if (!qSnap.empty) {
+        const regDoc = qSnap.docs[0];
+        familyDataId = regDoc.id;
+        familyData = regDoc.data();
+        console.log('fetchFamilyData: found via spouse access', familyDataId, 'parentEmails:', familyData.parentEmails);
 
-      // Auto-add current user as editor for future access
-      const editors = familyData.editors || [];
-      if (!editors.includes(currentUser.uid)) {
-        editors.push(currentUser.uid);
-        await updateDoc(doc(db, 'registrations', familyDataId), { editors }).catch(() => {});
-        familyData.editors = editors;
+        // Auto-add current user as editor for future access
+        const editors = familyData.editors || [];
+        if (!editors.includes(currentUser.uid)) {
+          editors.push(currentUser.uid);
+          await updateDoc(doc(db, 'registrations', familyDataId), { editors }).catch((e) => {
+            console.error('fetchFamilyData: failed to add editor:', e);
+          });
+          familyData.editors = editors;
+        }
+        return;
       }
-      return;
+      console.warn('fetchFamilyData: no registration found for spouse email', searchEmail);
+    } catch (err) {
+      console.error('fetchFamilyData: spouse query failed:', err);
     }
+  } else {
+    console.warn('fetchFamilyData: currentUser.email is empty');
   }
 }
 
