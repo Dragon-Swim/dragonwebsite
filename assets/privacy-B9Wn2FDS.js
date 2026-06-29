@@ -20,7 +20,7 @@ import{i as e}from"./i18n-DIN1ScE8.js";import{a as r,r as t}from"./footer-BdAPnb
         <p>We retain your personal information for as long as your family is actively registered with the team. Upon request, you may review, update, or request deletion of your personal data by contacting us. Some records may be retained as required for compliance with USA Swimming membership obligations or other legal requirements.</p>
 
         <h2 style="font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin: 1.5rem 0 0.75rem;">6. Contact Us</h2>
-        <p>If you have any questions about this Privacy Policy or wish to exercise your data rights, please contact us through our <a href="contact.html" style="color: var(--color-primary);">Contact page</a>.</p>
+        <p>If you have any questions about this Privacy Policy or wish to exercise your data rights, please email us at <a href="mailto:dragonswim@outlook.com" style="color: var(--color-primary);">dragonswim@outlook.com</a>.</p>
 
         <p style="margin-top: 2rem; font-size: 0.875rem; color: var(--text-muted);"><em>Last updated: June 2026</em></p>
       </div>
