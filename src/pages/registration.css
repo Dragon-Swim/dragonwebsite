@@ -216,6 +216,13 @@
     }
 }
 
+/* Readonly inputs */
+input[readonly].form-input {
+    background: var(--bg-secondary);
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-4px); }
     to   { opacity: 1; transform: translateY(0); }

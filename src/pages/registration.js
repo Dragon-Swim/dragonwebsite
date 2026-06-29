@@ -64,7 +64,7 @@ function personFields(prefix, opts = {}) {
   `;
 }
 
-function parentSection() {
+function parentSection(email) {
   return `
     <div class="form-section">
       <h2 class="subsection-title">${t('reg_parent_title')}</h2>
@@ -76,7 +76,9 @@ function parentSection() {
         </div>
         <div class="form-group">
           <label class="form-label" for="parent-email">${t('reg_email')}</label>
-          <input class="form-input" type="email" id="parent-email" required />
+          <input class="form-input" type="email" id="parent-email" value="${email || ''}" readonly required
+            title="Email is linked to your sign-in account and cannot be changed here." />
+          <p class="reg-email-note" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Email is tied to your sign-in account. Contact admin@dragonswim.com if you need to change it.</p>
         </div>
       </div>
       <div class="form-group">
@@ -202,7 +204,7 @@ function render() {
         </div>
 
         <div class="reg-form-wrapper" id="reg-form-wrapper">
-          ${parentSection()}
+          ${parentSection(currentUser?.email || '')}
           ${swimmersSection()}
           ${emergencySection()}
 
@@ -328,8 +330,8 @@ function bindEvents() {
         createdAt: new Date()
       });
 
-      document.getElementById('reg-form-wrapper').querySelectorAll('.form-section, #reg-submit').forEach(el => el.style.display = 'none');
-      document.getElementById('reg-success').style.display = 'flex';
+      // User is already whitelisted — go straight to dashboard
+      window.location.href = import.meta.env.BASE_URL + 'dashboard.html';
     } catch (err) {
       console.error('Failed to submit registration:', err);
       alert('Failed to submit registration. Please try again.');

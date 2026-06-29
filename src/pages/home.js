@@ -46,10 +46,6 @@ app.innerHTML = `
             <div class="hfc-icon">📅</div>
             <div class="hfc-label">Schedules</div>
           </a>
-          <a href="${import.meta.env.BASE_URL}contact.html" class="hero-float-card hfc-4">
-            <div class="hfc-icon">💬</div>
-            <div class="hfc-label">Coach Chat</div>
-          </a>
           <!-- Central dragon -->
           <div class="hero-central-icon">
             <div class="hero-central-ring"></div>
@@ -219,7 +215,6 @@ app.innerHTML = `
       <p class="cta-subtitle">${t('home_cta_subtitle')}</p>
       <div class="cta-actions">
         <a href="${import.meta.env.BASE_URL}registration.html" class="btn btn-primary btn-lg">${t('hero_cta')} →</a>
-        <a href="${import.meta.env.BASE_URL}contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">${t('home_cta_coach')}</a>
       </div>
     </div>
   </section>

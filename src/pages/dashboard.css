@@ -870,6 +870,13 @@
     to { opacity: 1; }
 }
 
+/* Readonly inputs in profile edit */
+input[readonly].profile-edit-field {
+    background: var(--bg-secondary);
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
     .profile-grid {

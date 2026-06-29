@@ -259,9 +259,6 @@ function renderDashboard(user) {
               <span class="dash-nav-icon">⚙️</span> ${t('dash_sidebar_admin')}
             </a>
             ` : ''}
-            <a href="${import.meta.env.BASE_URL}contact.html" class="dash-nav-item" style="text-decoration: none;">
-              <span class="dash-nav-icon">💬</span> ${t('dash_sidebar_messages')}
-            </a>
             <button class="dash-nav-item" id="dash-theme-toggle">
               <span class="dash-nav-icon" id="sidebar-theme-icon">🌙</span> ${t('dash_sidebar_theme')}
             </button>
@@ -1711,7 +1708,9 @@ function renderProfile() {
             <div class="profile-field">
               <span class="profile-label">${t('dash_profile_email')}</span>
               <span class="profile-value profile-display" id="display-spouse-email">${spouse.email || '—'}</span>
-              <input class="form-input profile-input profile-edit-field" id="edit-spouse-email" value="${spouse.email || ''}" />
+              <input class="form-input profile-input profile-edit-field" id="edit-spouse-email" value="${spouse.email || ''}" readonly
+                title="Spouse email is used for login access and cannot be changed here." />
+              <p class="profile-edit-field" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Spouse email is tied to login access. Contact admin@dragonswim.com if you need to change it.</p>
             </div>
           </div>
         </div>
@@ -1860,7 +1859,6 @@ function renderSwimMeets() {
               <span>📍 ${m.location}</span>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-              ${userRole !== 'coach' && m.status === 'Open' ? `<button class="btn btn-primary btn-sm dash-register-btn">${t('dash_meets_register')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${m.name || ''}">${t('dash_meets_fee')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}" data-season="${m.season || currentSeason}">${t('dash_meets_edit')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
@@ -2668,13 +2666,6 @@ function bindEvents() {
   const sidebar = document.getElementById('dash-sidebar');
   hamburger?.addEventListener('click', () => {
     sidebar.classList.toggle('open');
-  });
-
-  // Register buttons
-  document.querySelectorAll('.dash-register-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      window.location.href = import.meta.env.BASE_URL + 'registration.html';
-    });
   });
 
   // Sign out button

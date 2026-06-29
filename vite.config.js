@@ -9,7 +9,6 @@ export default defineConfig({
                 main: resolve(__dirname, 'index.html'),
                 dashboard: resolve(__dirname, 'dashboard.html'),
                 registration: resolve(__dirname, 'registration.html'),
-                contact: resolve(__dirname, 'contact.html'),
                 signin: resolve(__dirname, 'signin.html'),
                 privacy: resolve(__dirname, 'privacy.html'),
                 terms: resolve(__dirname, 'terms.html'),
