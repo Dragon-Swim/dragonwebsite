@@ -29,6 +29,10 @@ let allRegistrations = [];
 
 const app = document.getElementById('app');
 
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ── Auth guard ──────────────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
@@ -50,8 +54,8 @@ onAuthStateChanged(auth, async (user) => {
   const qReg = query(collection(db, 'registrations'), orderBy('createdAt', 'desc'));
   onSnapshot(qReg, (snapshot) => {
     allRegistrations = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Re-render if export tab is active (refresh swimmer count)
-    if (currentTab === 'export') render();
+    // Re-render if export or editreg tab is active
+    if (currentTab === 'export' || currentTab === 'editreg') render();
   });
 
   render();
@@ -75,6 +79,9 @@ function render() {
           <button class="admin-nav-item ${currentTab === 'export' ? 'active' : ''}" data-tab="export">
             📥 Export Data
           </button>
+          <button class="admin-nav-item ${currentTab === 'editreg' ? 'active' : ''}" data-tab="editreg">
+            ✏️ Edit Registrations
+          </button>
         </nav>
         <div class="admin-sidebar-footer">
           <a href="${import.meta.env.BASE_URL}dashboard.html" class="admin-nav-item">← Back to Dashboard</a>
@@ -84,10 +91,10 @@ function render() {
 
       <main class="admin-main">
         <header class="admin-topbar">
-          <h1 class="admin-page-title">${currentTab === 'coach' ? 'Add Coach' : currentTab === 'family' ? 'Add Family' : 'Export Data'}</h1>
+          <h1 class="admin-page-title">${currentTab === 'coach' ? 'Add Coach' : currentTab === 'family' ? 'Add Family' : currentTab === 'editreg' ? 'Edit Registrations' : 'Export Data'}</h1>
         </header>
         <div class="admin-content">
-          ${currentTab === 'coach' ? renderCoachView() : currentTab === 'family' ? renderFamilyView() : renderExportView()}
+          ${currentTab === 'coach' ? renderCoachView() : currentTab === 'family' ? renderFamilyView() : currentTab === 'editreg' ? renderEditRegView() : renderExportView()}
         </div>
       </main>
     </div>
@@ -256,6 +263,345 @@ function renderExportView() {
       <p id="export-message" class="admin-form-message" style="margin-top: 1rem;"></p>
     </div>
   `;
+}
+
+// ── Edit Registrations View ────────────────────────────────────
+function renderEditRegView() {
+  const registrations = allRegistrations;
+  return `
+    <div class="admin-panel" style="max-width: 100%;">
+      <h3>${t('admin_edit_tab')}</h3>
+      <p class="admin-hint">Click a family row to view and edit their registration data.</p>
+      <input type="text" class="edit-reg-search" id="edit-reg-search" placeholder="${t('admin_edit_search')}" />
+      <div class="edit-reg-table-wrapper">
+        <table class="edit-reg-table">
+          <thead>
+            <tr>
+              <th>Parent Name</th>
+              <th>Email</th>
+              <th>Swimmers</th>
+              <th>Status</th>
+              <th>Registered</th>
+              <th>Last Edited</th>
+            </tr>
+          </thead>
+          <tbody id="edit-reg-table-body">
+            ${registrations.length === 0
+              ? `<tr><td colspan="6" class="admin-empty">${t('admin_edit_no_results')}</td></tr>`
+              : registrations.map(reg => {
+                const parent = reg.parent || {};
+                const parentName = [parent.firstName, parent.lastName].filter(Boolean).join(' ') || '—';
+                const activeSwimmers = (reg.swimmers || []).filter(s => !s.deleted);
+                const statusBadge = activeSwimmers.length > 0 ? '<span class="admin-status admin-status-active">active</span>' : '<span class="admin-status admin-status-pending">pending</span>';
+                const regDate = reg.createdAt?.toDate?.() || new Date(reg.createdAt || 0);
+                const editedDate = reg.lastEditedAt?.toDate?.() || (reg.lastEditedAt ? new Date(reg.lastEditedAt) : null);
+                return `
+                  <tr data-reg-id="${escapeHtml(reg.id || '')}" class="edit-reg-row">
+                    <td><strong>${escapeHtml(parentName)}</strong></td>
+                    <td>${escapeHtml(parent.email || '—')}</td>
+                    <td>${activeSwimmers.length}</td>
+                    <td>${statusBadge}</td>
+                    <td>${regDate.toLocaleDateString()}</td>
+                    <td>${editedDate ? editedDate.toLocaleDateString() : '—'}</td>
+                  </tr>
+                `;
+              }).join('')
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ── Edit Registration Modal ─────────────────────────────────────
+function showEditRegModal(reg) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'edit-reg-overlay';
+
+  const parent = reg.parent || {};
+  const spouse = reg.spouse || null;
+  const swimmers = (reg.swimmers || []).filter(s => !s.deleted);
+  const emergency = reg.emergencyContact || {};
+  const notes = reg.notes || '';
+
+  const genderSelect = (selected, id) => `
+    <select class="form-input" id="${id}">
+      <option value="male" ${(selected || '').toLowerCase() === 'male' ? 'selected' : ''}>${t('admin_edit_gender_male')}</option>
+      <option value="female" ${(selected || '').toLowerCase() === 'female' ? 'selected' : ''}>${t('admin_edit_gender_female')}</option>
+    </select>
+  `;
+
+  const renderPersonFields = (prefix, data) => `
+    <div class="edit-reg-grid">
+      <div class="edit-reg-field">
+        <label>${t('admin_edit_field_firstName')}</label>
+        <input type="text" id="${prefix}-firstName" value="${escapeHtml(data.firstName || '')}" />
+      </div>
+      <div class="edit-reg-field">
+        <label>${t('admin_edit_field_lastName')}</label>
+        <input type="text" id="${prefix}-lastName" value="${escapeHtml(data.lastName || '')}" />
+      </div>
+      <div class="edit-reg-field">
+        <label>${t('admin_edit_field_middleName')}</label>
+        <input type="text" id="${prefix}-middleName" value="${escapeHtml(data.middleName || '')}" />
+      </div>
+      <div class="edit-reg-field">
+        <label>${t('admin_edit_field_gender')}</label>
+        ${genderSelect(data.gender, `${prefix}-gender`)}
+      </div>
+      <div class="edit-reg-field">
+        <label>${t('admin_edit_field_email')}</label>
+        <input type="email" id="${prefix}-email" value="${escapeHtml(data.email || '')}" />
+      </div>
+      <div class="edit-reg-field">
+        <label>${t('admin_edit_field_phone')}</label>
+        <input type="text" id="${prefix}-phone" value="${escapeHtml(data.phone || '')}" />
+      </div>
+      ${prefix === 'parent' ? `
+        <div class="edit-reg-field full-width">
+          <label>${t('admin_edit_field_address')}</label>
+          <input type="text" id="${prefix}-address" value="${escapeHtml(data.address || '')}" />
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  const renderSwimmerCard = (s, idx) => `
+    <div class="edit-reg-swimmer-card" data-swimmer-idx="${idx}">
+      <div class="edit-reg-swimmer-header">
+        <span class="edit-reg-swimmer-label">Swimmer ${idx + 1}</span>
+        <button class="edit-reg-swimmer-remove" data-remove-swimmer="${idx}">${t('admin_edit_swimmer_remove')}</button>
+      </div>
+      <div class="edit-reg-swimmer-fields">
+        <div class="edit-reg-field">
+          <label>${t('admin_edit_field_firstName')}</label>
+          <input type="text" id="swimmer-${idx}-firstName" value="${escapeHtml(s.firstName || '')}" />
+        </div>
+        <div class="edit-reg-field">
+          <label>${t('admin_edit_field_lastName')}</label>
+          <input type="text" id="swimmer-${idx}-lastName" value="${escapeHtml(s.lastName || '')}" />
+        </div>
+        <div class="edit-reg-field">
+          <label>${t('admin_edit_field_middleName')}</label>
+          <input type="text" id="swimmer-${idx}-middleName" value="${escapeHtml(s.middleName || '')}" />
+        </div>
+        <div class="edit-reg-field">
+          <label>${t('admin_edit_field_gender')}</label>
+          ${genderSelect(s.gender, `swimmer-${idx}-gender`)}
+        </div>
+        <div class="edit-reg-field">
+          <label>${t('admin_edit_field_dob')}</label>
+          <input type="date" id="swimmer-${idx}-dob" value="${escapeHtml(s.dob || '')}" />
+        </div>
+        <div class="edit-reg-field">
+          <label>${t('admin_edit_field_usaSwimmingId')}</label>
+          <input type="text" id="swimmer-${idx}-usaSwimmingId" value="${escapeHtml(s.usaSwimmingId || '')}" />
+        </div>
+      </div>
+    </div>
+  `;
+
+  overlay.innerHTML = `
+    <div class="confirm-modal edit-reg-modal">
+      <h3 class="confirm-title">${t('admin_edit_title')}</h3>
+      <div class="edit-reg-body">
+        <!-- Parent -->
+        <div class="edit-reg-section">
+          <p class="edit-reg-section-title">${t('admin_edit_section_parent')}</p>
+          ${renderPersonFields('parent', parent)}
+        </div>
+
+        <!-- Spouse -->
+        <div class="edit-reg-section">
+          <p class="edit-reg-section-title">${t('admin_edit_section_spouse')}</p>
+          ${spouse ? renderPersonFields('spouse', spouse) : `<p class="edit-reg-no-spouse">${t('admin_edit_no_spouse')}</p>`}
+          <!-- Always render hidden spouse fields so admin can add spouse -->
+          <div id="spouse-fields" style="${spouse ? '' : 'display:none;'}">
+            ${spouse ? '' : renderPersonFields('spouse', {})}
+          </div>
+          ${!spouse ? `<button class="edit-reg-add-swimmer-btn" id="add-spouse-btn" style="width:auto;">+ Add Spouse</button>` : ''}
+        </div>
+
+        <!-- Swimmers -->
+        <div class="edit-reg-section">
+          <p class="edit-reg-section-title">${t('admin_edit_section_swimmers')}</p>
+          <div class="edit-reg-swimmers" id="swimmers-container">
+            ${swimmers.map((s, i) => renderSwimmerCard(s, i)).join('')}
+          </div>
+          <button class="edit-reg-add-swimmer-btn" id="add-swimmer-btn">${t('admin_edit_swimmer_add')}</button>
+        </div>
+
+        <!-- Emergency Contact -->
+        <div class="edit-reg-section">
+          <p class="edit-reg-section-title">${t('admin_edit_section_emergency')}</p>
+          <div class="edit-reg-grid">
+            <div class="edit-reg-field">
+              <label>${t('admin_edit_field_firstName')}</label>
+              <input type="text" id="emergency-name" value="${escapeHtml(emergency.name || '')}" />
+            </div>
+            <div class="edit-reg-field">
+              <label>${t('admin_edit_field_phone')}</label>
+              <input type="text" id="emergency-phone" value="${escapeHtml(emergency.phone || '')}" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="edit-reg-section">
+          <p class="edit-reg-section-title">${t('admin_edit_section_notes')}</p>
+          <div class="edit-reg-field full-width">
+            <textarea id="edit-notes" placeholder="Internal notes...">${escapeHtml(notes)}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="edit-reg-cancel">${t('admin_edit_cancel_btn')}</button>
+        <button class="btn btn-primary btn-sm" id="edit-reg-save">${t('admin_edit_save_btn')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Track swimmer count for dynamic add
+  let swimmerCount = swimmers.length;
+  // Track spouse visibility
+  let hasSpouse = !!spouse;
+
+  // ── Event Binding ──
+
+  // Cancel
+  overlay.querySelector('#edit-reg-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // Add spouse
+  overlay.querySelector('#add-spouse-btn')?.addEventListener('click', () => {
+    const container = document.getElementById('spouse-fields');
+    if (container) {
+      container.style.display = 'block';
+      container.innerHTML = renderPersonFields('spouse', {});
+      hasSpouse = true;
+    }
+    const btn = overlay.querySelector('#add-spouse-btn');
+    if (btn) btn.remove();
+  });
+
+  // Remove swimmer
+  overlay.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('[data-remove-swimmer]');
+    if (!removeBtn) return;
+    const card = removeBtn.closest('.edit-reg-swimmer-card');
+    if (card) {
+      card.style.display = 'none';
+      card.dataset.removed = 'true';
+    }
+  });
+
+  // Add swimmer
+  overlay.querySelector('#add-swimmer-btn')?.addEventListener('click', () => {
+    const container = document.getElementById('swimmers-container');
+    const newSwimmer = { firstName: '', lastName: '', middleName: '', gender: '', dob: '', usaSwimmingId: '' };
+    const div = document.createElement('div');
+    div.innerHTML = renderSwimmerCard(newSwimmer, swimmerCount);
+    container.appendChild(div.firstElementChild);
+    swimmerCount++;
+  });
+
+  // Save
+  overlay.querySelector('#edit-reg-save').addEventListener('click', async () => {
+    await saveEditRegistration(reg.id, overlay);
+    overlay.remove();
+    render();
+  });
+}
+
+// ── Save Registration Edits ─────────────────────────────────────
+async function saveEditRegistration(regId, overlay) {
+  const getVal = (id) => overlay.querySelector('#' + id)?.value || '';
+
+  // Build parent object
+  const parent = {
+    firstName: getVal('parent-firstName'),
+    lastName: getVal('parent-lastName'),
+    middleName: getVal('parent-middleName') || null,
+    gender: getVal('parent-gender'),
+    email: getVal('parent-email'),
+    phone: getVal('parent-phone'),
+    address: getVal('parent-address'),
+  };
+
+  // Build spouse object
+  const spouseFirstName = getVal('spouse-firstName');
+  let spouse = null;
+  if (spouseFirstName || getVal('spouse-lastName') || getVal('spouse-email')) {
+    spouse = {
+      firstName: spouseFirstName,
+      lastName: getVal('spouse-lastName'),
+      middleName: getVal('spouse-middleName') || null,
+      gender: getVal('spouse-gender') || null,
+      email: getVal('spouse-email') || null,
+      phone: getVal('spouse-phone') || null,
+    };
+  }
+
+  // Build swimmers array (skip removed cards)
+  const swimmers = [];
+  const swimmerCards = overlay.querySelectorAll('.edit-reg-swimmer-card');
+  swimmerCards.forEach(card => {
+    if (card.dataset.removed === 'true') return;
+    const idx = card.dataset.swimmerIdx;
+    swimmers.push({
+      firstName: getVal(`swimmer-${idx}-firstName`),
+      lastName: getVal(`swimmer-${idx}-lastName`),
+      middleName: getVal(`swimmer-${idx}-middleName`) || null,
+      gender: getVal(`swimmer-${idx}-gender`),
+      dob: getVal(`swimmer-${idx}-dob`) || null,
+      usaSwimmingId: getVal(`swimmer-${idx}-usaSwimmingId`) || null,
+    });
+  });
+
+  // Build emergency contact
+  const emergencyContact = {
+    name: getVal('emergency-name'),
+    phone: getVal('emergency-phone'),
+  };
+
+  // Build parentEmails array
+  const parentEmails = [parent.email];
+  if (spouse && spouse.email) {
+    const spouseEmail = spouse.email.toLowerCase().trim();
+    if (spouseEmail && !parentEmails.includes(spouseEmail)) {
+      parentEmails.push(spouseEmail);
+    }
+  }
+
+  const updateData = {
+    parent,
+    spouse,
+    swimmers,
+    emergencyContact,
+    notes: getVal('edit-notes') || null,
+    parentEmails,
+    lastEditedBy: currentUser?.email || 'unknown',
+    lastEditedAt: new Date(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'registrations', regId), updateData);
+    const msgEl = document.getElementById('family-upload-message');
+    if (msgEl) {
+      msgEl.textContent = t('admin_edit_save_success');
+      msgEl.className = 'admin-form-message success';
+      setTimeout(() => { msgEl.textContent = ''; msgEl.className = 'admin-form-message'; }, 3000);
+    }
+  } catch (err) {
+    console.error('Error saving registration:', err);
+    alert(t('admin_edit_save_error') + ': ' + err.message);
+  }
 }
 
 // ── Events ──────────────────────────────────────────────────────
@@ -561,6 +907,30 @@ function bindEvents() {
       }
     });
   }
+
+  // Edit Registrations tab — search filter and row clicks
+  if (currentTab === 'editreg') {
+    const searchInput = document.getElementById('edit-reg-search');
+    const tbody = document.getElementById('edit-reg-table-body');
+
+    if (searchInput && tbody) {
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase().trim();
+        tbody.querySelectorAll('.edit-reg-row').forEach(row => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = query === '' || text.includes(query) ? '' : 'none';
+        });
+      });
+
+      tbody.querySelectorAll('.edit-reg-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const regId = row.dataset.regId;
+          const reg = allRegistrations.find(r => r.id === regId);
+          if (reg) showEditRegModal(reg);
+        });
+      });
+    }
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -740,8 +1110,6 @@ function showFamilyImportModal(results, filename) {
   const total = newRows.length + updateRows.length + conflictRows.length + skipRows.length + errorRows.length;
   const hasConflicts = conflictRows.length > 0;
   const hasWork = (newRows.length + updateRows.length) > 0;
-
-  const escapeHtml = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   // Build status badge HTML for each category
   const renderBadge = (label, cls) => `<span class="status-badge ${cls}">${label}</span>`;

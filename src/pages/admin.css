@@ -489,3 +489,218 @@
     background: rgba(220, 38, 38, 0.12);
     color: #DC2626;
 }
+
+/* ── Edit Registration Modal ── */
+.edit-reg-modal {
+    max-width: 840px;
+    width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.edit-reg-body {
+    overflow-y: auto;
+    flex: 1;
+    margin-bottom: var(--space-md);
+}
+
+.edit-reg-section {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.edit-reg-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.edit-reg-section-title {
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.edit-reg-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.edit-reg-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.edit-reg-field.full-width {
+    grid-column: 1 / -1;
+}
+
+.edit-reg-field label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    font-weight: var(--fw-medium);
+}
+
+.edit-reg-field input,
+.edit-reg-field select,
+.edit-reg-field textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-family: inherit;
+    transition: border-color var(--transition-fast);
+}
+
+.edit-reg-field input:focus,
+.edit-reg-field select:focus,
+.edit-reg-field textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.15);
+}
+
+.edit-reg-field textarea {
+    min-height: 60px;
+    resize: vertical;
+}
+
+.edit-reg-no-spouse {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 0.5rem;
+}
+
+/* ── Swimmer Cards ── */
+.edit-reg-swimmers {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.edit-reg-swimmer-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+}
+
+.edit-reg-swimmer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.edit-reg-swimmer-label {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    color: var(--text-primary);
+}
+
+.edit-reg-swimmer-remove {
+    font-size: var(--fs-xs);
+    background: none;
+    border: 1px solid var(--color-accent);
+    color: var(--color-accent);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.edit-reg-swimmer-remove:hover {
+    background: var(--color-accent);
+    color: white;
+}
+
+.edit-reg-swimmer-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+}
+
+/* ── Edit Registration Table ── */
+.edit-reg-table-wrapper {
+    overflow-x: auto;
+    margin-top: 0.5rem;
+}
+
+.edit-reg-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+}
+
+.edit-reg-table th {
+    padding: 0.75rem 1rem;
+    color: var(--text-muted);
+    font-weight: var(--fw-semibold);
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: var(--fs-xs);
+    text-align: left;
+}
+
+.edit-reg-table td {
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.edit-reg-table tbody tr {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.edit-reg-table tbody tr:hover {
+    background: rgba(245, 197, 24, 0.08);
+}
+
+.edit-reg-search {
+    width: 100%;
+    max-width: 400px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    margin-bottom: 1rem;
+}
+
+.edit-reg-search:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.15);
+}
+
+.edit-reg-add-swimmer-btn {
+    margin-top: 0.5rem;
+    font-size: var(--fs-xs);
+    background: none;
+    border: 1px dashed var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    width: 100%;
+    transition: all var(--transition-fast);
+}
+
+.edit-reg-add-swimmer-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: rgba(245, 197, 24, 0.04);
+}
