@@ -1,4 +1,4 @@
-import{i as e}from"./i18n-C1hpdw3r.js";import{a as t,r as i}from"./footer-BsZ6FkZw.js";e();t();const r=document.getElementById("app");r.innerHTML=`
+import{i as e}from"./i18n-CRIkWtj0.js";import{a as t,r as i}from"./footer-CudQORaQ.js";e();t();const r=document.getElementById("app");r.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); align-content: center;">
     <div class="container" style="max-width: 800px;">
       <h1 class="section-title">Terms & Conditions</h1>
@@ -29,7 +29,7 @@ import{i as e}from"./i18n-C1hpdw3r.js";import{a as t,r as i}from"./footer-BsZ6Fk
         <p>This website is provided for team communication, registration management, and information sharing. You agree not to misuse the website, including attempting unauthorized access, uploading malicious content, or scraping member data. We reserve the right to suspend or terminate website access for violations of these terms.</p>
 
         <h2 style="font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin: 1.5rem 0 0.75rem;">9. Contact</h2>
-        <p>For questions about these Terms &amp; Conditions, please reach out through our <a href="contact.html" style="color: var(--color-primary);">Contact page</a>.</p>
+        <p>For questions about these Terms &amp; Conditions, please email us at <a href="mailto:dragonswim@outlook.com" style="color: var(--color-primary);">dragonswim@outlook.com</a>.</p>
 
         <p style="margin-top: 2rem; font-size: 0.875rem; color: var(--text-muted);"><em>Last updated: June 2026</em></p>
       </div>

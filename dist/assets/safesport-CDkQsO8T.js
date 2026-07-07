@@ -1,19 +1,4 @@
-import '../styles/reset.css';
-import '../styles/variables.css';
-import '../styles/global.css';
-import '../styles/navbar.css';
-import '../styles/footer.css';
-import './safesport.css';
-
-import { initTheme } from '../components/theme-toggle.js';
-import { renderNavbar } from '../components/navbar.js';
-import { renderFooter } from '../components/footer.js';
-
-initTheme();
-renderNavbar();
-
-const app = document.getElementById('app');
-app.innerHTML = `
+import{i as e}from"./i18n-CRIkWtj0.js";import{a as r,r as a}from"./footer-CudQORaQ.js";e();r();const t=document.getElementById("app");t.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); align-content: center;">
     <div class="container" style="max-width: 800px;">
       <h1 class="section-title">Safe Sport</h1>
@@ -38,6 +23,4 @@ app.innerHTML = `
       </div>
     </div>
   </section>
-`;
-
-renderFooter();
+`;a();

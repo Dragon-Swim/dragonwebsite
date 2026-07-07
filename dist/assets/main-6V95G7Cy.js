@@ -1,4 +1,4 @@
-import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer-BsZ6FkZw.js";r();n();const l=document.getElementById("app");l.innerHTML=`
+import{i as r,t as e}from"./i18n-CRIkWtj0.js";import{a as n,r as c}from"./footer-CudQORaQ.js";r();n();const l=document.getElementById("app");l.innerHTML=`
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -7,12 +7,6 @@ import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer
         <div class="hero-badge badge badge-primary">🏊 Year-Round Competitive Swimming</div>
         <h1 class="hero-title">${e("hero_title")} <span class="text-gradient">Dragon Swim</span></h1>
         <p class="hero-subtitle">${e("hero_subtitle")}</p>
-        <div class="hero-actions">
-          <a href="/registration.html" class="btn btn-gradient btn-lg">
-            ${e("hero_cta")} <span class="btn-arrow">→</span>
-          </a>
-          <a href="/signin.html" class="btn btn-outline btn-lg">Sign In</a>
-        </div>
       </div>
       <div class="hero-right">
         <div class="hero-float-grid">
@@ -24,10 +18,6 @@ import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer
           <a href="/signin.html" class="hero-float-card hfc-3">
             <div class="hfc-icon">📅</div>
             <div class="hfc-label">Schedules</div>
-          </a>
-          <a href="/contact.html" class="hero-float-card hfc-4">
-            <div class="hfc-icon">💬</div>
-            <div class="hfc-label">Coach Chat</div>
           </a>
           <!-- Central dragon -->
           <div class="hero-central-icon">
@@ -187,18 +177,6 @@ import{i as r,t as e}from"./i18n-C1hpdw3r.js";import{a as n,r as c}from"./footer
             <span class="safesport-link-desc">Free SafeSport training courses for athletes</span>
           </a>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA Section -->
-  <section class="cta-section">
-    <div class="container text-center animate-on-scroll">
-      <h2 class="cta-title">${e("home_cta_title")}</h2>
-      <p class="cta-subtitle">${e("home_cta_subtitle")}</p>
-      <div class="cta-actions">
-        <a href="/registration.html" class="btn btn-primary btn-lg">${e("hero_cta")} →</a>
-        <a href="/contact.html" class="btn btn-outline btn-lg" style="border-color: #555; color: #ccc;">${e("home_cta_coach")}</a>
       </div>
     </div>
   </section>

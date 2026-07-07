@@ -21,6 +21,7 @@ export function renderNavbar() {
       </a>
 
       <div class="nav-links" id="nav-links">
+        <a href="${import.meta.env.BASE_URL}safesport.html" class="nav-link ${isActive(import.meta.env.BASE_URL + 'safesport.html')}">${t('nav_safesport')}</a>
         <a href="${import.meta.env.BASE_URL}" class="nav-link ${isActive(import.meta.env.BASE_URL)}">${t('nav_home')}</a>
         <a href="${import.meta.env.BASE_URL}dashboard.html" class="nav-link ${isActive(import.meta.env.BASE_URL + 'dashboard.html')}">Dashboard</a>
         <a href="${import.meta.env.BASE_URL}signin.html?mode=signup" class="nav-link ${isActive(import.meta.env.BASE_URL + 'registration.html') || isActive(import.meta.env.BASE_URL + 'signin.html')}">${t('nav_registration')}</a>

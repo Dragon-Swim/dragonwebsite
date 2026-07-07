@@ -2,29 +2,31 @@
    SafeSport Page Styles
    =========================================== */
 
-.safesport-link {
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-md) var(--space-lg);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    text-decoration: none;
-    transition: border-color var(--transition-fast), background var(--transition-fast);
+.safesport-section {
+    margin-bottom: var(--space-xl);
+    padding-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
 }
 
-.safesport-link:hover {
-    border-color: var(--color-primary);
-    background: var(--bg-secondary);
+.safesport-section:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
 }
 
-.safesport-link-title {
-    font-size: var(--fs-md);
+.safesport-heading {
+    font-size: var(--fs-lg);
     font-weight: var(--fw-semibold);
-    color: var(--color-primary);
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
 }
 
-.safesport-link-desc {
-    font-size: var(--fs-sm);
-    color: var(--text-muted);
-    margin-top: 2px;
+.safesport-section a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.safesport-section a:hover {
+    color: var(--color-primary-hover);
 }

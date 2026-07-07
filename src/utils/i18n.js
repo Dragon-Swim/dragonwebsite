@@ -7,6 +7,7 @@
 const translations = {
     en: {
         // Navigation
+        nav_safesport: 'Safe Sport',
         nav_home: 'Home',
         nav_registration: 'Registration',
         nav_contact: 'Contact',
