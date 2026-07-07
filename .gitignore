@@ -1,0 +1,14 @@
+# ⛔ NEVER COMMIT — Secrets (irreplaceable if lost)
+.env.local
+.env
+credentials.json
+token.json
+serviceAccountKey.json
+
+# ⛔ NEVER DELETE — Session continuity
+.tmp/
+
+# Build / dependency cruft — keep out of gh-pages
+node_modules/
+.vite/
+dist/
