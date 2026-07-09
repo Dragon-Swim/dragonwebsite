@@ -48,7 +48,7 @@ app.innerHTML = `
 
         <div class="safesport-subsection">
           <h3 class="safesport-heading">Safe Sport Coordinator</h3>
-          <p>Andrea Luo — <a href="mailto:luotexas@gmail.com">luotexas@gmail.com</a></p>
+          <p>Keke Chen — <a href="mailto:chuech@gmail.com">chuech@gmail.com</a></p>
         </div>
 
         <div class="safesport-subsection">
