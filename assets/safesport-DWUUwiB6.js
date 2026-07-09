@@ -1,4 +1,4 @@
-import{i as e}from"./i18n-CRIkWtj0.js";import{a as s,r as o}from"./footer-CudQORaQ.js";e();s();const t=document.getElementById("app");t.innerHTML=`
+import{i as e}from"./i18n-CRIkWtj0.js";import{a as s,r as t}from"./footer-CudQORaQ.js";e();s();const o=document.getElementById("app");o.innerHTML=`
   <section class="section safesport-page">
     <div class="container safesport-container">
       <h1 class="section-title">Safe Sport</h1>
@@ -33,7 +33,7 @@ import{i as e}from"./i18n-CRIkWtj0.js";import{a as s,r as o}from"./footer-CudQOR
 
         <div class="safesport-subsection">
           <h3 class="safesport-heading">Safe Sport Coordinator</h3>
-          <p>Andrea Luo — <a href="mailto:luotexas@gmail.com">luotexas@gmail.com</a></p>
+          <p>Keke Chen — <a href="mailto:chuech@gmail.com">chuech@gmail.com</a></p>
         </div>
 
         <div class="safesport-subsection">
@@ -60,4 +60,4 @@ import{i as e}from"./i18n-CRIkWtj0.js";import{a as s,r as o}from"./footer-CudQOR
 
     </div>
   </section>
-`;o();
+`;t();
