@@ -62,7 +62,11 @@ const isLocalhost =
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1";
 
-if (isLocalhost && import.meta.env.DEV) {
+// PHASE 0 TEST: 临时注释模拟器连接，连生产 Firestore 测试
+// TODO: Phase 0 完成后恢复
+const PHASE0_SKIP_EMULATOR = true;
+
+if (isLocalhost && import.meta.env.DEV && !PHASE0_SKIP_EMULATOR) {
     // Auth 模拟器 — 端口与 firebase.json 中保持一致
     connectAuthEmulator(auth, "http://127.0.0.1:9099");
 
@@ -72,6 +76,10 @@ if (isLocalhost && import.meta.env.DEV) {
     console.log("[Firebase] 已连接到本地模拟器");
     console.log("[Firebase]   Auth:      http://127.0.0.1:9099");
     console.log("[Firebase]   Firestore: http://127.0.0.1:8080");
+}
+
+if (PHASE0_SKIP_EMULATOR) {
+    console.log("[Firebase] Phase 0: 跳过模拟器，直连生产环境");
 }
 
 // ============================================================

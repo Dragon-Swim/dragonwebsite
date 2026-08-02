@@ -17,4 +17,16 @@ export default defineConfig({
             },
         },
     },
+    server: {
+        proxy: {
+            '/usas-api': {
+                target: 'https://times-api.usaswimming.org',
+                changeOrigin: true,
+                secure: false,
+                rewrite: (path) => path.replace(/^\/usas-api/, ''),
+                // Don't add X-Forwarded headers — some APIs reject them
+                xfwd: false,
+            },
+        },
+    },
 });

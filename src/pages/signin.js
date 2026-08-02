@@ -462,7 +462,9 @@ function bindEvents() {
       }
 
       if (!whitelistDoc) {
-        // Not authorized — sign out and show error
+        // Not authorized — delete the Auth account (it was auto-created by popup),
+        // then sign out. Without this, Firebase Auth keeps orphaned accounts.
+        try { await result.user.delete(); } catch (e) { /* best effort */ }
         await signOut(auth);
         throw new Error(t('signup_unauthorized_google'));
       }

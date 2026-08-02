@@ -10,7 +10,7 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
+import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
 window.XLSX = XLSX;
 
@@ -97,6 +97,11 @@ function initApp() {
       if (!isInitialized) {
         console.log("Dashboard: Initializing data listeners...");
         initDataListeners();
+        if (userRole === 'coach') {
+          loadSwimApiCredentials().then(() => {
+            console.log('Dashboard: Swim API credentials loaded:', !!swimApiCredentials);
+          });
+        }
         isInitialized = true;
         refreshUI();
       } else {
@@ -348,6 +353,9 @@ function renderCoachDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
               <span class="dash-nav-icon">⏱️</span> ${t('dash_coach_schedule_label')}
             </button>
+            <button class="dash-nav-item ${currentTab === 'results' ? 'active' : ''}" data-tab="results">
+              <span class="dash-nav-icon">🏊</span> Swim Times
+            </button>
             ${dbRole === 'admin' ? `
             <button class="dash-nav-item ${currentTab === 'feesummary' ? 'active' : ''}" data-tab="feesummary">
               <span class="dash-nav-icon">💰</span> ${t('dash_coach_fee_summary_label')}
@@ -427,6 +435,7 @@ function getTabTitle(tab, role = 'swimmer') {
       'roster': t('dash_coach_tab_roster'),
       'meets': t('dash_coach_tab_meets'),
       'schedule': t('dash_coach_tab_schedule'),
+      'results': 'Swim Times',
       'feesummary': t('dash_coach_tab_fee_summary'),
       'deposits': t('dash_coach_tab_deposits'),
     };
@@ -460,6 +469,7 @@ function renderTabContent(tab, role = 'swimmer') {
       case 'roster': return renderCoachRoster();
       case 'meets': return renderSwimMeets();
       case 'schedule': return renderSchedule();
+      case 'results': return renderCoachResults();
       case 'feesummary': return renderFeeSummary();
       case 'deposits': return renderDeposits();
       default: return renderCoachOverview();
@@ -510,6 +520,797 @@ function getCoachRecentRegistrations() {
     return created >= thirtyDaysAgo;
   });
 }
+
+// ══════════════════════════════════════════════
+// Swim Times Management — Phase 1
+// ══════════════════════════════════════════════
+
+// Use Vite proxy in dev to avoid CORS preflight; in production the
+// site is served from the same origin as the Firebase project and
+// browsers may handle CORS differently. If production CORS issues
+// arise, a Cloud Function proxy or similar will be needed.
+const USAS_BASE = '/usas-api/swims/TimesSearch';
+let swimApiCredentials = null;  // { deviceId, subId, sessionId } — cached from Firestore
+let swimResultsFetching = false;
+
+// ── Rate limiting & retry policy ──
+// 2026-08 加:上次批量抓取(300/500ms 间隔,~120 请求/2min)触发账号级限流
+// (GetSwimmerMeetTimes 全量 406,连 Data Hub 网页都短暂受限)。此后节奏刻意保守,
+// 模拟真人浏览速度,把请求窗口打散。参数集中在此,后续按观察再调。
+const MOCK_MODE = import.meta.env.DEV && new URLSearchParams(location.search).has('mock');
+const FETCH_POLICY = {
+  meetGapMs: 3000,                     // 每场 meet 之间的间隔
+  batchSize: 15,                       // 每抓完 N 场休息一次(成功+失败都算请求)
+  batchPauseMs: 60000,                 // 中场休息,打散请求窗口
+  swimmerGapMs: 180000,                // 运动员之间冷却
+  retryDelaysMs: [5000, 20000, 60000], // 可重试失败(406/429/5xx/网络)指数退避
+  cooldownAfterConsecutive: 3,         // 连续 N 场可重试失败 → 判定疑似限流
+  cooldownMs: 300000,                  // 疑似限流时全局暂停
+  emptyCooldownAfter: 5,               // 连续 N 场返回空数组 → 判定疑似软降级(200+空数据)
+  emptyCooldownMs: 600000,             // 软降级时全局暂停 10 分钟
+};
+const RETRYABLE_HTTP = new Set([406, 429, 500, 502, 503, 504]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+if (MOCK_MODE) {
+  // 本地 mock 测试:压缩所有等待,几分钟内走完整条链路
+  FETCH_POLICY.meetGapMs = 400;
+  FETCH_POLICY.batchPauseMs = 3000;
+  FETCH_POLICY.swimmerGapMs = 4000;
+  FETCH_POLICY.retryDelaysMs = [500, 1000, 2000];
+  FETCH_POLICY.cooldownMs = 4000;
+  FETCH_POLICY.emptyCooldownMs = 4000;
+}
+
+// ── Mock mode (dev only, ?mock=1) ──
+// 不发真实 API 请求、不写 Firestore,用内存数据安全测试限速/重试/熔断/断点续传。
+const MOCK_SWIMMERS = [
+  { name: 'Mock A (incremental + fail/circuit-break)', usaSwimmingId: 'MOCK-A' },
+  { name: 'Mock B (batch pause)', usaSwimmingId: 'MOCK-B' },
+];
+const MOCK_BEST_TIMES = [
+  { strokeAbbreviation: 'FR', strokeName: 'Freestyle', distance: 50, swimTime: 28.32, courseCode: 'SCY' },
+  { strokeAbbreviation: 'BK', strokeName: 'Backstroke', distance: 100, swimTime: 62.15, courseCode: 'SCY' },
+  { strokeAbbreviation: 'BR', strokeName: 'Breaststroke', distance: 100, swimTime: 72.48, courseCode: 'LCM' },
+];
+const MOCK_MEET_NAMES = ['Spring Invitational', 'Summer Champs', 'Regionals', 'Junior Meet', 'Fall Classic'];
+const MOCK_SWIMS = [
+  { event: '50 FR', swimTime: 28.32, timeStandard: 'BB' },
+  { event: '100 BK', swimTime: 62.15, timeStandard: 'A' },
+];
+function mockMeet(id, name) {
+  return { meetId: id, meetName: name, meetDates: '2026-05-01', meetType: 'invitational', courseCode: 'SCY', season: '2025-2026', seasonYear: '2026' };
+}
+function mockMeetsFor(memberId) {
+  if (memberId === 'MOCK-A') {
+    // 13 场正常 + 1 场"重试后成功" + 2 场"重试后仍失败"(连续 3 次可重试失败 → 熔断)
+    const meets = [];
+    for (let i = 1; i <= 13; i++) meets.push(mockMeet(`MEET-OK-${String(i).padStart(2, '0')}`, MOCK_MEET_NAMES[i % MOCK_MEET_NAMES.length]));
+    meets.push(mockMeet('MEET-FAIL-RETRY', 'Retry-then-ok Meet'));
+    meets.push(mockMeet('MEET-FAIL-HARD-1', 'Hard Fail 1'));
+    meets.push(mockMeet('MEET-FAIL-HARD-2', 'Hard Fail 2'));
+    return meets;
+  }
+  // MOCK-B:20 场全成功 → 第 15 场后触发中场休息
+  const meets = [];
+  for (let i = 1; i <= 20; i++) meets.push(mockMeet(`MEET-OK-B${String(i).padStart(2, '0')}`, MOCK_MEET_NAMES[i % MOCK_MEET_NAMES.length]));
+  return meets;
+}
+// mock 用内存 Firestore(验证断点续传,不碰生产数据)
+const mockStore = new Map(); // memberId -> { meets: {...} }
+function mockSeed(memberId) {
+  if (mockStore.has(memberId)) return;
+  const meets = {};
+  if (memberId === 'MOCK-A') {
+    // 预置 5 场 status ok → 增量抓取应跳过它们
+    for (let i = 1; i <= 5; i++) {
+      meets[`MEET-OK-${String(i).padStart(2, '0')}`] = {
+        status: 'ok', swims: MOCK_SWIMS, meetName: 'Already Fetched', fetchedAt: '2026-07-01T00:00:00Z',
+      };
+    }
+  }
+  mockStore.set(memberId, { meets });
+}
+const mockFailCounts = new Map();
+if (MOCK_MODE) window.__mockStore = mockStore; // console 里检查断点续传结果用
+
+function buildUsasHeaders(creds) {
+  return {
+    'AppName': 'DataHub',
+    'Usas-Sub-Id': creds.subId || '',
+    'Device-Id': creds.deviceId || '',
+    'usas-session-id': creds.sessionId || '',
+  };
+}
+
+async function fetchBestTimes(creds, memberId) {
+  if (MOCK_MODE) { await sleep(200); return MOCK_BEST_TIMES; }
+  const url = `${USAS_BASE}/GetBestTimesForMember/${memberId}`;
+  const res = await fetch(url, { headers: buildUsasHeaders(creds) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchMeets(creds, memberId) {
+  if (MOCK_MODE) { await sleep(200); return mockMeetsFor(memberId); }
+  const url = `${USAS_BASE}/GetSwimmerMeets/${memberId}`;
+  const res = await fetch(url, { headers: buildUsasHeaders(creds) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// 单次请求。retryable=true 表示值得重试(限流/5xx/网络/超时)
+async function tryFetchOnce(url, creds) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(url, {
+      headers: buildUsasHeaders(creds),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (res.ok) return { ok: true, data: await res.json() };
+    let detail = '';
+    try { detail = await res.text(); } catch (e) { detail = '(could not read body)'; }
+    const err = new Error(`HTTP ${res.status}: ${detail.slice(0, 200)}`);
+    return { ok: false, error: err, retryable: RETRYABLE_HTTP.has(res.status) };
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') return { ok: false, error: new Error('Timeout (15s)'), retryable: true };
+    return { ok: false, error: err, retryable: true }; // 网络错误可能自愈,可重试
+  }
+}
+
+// 带指数退避重试:406/429/5xx/网络/超时 → 重试 retryDelaysMs 里的次数,仍失败抛错(带 retryable 标记)
+async function fetchMeetTimes(creds, memberId, meetId) {
+  if (MOCK_MODE) {
+    await sleep(400);
+    if (meetId.includes('FAIL-RETRY')) {
+      // 前 2 次 406,第 3 次成功 → 验证重试后恢复
+      const n = (mockFailCounts.get(meetId) || 0) + 1;
+      mockFailCounts.set(meetId, n);
+      if (n <= 2) throw Object.assign(new Error('HTTP 406: mock rate-limited (retryable)'), { retryable: true });
+    }
+    if (meetId.includes('FAIL-HARD')) {
+      throw Object.assign(new Error('HTTP 406: mock rate-limited (retryable)'), { retryable: true });
+    }
+    return MOCK_SWIMS;
+  }
+  const url = `${USAS_BASE}/GetSwimmerMeetTimes/${memberId}/${meetId}`;
+  const delays = FETCH_POLICY.retryDelaysMs;
+  for (let attempt = 0; ; attempt++) {
+    const outcome = await tryFetchOnce(url, creds);
+    if (outcome.ok) return outcome.data;
+    if (!outcome.retryable) throw outcome.error;
+    if (attempt >= delays.length) throw Object.assign(outcome.error, { retryable: true });
+    console.warn(`[fetchMeetTimes] ${memberId}/${meetId} attempt ${attempt + 1} failed: ${outcome.error.message} — retrying in ${delays[attempt]}ms`);
+    await sleep(delays[attempt]);
+  }
+}
+
+async function loadSwimApiCredentials() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'swimApi'));
+    if (snap.exists()) {
+      swimApiCredentials = snap.data();
+      return swimApiCredentials;
+    }
+  } catch (e) { console.warn('Failed to load swim API credentials:', e); }
+  return null;
+}
+
+async function saveSwimApiCredentials(deviceId, subId, sessionId) {
+  const data = {
+    deviceId: deviceId.trim(),
+    subId: subId.trim(),
+    sessionId: sessionId.trim(),
+    updatedAt: new Date(),
+    updatedBy: currentUser?.email || 'unknown',
+  };
+  await setDoc(doc(db, 'settings', 'swimApi'), data);
+  swimApiCredentials = data;
+}
+
+function getSwimmersWithUsaId() {
+  const swimmers = [];
+  for (const reg of allRegistrations) {
+    if (!reg.swimmers) continue;
+    for (let i = 0; i < reg.swimmers.length; i++) {
+      const s = reg.swimmers[i];
+      if (s.deleted) continue;
+      swimmers.push({
+        usaSwimmingId: s.usaSwimmingId || null,
+        name: [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unknown',
+        hasId: !!s.usaSwimmingId,
+      });
+    }
+  }
+  return swimmers;
+}
+
+async function readExistingMeets(memberId) {
+  if (MOCK_MODE) { mockSeed(memberId); return mockStore.get(memberId)?.meets || {}; }
+  try {
+    const snap = await getDoc(doc(db, 'swimResults', memberId));
+    if (snap.exists()) return snap.data().meets || {};
+  } catch (e) { /* ignore — 读不到就全量抓 */ }
+  return {};
+}
+
+// 一次性迁移:2026-08-01 用 setDoc+merge 把 meets.{id} 存成了字面字段名
+// (meets.12345)。把这些字面字段合并回嵌套 meets 对象(字面键优先——它们有
+// 真实数据),然后整文档重写。幂等:没有字面字段的文档不受影响。
+async function migrateSwimResultDocument(memberId) {
+  const snap = await getDoc(doc(db, 'swimResults', memberId));
+  if (!snap.exists()) return false;
+  const data = snap.data();
+  const literalKeys = Object.keys(data).filter((k) => k.startsWith('meets.'));
+  if (literalKeys.length === 0) return false;
+
+  const meets = { ...(data.meets || {}) };
+  let migrated = 0;
+  for (const key of literalKeys) {
+    const meetId = key.slice('meets.'.length);
+    const val = data[key];
+    if (!val || typeof val !== 'object') continue;
+    meets[meetId] = { ...val };
+    migrated++;
+  }
+
+  const clean = { ...data };
+  for (const key of literalKeys) delete clean[key];
+  clean.meets = meets;
+  await setDoc(doc(db, 'swimResults', memberId), clean); // 整文档重写,meets 是普通嵌套键,安全
+  console.log(`[Migrate] ${memberId}: merged ${migrated} literal meet fields into meets object`);
+  return true;
+}
+
+// 教练页加载时对每个运动员跑一次迁移(后台执行,不阻塞 UI)
+async function migrateAllSwimResults() {
+  if (MOCK_MODE) return;
+  const swimmers = getSwimmersWithUsaId().filter((s) => s.hasId);
+  for (const s of swimmers) {
+    try {
+      await migrateSwimResultDocument(s.usaSwimmingId);
+    } catch (e) {
+      console.warn(`[Migrate] ${s.usaSwimmingId} failed:`, e);
+    }
+  }
+}
+
+// 每场 meet 抓完立即写入 → 中断后重跑只补失败/缺失的(断点续传)
+// ⚠ 必须用 updateDoc:setDoc 的 {merge:true} 会把带点号的键(meets.12345)
+// 当成字面字段名存储(2026-08-01 踩坑,见 migrateSwimResultDocument)
+async function saveMeetResult(memberId, meet, swims, status) {
+  if (MOCK_MODE) {
+    mockSeed(memberId);
+    const store = mockStore.get(memberId);
+    store.meets[meet.meetId] = {
+      meetName: meet.meetName, meetDates: meet.meetDates, meetType: meet.meetType,
+      courseCode: meet.courseCode, season: meet.season, seasonYear: meet.seasonYear,
+      fetchedAt: new Date().toISOString(), status, swims,
+    };
+    return;
+  }
+  const update = {
+    [`meets.${meet.meetId}`]: {
+      meetName: meet.meetName, meetDates: meet.meetDates, meetType: meet.meetType,
+      courseCode: meet.courseCode, season: meet.season, seasonYear: meet.seasonYear,
+      fetchedAt: new Date().toISOString(), status, swims,
+    },
+    lastUpdated: new Date().toISOString(),
+  };
+  await updateDoc(doc(db, 'swimResults', memberId), update);
+}
+
+// 抓取单个运动员:限速 + 重试 + 熔断 + 断点续传。
+// force=true 忽略已有数据全量重抓;否则只抓 status≠'ok' 的 meet。
+// 返回 { fetched, failed, errors, bestTimes, meets }
+async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
+  const { force = false, onLog = () => {}, onBestTimes = () => {} } = opts;
+  const existingMeets = await readExistingMeets(memberId);
+
+  const needsFetch = (meetId) => {
+    if (force) return true;
+    const ex = existingMeets[meetId];
+    if (!ex) return true;                        // 从未抓过
+    if (ex.status === 'ok') return false;        // 已成功
+    if (ex.status === 'failed' || ex.status === 'empty') return true; // 上次失败/空结果 → 重试
+    return (ex.swims?.length || 0) === 0;        // 旧数据(无 status)按 swims 判断
+  };
+
+  // 1. Best times
+  const bestTimes = await fetchBestTimes(creds, memberId);
+  onBestTimes(bestTimes);
+  if (!MOCK_MODE) {
+    await setDoc(doc(db, 'swimResults', memberId), {
+      memberId, swimmerName, bestTimes, lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+  }
+
+  // 2. Meets 列表
+  const meets = await fetchMeets(creds, memberId);
+  const pending = meets.filter((m) => needsFetch(m.meetId));
+  onLog(`📅 ${meets.length} meets total, ${pending.length} to fetch${pending.length ? '' : ' — all up to date'}`);
+
+  let fetched = 0;
+  let failed = 0;
+  const errors = [];
+  let consecutiveFailures = 0; // 连续"可重试"失败数 → 限流熔断
+  let consecutiveEmpty = 0;    // 连续空结果数 → 软降级熔断
+
+  for (let i = 0; i < pending.length; i++) {
+    const meet = pending[i];
+    try {
+      const raw = await fetchMeetTimes(creds, memberId, meet.meetId);
+      const swims = Array.isArray(raw) ? raw : []; // 防御:非数组响应按空处理
+      // 空数组可能是"真的没成绩",也可能是 API 软降级(200+空)。
+      // 标记 empty 而非 ok,下次增量会重试;连续空则触发软降级暂停。
+      const status = swims.length === 0 ? 'empty' : 'ok';
+      await saveMeetResult(memberId, meet, swims, status);
+      fetched++;
+      consecutiveFailures = 0;
+      if (swims.length === 0) {
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= FETCH_POLICY.emptyCooldownAfter) {
+          onLog(`⚠ 连续 ${consecutiveEmpty} 场返回空结果,疑似被软降级 — 暂停 ${FETCH_POLICY.emptyCooldownMs / 60000} 分钟`, true);
+          await sleep(FETCH_POLICY.emptyCooldownMs);
+          consecutiveEmpty = 0;
+        }
+      } else {
+        consecutiveEmpty = 0;
+      }
+    } catch (err) {
+      await saveMeetResult(memberId, meet, [], 'failed');
+      failed++;
+      errors.push(`${meet.meetName || meet.meetId}: ${err.message}`);
+      if (err.retryable) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= FETCH_POLICY.cooldownAfterConsecutive) {
+          onLog(`⚠ 连续 ${consecutiveFailures} 场可重试失败,疑似被限流 — 全局暂停 ${FETCH_POLICY.cooldownMs / 60000} 分钟`, true);
+          await sleep(FETCH_POLICY.cooldownMs);
+          consecutiveFailures = 0;
+        }
+      }
+    }
+
+    // 中场休息:每 batchSize 场(成功+失败都发过请求)休息一次;最后一场后不再等
+    if (i + 1 < pending.length) {
+      if ((i + 1) % FETCH_POLICY.batchSize === 0) {
+        onLog(`⏸ 已处理 ${i + 1}/${pending.length} 场,中场休息 ${FETCH_POLICY.batchPauseMs / 60000} 分钟(保护 API 配额)...`);
+        await sleep(FETCH_POLICY.batchPauseMs);
+      } else {
+        await sleep(FETCH_POLICY.meetGapMs);
+      }
+    }
+  }
+
+  return { fetched, failed, errors, bestTimes, meets };
+}
+
+async function fetchAllSwimmerResults(creds, onProgress) {
+  const swimmers = MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId().filter((s) => s.hasId);
+  if (swimmers.length === 0) {
+    onProgress({ type: 'error', message: 'No swimmers with USA Swimming ID found.' });
+    return;
+  }
+
+  onProgress({ type: 'start', total: swimmers.length });
+
+  let success = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (let i = 0; i < swimmers.length; i++) {
+    const sw = swimmers[i];
+    onProgress({ type: 'swimmer-start', index: i, total: swimmers.length, name: sw.name, memberId: sw.usaSwimmingId });
+
+    let summary = null;
+    try {
+      summary = await fetchSwimmerData(creds, sw.usaSwimmingId, sw.name, {
+        force: false,
+        onLog: (message, isError) => onProgress({ type: 'log', message, isError }),
+        onBestTimes: (bt) => onProgress({ type: 'step', name: sw.name, step: 'bestTimes', count: bt.length }),
+      });
+      const hadWork = summary.fetched > 0 || summary.failed > 0;
+      onProgress({
+        type: 'swimmer-done', name: sw.name, memberId: sw.usaSwimmingId,
+        bestTimes: summary.bestTimes.length, meets: summary.meets.length,
+        newMeets: summary.fetched, failedMeets: summary.failed, written: hadWork,
+      });
+      if (summary.failed > 0) {
+        errors.push(...summary.errors.map((e) => `${sw.name}: ${e}`));
+      }
+      success++;
+    } catch (err) {
+      failed++;
+      errors.push(`${sw.name}: ${err.message}`);
+      onProgress({ type: 'swimmer-error', name: sw.name, memberId: sw.usaSwimmingId, error: err.message });
+    }
+
+    onProgress({ type: 'progress', index: i + 1, total: swimmers.length, success, failed });
+
+    // 运动员之间冷却:只有实际发过请求才休息,全部跳过则立即继续
+    if (summary && i < swimmers.length - 1 && (summary.fetched > 0 || summary.failed > 0)) {
+      onProgress({ type: 'log', message: `⏸ 运动员间冷却 ${FETCH_POLICY.swimmerGapMs / 60000} 分钟...` });
+      await sleep(FETCH_POLICY.swimmerGapMs);
+    }
+  }
+
+  onProgress({ type: 'done', total: swimmers.length, success, failed, errors });
+}
+
+function renderCoachResults() {
+  const swimmers = getSwimmersWithUsaId();
+  const withId = swimmers.filter(s => s.hasId);
+  const withoutId = swimmers.filter(s => !s.hasId);
+
+  const hasCreds = swimApiCredentials && swimApiCredentials.deviceId && swimApiCredentials.sessionId;
+
+  // Step-by-step guide for non-technical coaches
+  const credentialGuide = `
+    <div class="credential-guide" id="credential-guide" style="display:none; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: var(--space-lg); margin-top: var(--space-md); font-size: 0.9rem; line-height: 1.8;">
+      <h4 style="margin: 0 0 0.75rem 0;">📖 How to Get Your Credentials</h4>
+      <ol style="padding-left: 1.25rem; margin: 0;">
+        <li>Open <a href="https://data.usaswimming.org/" target="_blank" rel="noopener">https://data.usaswimming.org/</a> and <strong>log in</strong> to your USA Swimming account</li>
+        <li>Press <kbd>F12</kbd> on your keyboard (opens Developer Tools)</li>
+        <li>Click the <strong>Network</strong> tab at the top</li>
+        <li>Type <code>times-api</code> in the filter box to narrow down requests</li>
+        <li>In the left sidebar, <strong>click any athlete's name</strong></li>
+        <li>Click any request that appears on the right → then click the <strong>Headers</strong> tab</li>
+        <li>Under <strong>Request Headers</strong>, find and copy these three values:</li>
+      </ol>
+      <table style="margin-top: 0.75rem; width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">Device-Id</td>
+          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">Long string (e.g. <code>V2luMzIgLSBHb29V...</code>). Tied to your computer + browser — <strong>rarely changes</strong>.</td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">Usas-Sub-Id</td>
+          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">UUID format (e.g. <code>a05b310b-0c25-47a9-...</code>). Tied to your USA Swimming account — <strong>never changes</strong> as long as you use the same account.</td>
+        </tr>
+        <tr>
+          <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">usas-session-id</td>
+          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">32-character hex (e.g. <code>6F7FF3AF...</code>). <strong>Expires after a few hours to a day</strong>. You'll need to log in to Data Hub again and copy a fresh one when it stops working.</td>
+        </tr>
+      </table>
+      <p style="margin: 0.75rem 0 0 0; font-size: 0.8rem; color: var(--color-accent);">
+        ⚠ <strong>Tip:</strong> Device-Id and Usas-Sub-Id only need to be set once. The session-id is the one you'll need to update periodically — if fetching suddenly fails with auth errors, just log in to Data Hub again and copy a fresh session-id.
+      </p>
+    </div>
+  `;
+
+  return `
+    <div class="dash-panel" style="margin-bottom: 1.5rem;">
+      <div class="dash-panel-header">
+        <h3 style="margin: 0;">🔑 API Credentials</h3>
+        <span id="creds-status" style="font-size: 0.85rem; color: ${hasCreds ? '#16A34A' : 'var(--color-accent)'};">
+          ${hasCreds ? '✅ Configured' : '⚠ Not configured'}
+        </span>
+      </div>
+      <div class="profile-fields" style="margin-top: var(--space-md);">
+        <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr;">
+          <div class="form-group">
+            <label class="form-label">Device-Id <span style="font-size:0.75rem;color:var(--text-muted);">(set once — tied to computer/browser)</span></label>
+            <input class="form-input" id="creds-device-id" placeholder="Copy from Data Hub" value="${escapeHtml(swimApiCredentials?.deviceId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Usas-Sub-Id <span style="font-size:0.75rem;color:var(--text-muted);">(set once — tied to your account)</span></label>
+            <input class="form-input" id="creds-sub-id" placeholder="UUID format" value="${escapeHtml(swimApiCredentials?.subId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">usas-session-id <span style="color: var(--color-accent);" title="Expires after a few hours to a day">⚠ expires</span></label>
+            <input class="form-input" id="creds-session-id" placeholder="32-char hex — expires, update when broken" value="${escapeHtml(swimApiCredentials?.sessionId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.75rem; margin-top: var(--space-md);">
+        <button class="btn btn-primary btn-sm" id="save-creds-btn">💾 Save Credentials</button>
+        <button class="btn btn-outline btn-sm" id="toggle-guide-btn">💡 How to get credentials?</button>
+      </div>
+      ${credentialGuide}
+      <p id="creds-message" style="margin-top: 0.5rem; font-size: 0.85rem;"></p>
+    </div>
+
+    <div class="dash-panel" style="margin-bottom: 1.5rem;">
+      <div class="dash-panel-header">
+        <h3 style="margin: 0;">🔄 Fetch Swim Times</h3>
+        <span id="fetch-status" style="font-size: 0.85rem;">Ready</span>
+      </div>
+      <p style="color: var(--text-muted); margin: var(--space-md) 0; font-size: 0.9rem;">
+        Fetch results from USA Swimming for <strong>${withId.length}</strong> athlete(s).
+        Previously fetched meets are skipped automatically (incremental update).
+      </p>
+      <div style="display: flex; gap: 0.75rem; margin-bottom: var(--space-md);">
+        <button class="btn btn-primary btn-sm" id="fetch-all-btn" ${!hasCreds || swimResultsFetching ? 'disabled' : ''}>
+          ${swimResultsFetching ? '⏳ Fetching...' : '🔄 Fetch All Swimmer Results'}
+        </button>
+      </div>
+      <div id="fetch-log" style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; max-height: 350px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; line-height: 1.6; display: none;">
+      </div>
+    </div>
+
+    <div class="dash-panel">
+      <h3 style="margin: 0 0 var(--space-md) 0;">📋 Athlete Data Status</h3>
+      <div class="roster-table-wrapper" style="max-height: 400px; overflow-y: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted);">
+              <th style="padding: 0.6rem; text-align: left;">Name</th>
+              <th style="padding: 0.6rem; text-align: left;">USA Swimming ID</th>
+              <th style="padding: 0.6rem; text-align: left;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${withId.map(s => `
+              <tr style="border-bottom: 1px solid var(--border-color);">
+                <td style="padding: 0.5rem 0.6rem; font-weight: 500;">${escapeHtml(s.name)}</td>
+                <td style="padding: 0.5rem 0.6rem; font-family: monospace; font-size: 0.8rem;">${escapeHtml(s.usaSwimmingId)}</td>
+                <td style="padding: 0.5rem 0.6rem;" id="status-${escapeHtml(s.usaSwimmingId)}">
+                  <span style="color: var(--text-muted);">—</span>
+                </td>
+              </tr>
+            `).join('')}
+            ${withoutId.map(s => `
+              <tr style="border-bottom: 1px solid var(--border-color); opacity: 0.6;">
+                <td style="padding: 0.5rem 0.6rem;">${escapeHtml(s.name)}</td>
+                <td style="padding: 0.5rem 0.6rem; color: var(--color-accent);">Not set</td>
+                <td style="padding: 0.5rem 0.6rem;">⚠ Add USA Swimming ID in Profile</td>
+              </tr>
+            `).join('')}
+            ${swimmers.length === 0 ? `
+              <tr><td colspan="3" style="padding: 2rem; text-align: center; color: var(--text-muted);">No athlete data yet</td></tr>
+            ` : ''}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    ${withId.length > 0 ? `
+    <div class="dash-panel" style="margin-top: 1.5rem;">
+      <h3 style="margin: 0 0 var(--space-md) 0;">📊 View Athlete Results</h3>
+      <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: var(--space-md); flex-wrap: wrap;">
+        <select class="form-input" id="results-athlete-select" style="max-width: 300px;">
+          <option value="">— Select an athlete —</option>
+          ${withId.map(s => `<option value="${escapeHtml(s.usaSwimmingId)}">${escapeHtml(s.name)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" id="refetch-one-btn" disabled>🔄 Refetch Selected Athlete</button>
+      </div>
+      <div id="results-viewer" style="display: none;">
+        <div id="results-content"></div>
+      </div>
+    </div>
+    ` : ''}
+  `;
+}
+
+// ── Swim Time Formatting Helpers ──
+
+function formatSwimTime(seconds) {
+  if (seconds == null || seconds === '') return '—';
+  const num = Number(seconds);
+  if (isNaN(num)) return String(seconds);
+  if (num < 60) return num.toFixed(2);
+  const mins = Math.floor(num / 60);
+  const secs = (num % 60).toFixed(2);
+  return `${mins}:${secs.padStart(5, '0')}`;
+}
+
+function getTimeStandardClass(std) {
+  if (!std) return '';
+  const upper = std.toUpperCase();
+  const map = {
+    'B': 'ts-b', 'BB': 'ts-bb', 'A': 'ts-a',
+    'AA': 'ts-aa', 'AAA': 'ts-aaa', 'AAAA': 'ts-aaaa',
+  };
+  return map[upper] || '';
+}
+
+function getCourseLabel(code) {
+  const map = { 'LCM': 'LCM (50m)', 'SCY': 'SCY (25yd)', 'SCM': 'SCM (25m)' };
+  return map[code] || code || '—';
+}
+
+// ── Render Swimmer Results (coach view) ──
+
+function groupMeetsBySeason(meets) {
+  const seasons = {};
+  for (const [meetId, meet] of Object.entries(meets)) {
+    const season = meet.season || 'Unknown';
+    if (!seasons[season]) seasons[season] = [];
+    seasons[season].push({ meetId, ...meet });
+  }
+  // Sort seasons descending, meets within season descending by date
+  const sorted = {};
+  for (const season of Object.keys(seasons).sort().reverse()) {
+    sorted[season] = seasons[season].sort((a, b) => {
+      const da = a.meetDates || '';
+      const db = b.meetDates || '';
+      return db.localeCompare(da);
+    });
+  }
+  return sorted;
+}
+
+function renderBestTimesTable(bestTimes) {
+  if (!bestTimes || bestTimes.length === 0) {
+    return '<p style="color:var(--text-muted);text-align:center;padding:1rem;">No best times recorded.</p>';
+  }
+
+  // Sort by stroke then distance
+  const sorted = [...bestTimes].sort((a, b) => {
+    if (a.strokeAbbreviation !== b.strokeAbbreviation) {
+      return (a.strokeAbbreviation || '').localeCompare(b.strokeAbbreviation || '');
+    }
+    return (a.distance || 0) - (b.distance || 0);
+  });
+
+  return `
+    <div class="roster-table-wrapper" style="max-height: 400px; overflow-y: auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border-color);color:var(--text-muted);">
+            <th style="padding:0.5rem;text-align:left;">Event</th>
+            <th style="padding:0.5rem;text-align:left;">Best Time</th>
+            <th style="padding:0.5rem;text-align:left;">Course</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map(t => `
+            <tr style="border-bottom:1px solid var(--border-color);">
+              <td style="padding:0.4rem 0.5rem;">${t.distance || ''} ${t.strokeName || t.stroke || t.strokeAbbreviation || ''}</td>
+              <td style="padding:0.4rem 0.5rem;font-weight:600;font-family:monospace;">${formatSwimTime(t.swimTime ?? t.bestTime)}</td>
+              <td style="padding:0.4rem 0.5rem;">${getCourseLabel(t.courseCode)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderMeetHistory(meets) {
+  if (!meets || Object.keys(meets).length === 0) {
+    return '<p style="color:var(--text-muted);text-align:center;padding:1rem;">No meet history recorded.</p>';
+  }
+
+  const grouped = groupMeetsBySeason(meets);
+
+  let html = '';
+  for (const [season, seasonMeets] of Object.entries(grouped)) {
+    const seasonId = `season-${season.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    html += `
+      <div style="margin-bottom: 0.75rem;">
+        <button class="btn btn-outline btn-sm season-toggle" data-season="${escapeHtml(seasonId)}"
+                style="width:100%;text-align:left;font-weight:600;display:flex;justify-content:space-between;align-items:center;">
+          <span>📅 ${escapeHtml(season)} Season (${seasonMeets.length} meet${seasonMeets.length > 1 ? 's' : ''})</span>
+          <span class="season-arrow" id="arrow-${escapeHtml(seasonId)}">▶</span>
+        </button>
+        <div class="season-meets" id="${escapeHtml(seasonId)}" style="display:none;margin-top:0.5rem;">
+          ${seasonMeets.map(meet => {
+            const meetId = `meet-${meet.meetId}`;
+            return `
+              <div style="margin-bottom:0.5rem;border:1px solid var(--border-color);border-radius:var(--radius-sm);overflow:hidden;">
+                <button class="btn btn-outline btn-sm meet-toggle" data-meet="${escapeHtml(meetId)}"
+                        style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:none;border-radius:0;">
+                  <span>🏁 ${escapeHtml(meet.meetName)} <span style="color:var(--text-muted);font-size:0.8rem;">${escapeHtml(meet.courseCode || '')}</span></span>
+                  <span style="font-size:0.75rem;color:var(--text-muted);">
+                    ${escapeHtml(meet.meetDates || '')} · ${meet.swims?.length || 0} swim${(meet.swims?.length || 0) !== 1 ? 's' : ''}
+                    <span class="meet-arrow" id="m-arrow-${escapeHtml(meetId)}">▶</span>
+                  </span>
+                </button>
+                <div class="meet-swims" id="${escapeHtml(meetId)}" style="display:none;">
+                  ${meet.swims && meet.swims.length > 0 ? `
+                    <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+                      <thead>
+                        <tr style="border-bottom:1px solid var(--border-color);color:var(--text-muted);background:var(--bg-secondary);">
+                          <th style="padding:0.35rem 0.5rem;text-align:left;">Event</th>
+                          <th style="padding:0.35rem 0.5rem;text-align:left;">Time</th>
+                          <th style="padding:0.35rem 0.5rem;text-align:left;">Session</th>
+                          <th style="padding:0.35rem 0.5rem;text-align:left;">Place</th>
+                          <th style="padding:0.35rem 0.5rem;text-align:left;">Standard</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${meet.swims.map(sw => `
+                          <tr style="border-bottom:1px solid var(--border-color);">
+                            <td style="padding:0.3rem 0.5rem;">${sw.eventCode || `${sw.distance || ''} ${sw.strokeAbbreviation || ''}`}</td>
+                            <td style="padding:0.3rem 0.5rem;font-family:monospace;font-weight:500;">${formatSwimTime(sw.swimTime)}</td>
+                            <td style="padding:0.3rem 0.5rem;">${sw.sessionName || '—'}</td>
+                            <td style="padding:0.3rem 0.5rem;">${sw.finishPosition != null ? sw.finishPosition : '—'}</td>
+                            <td style="padding:0.3rem 0.5rem;">
+                              ${sw.timeStandard ? `<span class="ts-badge ${getTimeStandardClass(sw.timeStandard)}">${escapeHtml(sw.timeStandard)}</span>` : '—'}
+                            </td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  ` : '<p style="padding:0.5rem;color:var(--text-muted);font-size:0.8rem;">No swim data for this meet.</p>'}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+  return html;
+}
+
+async function loadAthleteResults(memberId) {
+  const viewer = document.getElementById('results-viewer');
+  const content = document.getElementById('results-content');
+  if (!viewer || !content) return;
+
+  viewer.style.display = 'block';
+  content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">⏳ Loading...</p>';
+
+  try {
+    const snap = await getDoc(doc(db, 'swimResults', memberId));
+    if (!snap.exists()) {
+      content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">No results data yet. Run a fetch first.</p>';
+      return;
+    }
+
+    const data = snap.data();
+    console.log('[Results] Loaded data for', memberId, ':', data);
+    console.log('[Results] bestTimes:', data.bestTimes?.length, 'meets:', Object.keys(data.meets || {}).length);
+
+    content.innerHTML = `
+      <div style="margin-bottom:1.5rem;">
+        <h4 style="margin:0 0 0.75rem 0;display:flex;align-items:center;gap:0.5rem;">
+          🏆 Best Times (${(data.bestTimes || []).length} entries)
+          <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">
+            Last updated: ${data.lastUpdated ? new Date(data.lastUpdated).toLocaleString() : '—'}
+          </span>
+        </h4>
+        ${renderBestTimesTable(data.bestTimes)}
+      </div>
+
+      <div>
+        <h4 style="margin:0 0 0.75rem 0;">📅 Meet History (${Object.keys(data.meets || {}).length} meets)</h4>
+        <div id="meet-history-container">
+          ${renderMeetHistory(data.meets)}
+        </div>
+      </div>
+
+      <details style="margin-top:1.5rem;border-top:1px solid var(--border-color);padding-top:1rem;">
+        <summary style="cursor:pointer;color:var(--text-muted);font-size:0.8rem;">🔍 Debug: Raw JSON</summary>
+        <pre style="background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:0.75rem;max-height:400px;overflow:auto;font-size:0.7rem;line-height:1.4;margin-top:0.5rem;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+      </details>
+    `;
+
+    // Bind expand/collapse for seasons and meets
+    content.querySelectorAll('.season-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const seasonId = btn.dataset.season;
+        const panel = document.getElementById(seasonId);
+        const arrow = document.getElementById('arrow-' + seasonId);
+        if (!panel) return;
+        const isOpen = panel.style.display !== 'none';
+        panel.style.display = isOpen ? 'none' : 'block';
+        if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
+      });
+    });
+
+    content.querySelectorAll('.meet-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const meetId = btn.dataset.meet;
+        const panel = document.getElementById(meetId);
+        const arrow = document.getElementById('m-arrow-' + meetId);
+        if (!panel) return;
+        const isOpen = panel.style.display !== 'none';
+        panel.style.display = isOpen ? 'none' : 'block';
+        if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
+      });
+    });
+
+  } catch (err) {
+    content.innerHTML = `<p style="text-align:center;padding:2rem;color:var(--color-accent);">Failed to load results: ${escapeHtml(err.message)}</p>`;
+    console.error('loadAthleteResults:', err);
+  }
+}
+
+// ══════════════════════════════════════════════
 
 function renderCoachOverview() {
   const activeSwimmers = getCoachActiveSwimmers();
@@ -2659,6 +3460,10 @@ async function showFeeModal(meetId, meetName) {
 
 // ── Events ──
 function bindEvents() {
+  // 一次性数据迁移(后台执行):修复 2026-08-01 setDoc merge 把 meets.{id}
+  // 存成字面字段名的问题。幂等,无字面字段则无操作。
+  migrateAllSwimResults();
+
   // Sidebar nav
   document.querySelectorAll('.dash-nav-item[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3207,6 +4012,191 @@ function bindEvents() {
 
     // ── Deposits — Inline Edit / Delete ──
     bindDepositsInlineEvents();
+
+    // ── Results Tab — Swim Times Management ──
+
+    // Save credentials
+    document.getElementById('save-creds-btn')?.addEventListener('click', async () => {
+      const msgEl = document.getElementById('creds-message');
+      const deviceId = document.getElementById('creds-device-id')?.value || '';
+      const subId = document.getElementById('creds-sub-id')?.value || '';
+      const sessionId = document.getElementById('creds-session-id')?.value || '';
+
+      if (!deviceId || !subId || !sessionId) {
+        msgEl.textContent = '❌ Please fill in all three credential fields.';
+        msgEl.style.color = 'var(--color-accent)';
+        return;
+      }
+
+      try {
+        await saveSwimApiCredentials(deviceId, subId, sessionId);
+        msgEl.textContent = '✅ Credentials saved to Firestore.';
+        msgEl.style.color = '#16A34A';
+        setTimeout(() => { msgEl.textContent = ''; }, 3000);
+        refreshUI(); // refresh to update status display
+      } catch (err) {
+        msgEl.textContent = '❌ Save failed: ' + err.message;
+        msgEl.style.color = 'var(--color-accent)';
+      }
+    });
+
+    // Toggle credential guide
+    document.getElementById('toggle-guide-btn')?.addEventListener('click', () => {
+      const guide = document.getElementById('credential-guide');
+      if (guide) {
+        guide.style.display = guide.style.display === 'none' ? 'block' : 'none';
+      }
+    });
+
+    // Athlete results viewer — dropdown select
+    const athleteSelect = document.getElementById('results-athlete-select');
+    const refetchOneBtn = document.getElementById('refetch-one-btn');
+
+    athleteSelect?.addEventListener('change', (e) => {
+      const memberId = e.target.value;
+      if (memberId) {
+        loadAthleteResults(memberId);
+        if (refetchOneBtn) refetchOneBtn.disabled = false;
+      } else {
+        const viewer = document.getElementById('results-viewer');
+        if (viewer) viewer.style.display = 'none';
+        if (refetchOneBtn) refetchOneBtn.disabled = true;
+      }
+    });
+
+    // Refetch single athlete (force mode — fetches ALL meets, ignoring existing)
+    refetchOneBtn?.addEventListener('click', async () => {
+      const memberId = athleteSelect?.value;
+      if (!memberId) return;
+      if (!swimApiCredentials || !swimApiCredentials.sessionId) {
+        alert('Please configure API credentials first.');
+        return;
+      }
+
+      refetchOneBtn.disabled = true;
+      refetchOneBtn.textContent = '⏳ Fetching...';
+
+      const log = document.getElementById('fetch-log');
+      log.style.display = 'block';
+      const appendLog = (msg, isError) => {
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        line.style.color = isError ? 'var(--color-accent)' : 'var(--text-primary)';
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      };
+
+      try {
+        appendLog(`🔄 Force-refetching athlete ${memberId}...`);
+
+        const athleteName = athleteSelect.selectedOptions[0]?.text || '';
+        const summary = await fetchSwimmerData(swimApiCredentials, memberId, athleteName, {
+          force: true,
+          onLog: (msg, isError) => appendLog(`   ${msg}`, isError),
+          onBestTimes: (bt) => appendLog(`   📊 bestTimes: ${bt.length} entries`),
+        });
+        appendLog(`✅ Done — ${summary.fetched} meets fetched, ${summary.failed} failed`);
+        if (summary.errors.length > 0) {
+          summary.errors.slice(0, 5).forEach((e) => appendLog(`   ⚠ ${e}`, true));
+          if (summary.errors.length > 5) appendLog(`   …and ${summary.errors.length - 5} more`, true);
+        }
+
+        // Reload the results viewer
+        loadAthleteResults(memberId);
+      } catch (err) {
+        appendLog(`❌ Refetch failed: ${err.message}`, true);
+      } finally {
+        refetchOneBtn.disabled = false;
+        refetchOneBtn.textContent = '🔄 Refetch Selected Athlete';
+      }
+    });
+
+    // Fetch all swimmer results
+    document.getElementById('fetch-all-btn')?.addEventListener('click', async () => {
+      if (swimResultsFetching) return;
+
+      // Ensure credentials are loaded
+      if (!swimApiCredentials || !swimApiCredentials.deviceId || !swimApiCredentials.sessionId) {
+        alert('Please configure and save API credentials first.');
+        return;
+      }
+
+      swimResultsFetching = true;
+      const log = document.getElementById('fetch-log');
+      const statusEl = document.getElementById('fetch-status');
+      const btn = document.getElementById('fetch-all-btn');
+
+      log.style.display = 'block';
+      log.innerHTML = '';
+      btn.disabled = true;
+      btn.textContent = '⏳ Fetching...';
+
+      const appendLog = (msg, isError) => {
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        line.style.color = isError ? 'var(--color-accent)' : 'var(--text-primary)';
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      };
+
+      await fetchAllSwimmerResults(swimApiCredentials, (evt) => {
+        switch (evt.type) {
+          case 'start':
+            appendLog(`🚀 Starting fetch for ${evt.total} athlete(s)...`);
+            statusEl.textContent = `⏳ 0 / ${evt.total}`;
+            break;
+          case 'swimmer-start':
+            appendLog(`🔄 ${evt.name} (${evt.memberId})...`);
+            break;
+          case 'step':
+            appendLog(`   📊 ${evt.step}: ${evt.count} entries`);
+            break;
+          case 'log':
+            appendLog(`   ${evt.message}`, evt.isError);
+            break;
+          case 'swimmer-done':
+            if (evt.written) {
+              appendLog(`   ✅ Written: ${evt.bestTimes} best times, ${evt.meets} meets (${evt.newMeets} new${evt.failedMeets > 0 ? `, ${evt.failedMeets} failed` : ''})`);
+            } else {
+              appendLog(`   ⏭ Skipped: no new meets`);
+            }
+            const statusCell = document.getElementById(`status-${evt.memberId}`);
+            if (statusCell) statusCell.innerHTML =
+              `<span style="color:#16A34A;">✅ ${evt.bestTimes} best times, ${evt.meets} meets</span>`;
+            break;
+          case 'swimmer-error':
+            appendLog(`   ❌ Failed: ${evt.error}`, true);
+            const statusErrCell = document.getElementById(`status-${evt.memberId}`);
+            if (statusErrCell) statusErrCell.innerHTML =
+              `<span style="color:var(--color-accent);">❌ ${escapeHtml(evt.error)}</span>`;
+            break;
+          case 'progress':
+            statusEl.textContent = `⏳ ${evt.index} / ${evt.total} (✅ ${evt.success} ❌ ${evt.failed})`;
+            break;
+          case 'done':
+            statusEl.textContent = `✅ Done: ${evt.success} succeeded, ${evt.failed} failed`;
+            statusEl.style.color = evt.failed > 0 ? 'var(--color-accent)' : '#16A34A';
+            appendLog('');
+            appendLog(`✅ Fetch complete — ${evt.success} succeeded, ${evt.failed} failed`);
+            if (evt.errors.length > 0) {
+              appendLog('Error details:', true);
+              evt.errors.forEach(e => appendLog(`  • ${e}`, true));
+            }
+            swimResultsFetching = false;
+            btn.disabled = false;
+            btn.textContent = '🔄 Fetch All Swimmer Results';
+            break;
+          case 'error':
+            appendLog(`❌ ${evt.message}`, true);
+            statusEl.textContent = '❌ Failed';
+            statusEl.style.color = 'var(--color-accent)';
+            swimResultsFetching = false;
+            btn.disabled = false;
+            btn.textContent = '🔄 Fetch All Swimmer Results';
+            break;
+        }
+      });
+    });
   }
 }
 

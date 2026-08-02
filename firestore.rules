@@ -141,6 +141,25 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ── swimResults — USA Swimming times data ──────────────────────
+
+    match /swimResults/{docId} {
+      // All authenticated users (families + coaches) can read
+      allow read: if isAuth();
+      // Only coaches and admins can write (batch fetch results)
+      allow create, update: if userRole() == 'coach' || userRole() == 'admin';
+      allow delete: if isAdmin();
+    }
+
+    // ── settings — app configuration (API credentials, etc.) ──────
+
+    match /settings/{docId} {
+      // Only coaches and admins can read settings (contains API keys)
+      allow read: if userRole() == 'coach' || userRole() == 'admin';
+      // Only admins can write settings
+      allow create, update, delete: if isAdmin();
+    }
+
     // ── members — test utility only, deny all in production ──────
 
     match /members/{docId} {

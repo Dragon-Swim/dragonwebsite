@@ -1586,3 +1586,20 @@ input[readonly].profile-edit-field {
     border-color: var(--color-primary);
     box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.2);
 }
+
+/* ── Time Standard Badges ── */
+.ts-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 2.2em;
+}
+.ts-b { background: #E5E7EB; color: #6B7280; }
+.ts-bb { background: #DBEAFE; color: #2563EB; }
+.ts-a { background: #D1FAE5; color: #059669; }
+.ts-aa { background: #FEF3C7; color: #D97706; }
+.ts-aaa { background: #FEE2E2; color: #DC2626; }
+.ts-aaaa { background: #FEF3C7; color: #B45309; border: 1px solid #F59E0B; }
