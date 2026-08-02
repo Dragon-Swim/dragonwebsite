@@ -529,7 +529,12 @@ function getCoachRecentRegistrations() {
 // site is served from the same origin as the Firebase project and
 // browsers may handle CORS differently. If production CORS issues
 // arise, a Cloud Function proxy or similar will be needed.
-const USAS_BASE = '/usas-api/swims/TimesSearch';
+// dev:走 Vite proxy(本地免 CORS);生产:直连 times-api
+// (2026-08-01 验证:Access-Control-Allow-Origin: * 且允许 appname/
+// device-id/usas-session-id/usas-sub-id 自定义头,无需代理)
+const USAS_BASE = import.meta.env.DEV
+  ? '/usas-api/swims/TimesSearch'
+  : 'https://times-api.usaswimming.org/swims/TimesSearch';
 let swimApiCredentials = null;  // { deviceId, subId, sessionId } — cached from Firestore
 let swimResultsFetching = false;
 
