@@ -417,6 +417,10 @@ function renderCoachDashboard(user) {
     </div>
   `;
 
+  // Results tab:innerHTML 已就位,此时读回持久化状态才不会找不到 cell
+  // (refreshUI 是异步的,导航点击处立即调用会因 DOM 未渲染而空跑 → 状态列恒 "—")
+  if (currentTab === 'results') loadAthleteDataStatus();
+
   bindEvents();
   initTheme();
   updateSidebarThemeIcon();
@@ -544,8 +548,8 @@ let swimResultsFetching = false;
 // 模拟真人浏览速度,把请求窗口打散。参数集中在此,后续按观察再调。
 const MOCK_MODE = import.meta.env.DEV && new URLSearchParams(location.search).has('mock');
 const FETCH_POLICY = {
-  meetGapMs: 3000,                     // 每场 meet 之间的间隔
-  batchSize: 15,                       // 每抓完 N 场休息一次(成功+失败都算请求)
+  meetGapMs: 5000,                     // 每场 meet 之间的间隔
+  batchSize: 10,                       // 每抓完 N 场休息一次(成功+失败都算请求)
   batchPauseMs: 60000,                 // 中场休息,打散请求窗口
   swimmerGapMs: 180000,                // 运动员之间冷却
   retryDelaysMs: [5000, 20000, 60000], // 可重试失败(406/429/5xx/网络)指数退避
@@ -569,8 +573,8 @@ if (MOCK_MODE) {
 // ── Mock mode (dev only, ?mock=1) ──
 // 不发真实 API 请求、不写 Firestore,用内存数据安全测试限速/重试/熔断/断点续传。
 const MOCK_SWIMMERS = [
-  { name: 'Mock A (incremental + fail/circuit-break)', usaSwimmingId: 'MOCK-A' },
-  { name: 'Mock B (batch pause)', usaSwimmingId: 'MOCK-B' },
+  { name: 'Mock A (incremental + fail/circuit-break)', usaSwimmingId: 'MOCK-A', hasId: true },
+  { name: 'Mock B (batch pause)', usaSwimmingId: 'MOCK-B', hasId: true },
 ];
 const MOCK_BEST_TIMES = [
   { strokeAbbreviation: 'FR', strokeName: 'Freestyle', distance: 50, swimTime: 28.32, courseCode: 'SCY' },
@@ -782,6 +786,53 @@ async function migrateAllSwimResults() {
   }
 }
 
+// Athlete Data Status — Results tab 渲染后从 Firestore 聚合持久化状态
+// (fetch 期间的事件实时更新单元格;这里负责页面刷新/切换 tab 后读回真实数据)
+async function loadAthleteDataStatus() {
+  // mock 模式与 fetch 流程共用 MOCK_SWIMMERS,否则表格行是真实 id,
+  // mockStore 里永远没有对应数据 → 状态列恒为 "—"
+  const swimmers = MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId().filter((s) => s.hasId);
+  await Promise.all(swimmers.map(async (s) => {
+    const cell = document.getElementById(`status-${s.usaSwimmingId}`);
+    if (!cell) return;
+    let meets = {};
+    try {
+      if (MOCK_MODE) {
+        mockSeed(s.usaSwimmingId);
+        meets = mockStore.get(s.usaSwimmingId)?.meets || {};
+      } else {
+        const snap = await getDoc(doc(db, 'swimResults', s.usaSwimmingId));
+        if (snap.exists()) meets = snap.data().meets || {};
+      }
+    } catch (e) {
+      cell.innerHTML = `<span style="color:var(--color-accent);">❌ ${escapeHtml(e.message || 'load failed')}</span>`;
+      return;
+    }
+    const entries = Object.values(meets);
+    if (entries.length === 0) {
+      cell.innerHTML = `<span style="color: var(--text-muted);">— No data yet</span>`;
+      return;
+    }
+    let ok = 0, failed = 0, empty = 0, swims = 0;
+    for (const m of entries) {
+      // 旧数据无 status → 按 swims 长度判断(2026-08-01 约定)
+      const st = m.status || (m.swims && m.swims.length ? 'ok' : 'empty');
+      if (st === 'ok') ok++;
+      else if (st === 'failed') failed++;
+      else empty++;
+      swims += (m.swims || []).length;
+    }
+    if (failed === 0 && empty === 0) {
+      cell.innerHTML = `<span style="color:#16A34A;">✅ ${ok} meets · ${swims} swims</span>`;
+    } else {
+      const issues = [];
+      if (failed) issues.push(`${failed} failed`);
+      if (empty) issues.push(`${empty} empty`);
+      cell.innerHTML = `<span style="color:var(--color-accent);">⚠ ${entries.length} meets · ${issues.join(' · ')} — refetch</span>`;
+    }
+  }));
+}
+
 // 每场 meet 抓完立即写入 → 中断后重跑只补失败/缺失的(断点续传)
 // ⚠ 必须用 updateDoc:setDoc 的 {merge:true} 会把带点号的键(meets.12345)
 // 当成字面字段名存储(2026-08-01 踩坑,见 migrateSwimResultDocument)
@@ -945,7 +996,8 @@ async function fetchAllSwimmerResults(creds, onProgress) {
 }
 
 function renderCoachResults() {
-  const swimmers = getSwimmersWithUsaId();
+  // mock 模式用 MOCK_SWIMMERS,与 fetch 流程/loadAthleteDataStatus 保持一致
+  const swimmers = MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId();
   const withId = swimmers.filter(s => s.hasId);
   const withoutId = swimmers.filter(s => !s.hasId);
 
@@ -975,11 +1027,11 @@ function renderCoachResults() {
         </tr>
         <tr>
           <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">usas-session-id</td>
-          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">32-character hex (e.g. <code>6F7FF3AF...</code>). <strong>Expires after a few hours to a day</strong>. You'll need to log in to Data Hub again and copy a fresh one when it stops working.</td>
+          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">32-character hex (e.g. <code>6F7FF3AF...</code>). <strong>Long-lived — rarely needs replacing</strong>. Only refresh it if fetching fails with an auth error (401/403): log in to Data Hub again and copy a fresh one.</td>
         </tr>
       </table>
       <p style="margin: 0.75rem 0 0 0; font-size: 0.8rem; color: var(--color-accent);">
-        ⚠ <strong>Tip:</strong> Device-Id and Usas-Sub-Id only need to be set once. The session-id is the one you'll need to update periodically — if fetching suddenly fails with auth errors, just log in to Data Hub again and copy a fresh session-id.
+        ⚠ <strong>Tip:</strong> Device-Id, Usas-Sub-Id, and usas-session-id all only need to be set once. The session-id is long-lived — only refresh it if fetching fails with an auth error (401/403): log in to Data Hub again and copy a fresh session-id.
       </p>
     </div>
   `;
@@ -1003,8 +1055,8 @@ function renderCoachResults() {
             <input class="form-input" id="creds-sub-id" placeholder="UUID format" value="${escapeHtml(swimApiCredentials?.subId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
           </div>
           <div class="form-group">
-            <label class="form-label">usas-session-id <span style="color: var(--color-accent);" title="Expires after a few hours to a day">⚠ expires</span></label>
-            <input class="form-input" id="creds-session-id" placeholder="32-char hex — expires, update when broken" value="${escapeHtml(swimApiCredentials?.sessionId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+            <label class="form-label">usas-session-id <span style="font-size:0.75rem;color:var(--text-muted);">(set once — long-lived, refresh only on auth errors)</span></label>
+            <input class="form-input" id="creds-session-id" placeholder="32-char hex — rarely changes" value="${escapeHtml(swimApiCredentials?.sessionId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
           </div>
         </div>
       </div>
@@ -3473,7 +3525,7 @@ function bindEvents() {
   document.querySelectorAll('.dash-nav-item[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       currentTab = btn.dataset.tab;
-      refreshUI();
+      refreshUI(); // 渲染完成后 renderCoachDashboard 会按需调用 loadAthleteDataStatus()
     });
   });
 
@@ -4108,6 +4160,8 @@ function bindEvents() {
 
         // Reload the results viewer
         loadAthleteResults(memberId);
+        // Refresh the Athlete Data Status table (refetch-one 不走事件回调)
+        loadAthleteDataStatus();
       } catch (err) {
         appendLog(`❌ Refetch failed: ${err.message}`, true);
       } finally {
