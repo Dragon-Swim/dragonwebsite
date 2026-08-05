@@ -9,7 +9,7 @@ import '../styles/global.css';
 import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
-import { getTimeStandardLevels } from '../data/timeStandards.js';
+import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
@@ -769,6 +769,8 @@ function getSwimmersWithUsaId() {
         usaSwimmingId: s.usaSwimmingId || null,
         name: [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unknown',
         hasId: !!s.usaSwimmingId,
+        dob: s.dob || null,        // 趋势图标准线需要(按比赛日年龄选年龄组)
+        gender: s.gender || null,  // 标准表分男女(官方表 B 档有女快于男特例)
       });
     }
   }
@@ -1254,6 +1256,26 @@ function parseEventCode(eventCode, meet) {
   return { distance, stroke, course };
 }
 
+// 某时间戳下运动员的年龄(按 USAS 规则,标准按比赛日年龄归属)。
+function ageAtDate(dob, ts) {
+  if (!dob) return null;
+  const b = new Date(dob);
+  const d = new Date(ts);
+  if (isNaN(b.getTime()) || isNaN(d.getTime())) return null;
+  let age = d.getFullYear() - b.getFullYear();
+  if (d.getMonth() < b.getMonth() || (d.getMonth() === b.getMonth() && d.getDate() < b.getDate())) age--;
+  return age;
+}
+
+// 构建趋势图标准线层:用该运动员最近一次(所选事件的最后一个点)的年龄选年龄组。
+// 无 dob/gender 或事件在标准表中不存在 → null → 图表自动不画线层。
+function trendLevelLines(points, eventKey, swimmer) {
+  if (!points || points.length === 0) return null;
+  const age = ageAtDate(swimmer?.dob, points[points.length - 1].dateTs);
+  const course = String(eventKey || '').split(' ').pop().toUpperCase();
+  return getTimeStandardLevels({ age, course, eventKey, gender: swimmer?.gender });
+}
+
 // 汇总某运动员某项目的历史成绩点。eventKey 形如 "50 FR SCY"(大写)。
 // 同一 meet 同项目取最快(预赛/决赛去重);meet 日期或成绩解析失败丢点(warn)。
 // 返回 { points, count },points 按日期升序。点携带 tooltip 所需全部字段。
@@ -1658,6 +1680,13 @@ async function loadAthleteResults(memberId) {
     if (eventOptions.length > 0) {
       const defaultKey = [...eventOptions].sort((a, b) => b.count - a.count)[0].key;
       const initial = buildTrendData(data.meets, defaultKey);
+      // 标准线层:运动员 dob/gender 决定年龄组;无 dob/gender → null → 不画线
+      const swimmer = getSwimmersWithUsaId().find((s) => s.usaSwimmingId === memberId) || null;
+      const levelLines = trendLevelLines(initial.points, defaultKey, swimmer);
+      const lastAge = ageAtDate(swimmer?.dob, initial.points[initial.points.length - 1].dateTs);
+      const levelCaption = (lastAge != null && levelLines)
+        ? `<span style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;">Level lines: ${ageGroupForAge(lastAge)} · ${swimmer.gender ? String(swimmer.gender)[0].toUpperCase() : '?'}</span>`
+        : '';
       trendSection = `
       <div style="margin-top:1.5rem;">
         <h4 style="margin:0 0 0.75rem 0;">📈 Performance Trend</h4>
@@ -1666,9 +1695,10 @@ async function loadAthleteResults(memberId) {
             ${eventOptions.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === defaultKey ? 'selected' : ''}>${escapeHtml(o.label)} (${o.count})</option>`).join('')}
           </select>
           <span id="trend-event-count" style="font-size:0.8rem;color:var(--text-muted);">${initial.count} swim${initial.count === 1 ? '' : 's'}</span>
+          ${levelCaption}
         </div>
         <div class="trend-legend">${trendLegendMarkup()}</div>
-        <div class="trend-chart" id="trend-chart">${renderTrendChart(initial.points, getTimeStandardLevels({}))}</div>
+        <div class="trend-chart" id="trend-chart">${renderTrendChart(initial.points, levelLines)}</div>
       </div>`;
     }
 
@@ -1729,7 +1759,7 @@ async function loadAthleteResults(memberId) {
       const countEl = document.getElementById('trend-event-count');
       if (!chartEl) return;
       const res = buildTrendData(data.meets, e.target.value);
-      chartEl.innerHTML = renderTrendChart(res.points, getTimeStandardLevels({}));
+      chartEl.innerHTML = renderTrendChart(res.points, trendLevelLines(res.points, e.target.value, swimmer));
       if (countEl) countEl.textContent = `${res.count} swim${res.count === 1 ? '' : 's'}`;
     });
 
