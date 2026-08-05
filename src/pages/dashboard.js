@@ -1684,7 +1684,8 @@ async function loadAthleteResults(memberId) {
       const initial = buildTrendData(data.meets, defaultKey);
       // 标准线层:运动员 dob/gender 决定年龄组;无 dob/gender → null → 不画线
       const levelLines = trendLevelLines(initial.points, defaultKey, swimmer);
-      const lastAge = ageAtDate(swimmer?.dob, initial.points[initial.points.length - 1].dateTs);
+      const lastTs = initial.points.length ? initial.points[initial.points.length - 1].dateTs : null;
+      const lastAge = ageAtDate(swimmer?.dob, lastTs);
       const levelCaption = (lastAge != null && levelLines)
         ? `<span style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;">Level lines: ${ageGroupForAge(lastAge)} · ${swimmer.gender ? String(swimmer.gender)[0].toUpperCase() : '?'}</span>`
         : '';
