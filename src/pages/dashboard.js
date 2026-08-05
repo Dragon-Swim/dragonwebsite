@@ -1676,12 +1676,13 @@ async function loadAthleteResults(memberId) {
     // 趋势区:仅当有可画事件时显示;默认选点数最多的事件并立即渲染。
     // 数据已在内存(getDoc 结果),换事件只重渲染图,不重新请求。
     const eventOptions = buildEventOptions(data.meets);
+    // 运动员元数据(dob/gender)供标准线层用;声明在块外 — change handler 也要引用
+    const swimmer = getSwimmersWithUsaId().find((s) => s.usaSwimmingId === memberId) || null;
     let trendSection = '';
     if (eventOptions.length > 0) {
       const defaultKey = [...eventOptions].sort((a, b) => b.count - a.count)[0].key;
       const initial = buildTrendData(data.meets, defaultKey);
       // 标准线层:运动员 dob/gender 决定年龄组;无 dob/gender → null → 不画线
-      const swimmer = getSwimmersWithUsaId().find((s) => s.usaSwimmingId === memberId) || null;
       const levelLines = trendLevelLines(initial.points, defaultKey, swimmer);
       const lastAge = ageAtDate(swimmer?.dob, initial.points[initial.points.length - 1].dateTs);
       const levelCaption = (lastAge != null && levelLines)
