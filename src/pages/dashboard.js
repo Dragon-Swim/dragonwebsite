@@ -1169,6 +1169,29 @@ function getCourseLabel(code) {
 
 // ── Render Swimmer Results (coach view) ──
 
+// 解析 meet 的开始日期时间戳(用于 season 内排序)。
+// meetDates 两种格式:生产 "Feb 24 - Feb 25"(无年份)与 mock "2026-05-01"(ISO)。
+// 无年份时用 season 推断:赛季 "YYYY1/YYYY2"(或 "YYYY1-YYYY2")。
+// 赛季定义:9 月 1 日 - 次年 8 月 31 日(教练确认)。
+// 因此月份 ≥ 9 属起始年(新赛季开始),月份 ≤ 8 属结束年(赛季收尾,
+// 如 2025/2026 的 8 月比赛发生在 2026 年)。
+// 解析失败返回 null,调用方回退到字典序比较。
+function parseMeetStartDate(meet) {
+  const dates = meet.meetDates || '';
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(dates);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+  const d = /^([A-Za-z]{3}) (\d{1,2})/.exec(dates); // 如 "Feb 24 - Feb 25" → 取第一个
+  const seasonMatch = /^(\d{4})\s*[/-]\s*(\d{4})/.exec(meet.season || '');
+  if (!d || !seasonMatch) return null;
+  const monthAbbr = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+  const month = monthAbbr[d[1]];
+  if (!month) return null;
+  const y1 = +seasonMatch[1];
+  const y2 = +seasonMatch[2];
+  const year = month >= 9 ? y1 : y2;
+  return new Date(year, month - 1, +d[2]).getTime();
+}
+
 function groupMeetsBySeason(meets) {
   const seasons = {};
   for (const [meetId, meet] of Object.entries(meets)) {
@@ -1180,9 +1203,11 @@ function groupMeetsBySeason(meets) {
   const sorted = {};
   for (const season of Object.keys(seasons).sort().reverse()) {
     sorted[season] = seasons[season].sort((a, b) => {
-      const da = a.meetDates || '';
-      const db = b.meetDates || '';
-      return db.localeCompare(da);
+      const da = parseMeetStartDate(a);
+      const db = parseMeetStartDate(b);
+      if (da != null && db != null) return db - da; // 最新在前
+      // 解析失败(未知格式)回退:字典序倒序
+      return (b.meetDates || '').localeCompare(a.meetDates || '');
     });
   }
   return sorted;
