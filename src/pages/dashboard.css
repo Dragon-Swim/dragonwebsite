@@ -1603,3 +1603,26 @@ input[readonly].profile-edit-field {
 .ts-aa { background: #FEF3C7; color: #D97706; }
 .ts-aaa { background: #FEE2E2; color: #DC2626; }
 .ts-aaaa { background: #FEF3C7; color: #B45309; border: 1px solid #F59E0B; }
+
+/* ── Trend Chart(成绩历史曲线图)──
+   点色复用 .ts-* 六色;深色模式各加亮一档(浅色系在深色底可读性差,
+   dataviz 校验器对比度 PASS;AA/AAAA 邻对色差弱,靠图例文字 + AAAA 加大点二次编码) */
+.trend-chart { width: 100%; overflow-x: auto; margin-top: 0.5rem; }
+.trend-chart-svg { max-width: 100%; height: auto; display: block; }
+.trend-legend { display: flex; gap: 0.9rem; align-items: center; font-size: 0.75rem; color: var(--text-muted); flex-wrap: wrap; margin-bottom: 0.25rem; }
+.trend-legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 0.3rem; vertical-align: -1px; }
+.trend-empty { color: var(--text-muted); text-align: center; padding: 1.5rem 0; font-size: 0.9rem; }
+.ts-dot { stroke: var(--bg-card); stroke-width: 2; cursor: help; }
+.ts-dot.ts-none { fill: var(--text-muted); }
+.ts-dot.ts-b { fill: #6B7280; }
+.ts-dot.ts-bb { fill: #2563EB; }
+.ts-dot.ts-a { fill: #059669; }
+.ts-dot.ts-aa { fill: #D97706; }
+.ts-dot.ts-aaa { fill: #DC2626; }
+.ts-dot.ts-aaaa { fill: #B45309; }
+[data-theme="dark"] .ts-dot.ts-b { fill: #9CA3AF; }
+[data-theme="dark"] .ts-dot.ts-bb { fill: #60A5FA; }
+[data-theme="dark"] .ts-dot.ts-a { fill: #34D399; }
+[data-theme="dark"] .ts-dot.ts-aa { fill: #FBBF24; }
+[data-theme="dark"] .ts-dot.ts-aaa { fill: #F87171; }
+[data-theme="dark"] .ts-dot.ts-aaaa { fill: #FB923C; }

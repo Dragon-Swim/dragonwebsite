@@ -9,6 +9,7 @@ import '../styles/global.css';
 import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
+import { getTimeStandardLevels } from '../data/timeStandards.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
@@ -577,47 +578,85 @@ const MOCK_SWIMMERS = [
   { name: 'Mock B (batch pause)', usaSwimmingId: 'MOCK-B', hasId: true },
 ];
 const MOCK_BEST_TIMES = [
-  { strokeAbbreviation: 'FR', strokeName: 'Freestyle', distance: 50, swimTime: 28.32, courseCode: 'SCY' },
-  { strokeAbbreviation: 'BK', strokeName: 'Backstroke', distance: 100, swimTime: 62.15, courseCode: 'SCY' },
-  { strokeAbbreviation: 'BR', strokeName: 'Breaststroke', distance: 100, swimTime: 72.48, courseCode: 'LCM' },
+  { strokeAbbreviation: 'FR', strokeName: 'Freestyle', distance: 50, swimTime: '28.32', courseCode: 'SCY' },
+  { strokeAbbreviation: 'BK', strokeName: 'Backstroke', distance: 100, swimTime: '1:02.15', courseCode: 'SCY' },
+  { strokeAbbreviation: 'BR', strokeName: 'Breaststroke', distance: 100, swimTime: '1:12.48', courseCode: 'LCM' },
 ];
 const MOCK_MEET_NAMES = ['Spring Invitational', 'Summer Champs', 'Regionals', 'Junior Meet', 'Fall Classic'];
+// 与生产 Data Hub 返回格式一致:eventCode 字符串、swimTime 字符串、带 timeStandard 等字段。
+// 覆盖 SCY 5 项 + LCM 3 项,趋势图/事件下拉可用。
 const MOCK_SWIMS = [
-  { event: '50 FR', swimTime: 28.32, timeStandard: 'BB' },
-  { event: '100 BK', swimTime: 62.15, timeStandard: 'A' },
+  { eventCode: '50 FR SCY', distance: 50, strokeAbbreviation: 'FR', swimTime: '28.32', timeStandard: 'BB', finishPosition: 4, sessionName: 'Prelims', timeDrop: '-0.35' },
+  { eventCode: '100 FR SCY', distance: 100, strokeAbbreviation: 'FR', swimTime: '1:02.15', timeStandard: 'A', finishPosition: 2, sessionName: 'Finals', timeDrop: '-1.20' },
+  { eventCode: '100 BK SCY', distance: 100, strokeAbbreviation: 'BK', swimTime: '1:08.44', timeStandard: 'BB', finishPosition: 6, sessionName: 'Prelims', timeDrop: '0.00' },
+  { eventCode: '100 BR SCY', distance: 100, strokeAbbreviation: 'BR', swimTime: '1:16.90', timeStandard: 'B', finishPosition: 9, sessionName: 'Prelims', timeDrop: '+0.85' },
+  { eventCode: '200 FR SCY', distance: 200, strokeAbbreviation: 'FR', swimTime: '2:18.33', timeStandard: 'A', finishPosition: 3, sessionName: 'Finals', timeDrop: '-2.10' },
+  { eventCode: '50 FR LCM', distance: 50, strokeAbbreviation: 'FR', swimTime: '32.18', timeStandard: 'B', finishPosition: 7, sessionName: 'Prelims', timeDrop: '-0.12' },
+  { eventCode: '100 FL LCM', distance: 100, strokeAbbreviation: 'FL', swimTime: '1:15.30', timeStandard: 'AA', finishPosition: 1, sessionName: 'Finals', timeDrop: '-1.85' },
+  { eventCode: '200 IM LCM', distance: 200, strokeAbbreviation: 'IM', swimTime: '2:41.05', timeStandard: 'BB', finishPosition: 5, sessionName: 'Prelims', timeDrop: '-0.60' },
 ];
-function mockMeet(id, name) {
-  return { meetId: id, meetName: name, meetDates: '2026-05-01', meetType: 'invitational', courseCode: 'SCY', season: '2025-2026', seasonYear: '2026' };
+// 日期池:2022-01 → 2026-07,4-8 月 LCM(夏季)其余 SCY(室内赛季)。
+// MOCK-A 用索引 8..23(2023-09 → 2026-07,跨 4 个赛季),MOCK-B 用 0..19。
+const MOCK_DATE_POOL = [
+  '2022-01-08', '2022-03-12', '2022-06-18', '2022-10-08', '2022-12-10', '2023-02-04',
+  '2023-05-20', '2023-07-08', '2023-09-16', '2023-12-09', '2024-02-03', '2024-05-18',
+  '2024-07-06', '2024-10-12', '2024-12-14', '2025-02-01', '2025-04-26', '2025-06-14',
+  '2025-10-11', '2025-12-13', '2026-01-31', '2026-04-25', '2026-05-16', '2026-07-04',
+];
+function mockIndexFor(memberId, meetNo) {
+  return memberId === 'MOCK-A' ? 7 + meetNo : meetNo - 1;
+}
+function mockMeet(id, name, idx) {
+  const d = MOCK_DATE_POOL[idx % MOCK_DATE_POOL.length];
+  const y = +d.slice(0, 4);
+  const m = +d.slice(5, 7);
+  // 与 parseMeetStartDate 同一赛季约定:9 月-次年 8 月
+  const season = m >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  const course = m >= 4 && m <= 8 ? 'LCM' : 'SCY';
+  return {
+    meetId: id, meetName: name, meetDates: d, meetType: 'invitational',
+    courseCode: course, season, seasonYear: season.slice(-4),
+  };
+}
+// 每场 meet 渐进提速(0.4%/场),让趋势图有可见的下降曲线。
+// 成绩经 parseSwimTime/formatSwimTime 往返,保持 "32.28"/"1:02.15" 字符串格式。
+function mockSwimsForMeet(meetId) {
+  const n = Number(/\d+/.exec(meetId.split('-').pop())?.[0] || 0);
+  const factor = 1 - (Math.max(n, 1) - 1) * 0.004;
+  return MOCK_SWIMS.map((sw) => ({ ...sw, swimTime: formatSwimTime(parseSwimTime(sw.swimTime) * factor) }));
 }
 function mockMeetsFor(memberId) {
   if (memberId === 'MOCK-A') {
     // 13 场正常 + 1 场"重试后成功" + 2 场"重试后仍失败"(连续 3 次可重试失败 → 熔断)
     const meets = [];
-    for (let i = 1; i <= 13; i++) meets.push(mockMeet(`MEET-OK-${String(i).padStart(2, '0')}`, MOCK_MEET_NAMES[i % MOCK_MEET_NAMES.length]));
-    meets.push(mockMeet('MEET-FAIL-RETRY', 'Retry-then-ok Meet'));
-    meets.push(mockMeet('MEET-FAIL-HARD-1', 'Hard Fail 1'));
-    meets.push(mockMeet('MEET-FAIL-HARD-2', 'Hard Fail 2'));
+    for (let i = 1; i <= 13; i++) meets.push(mockMeet(`MEET-OK-${String(i).padStart(2, '0')}`, MOCK_MEET_NAMES[i % MOCK_MEET_NAMES.length], mockIndexFor(memberId, i)));
+    meets.push(mockMeet('MEET-FAIL-RETRY', 'Retry-then-ok Meet', mockIndexFor(memberId, 14)));
+    meets.push(mockMeet('MEET-FAIL-HARD-1', 'Hard Fail 1', mockIndexFor(memberId, 15)));
+    meets.push(mockMeet('MEET-FAIL-HARD-2', 'Hard Fail 2', mockIndexFor(memberId, 16)));
     return meets;
   }
   // MOCK-B:20 场全成功 → 第 15 场后触发中场休息
   const meets = [];
-  for (let i = 1; i <= 20; i++) meets.push(mockMeet(`MEET-OK-B${String(i).padStart(2, '0')}`, MOCK_MEET_NAMES[i % MOCK_MEET_NAMES.length]));
+  for (let i = 1; i <= 20; i++) meets.push(mockMeet(`MEET-OK-B${String(i).padStart(2, '0')}`, MOCK_MEET_NAMES[i % MOCK_MEET_NAMES.length], mockIndexFor(memberId, i)));
   return meets;
 }
 // mock 用内存 Firestore(验证断点续传,不碰生产数据)
-const mockStore = new Map(); // memberId -> { meets: {...} }
+const mockStore = new Map(); // memberId -> { meets, bestTimes, lastUpdated }
 function mockSeed(memberId) {
   if (mockStore.has(memberId)) return;
   const meets = {};
   if (memberId === 'MOCK-A') {
     // 预置 5 场 status ok → 增量抓取应跳过它们
     for (let i = 1; i <= 5; i++) {
-      meets[`MEET-OK-${String(i).padStart(2, '0')}`] = {
-        status: 'ok', swims: MOCK_SWIMS, meetName: 'Already Fetched', fetchedAt: '2026-07-01T00:00:00Z',
+      const id = `MEET-OK-${String(i).padStart(2, '0')}`;
+      meets[id] = {
+        status: 'ok', swims: mockSwimsForMeet(id),
+        ...mockMeet(id, 'Already Fetched', mockIndexFor(memberId, i)),
+        fetchedAt: '2026-07-01T00:00:00Z',
       };
     }
   }
-  mockStore.set(memberId, { meets });
+  mockStore.set(memberId, { meets, bestTimes: MOCK_BEST_TIMES, lastUpdated: '2026-07-01T00:00:00Z' });
 }
 const mockFailCounts = new Map();
 if (MOCK_MODE) window.__mockStore = mockStore; // console 里检查断点续传结果用
@@ -682,7 +721,7 @@ async function fetchMeetTimes(creds, memberId, meetId) {
     if (meetId.includes('FAIL-HARD')) {
       throw Object.assign(new Error('HTTP 406: mock rate-limited (retryable)'), { retryable: true });
     }
-    return MOCK_SWIMS;
+    return mockSwimsForMeet(meetId);
   }
   const url = `${USAS_BASE}/GetSwimmerMeetTimes/${memberId}/${meetId}`;
   const delays = FETCH_POLICY.retryDelaysMs;
@@ -877,7 +916,12 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
   // 1. Best times
   const bestTimes = await fetchBestTimes(creds, memberId);
   onBestTimes(bestTimes);
-  if (!MOCK_MODE) {
+  if (MOCK_MODE) {
+    // mock:bestTimes 写入内存 store,View Athlete Results 与生产同构
+    mockSeed(memberId);
+    const entry = mockStore.get(memberId);
+    if (entry) { entry.bestTimes = bestTimes; entry.lastUpdated = new Date().toISOString(); }
+  } else {
     await setDoc(doc(db, 'swimResults', memberId), {
       memberId, swimmerName, bestTimes, lastUpdated: new Date().toISOString(),
     }, { merge: true });
@@ -1167,6 +1211,269 @@ function getCourseLabel(code) {
   return map[code] || code || '—';
 }
 
+// ── Trend Chart(成绩历史曲线图,原生 SVG 零依赖)──
+
+const STROKE_LABELS = { FR: 'Free', BK: 'Back', BR: 'Breast', FL: 'Fly', IM: 'IM' };
+const TREND_LEVELS = [
+  ['B', 'ts-b'], ['BB', 'ts-bb'], ['A', 'ts-a'], ['AA', 'ts-aa'], ['AAA', 'ts-aaa'], ['AAAA', 'ts-aaaa'],
+];
+
+// 解析成绩字符串/数字 → 秒。"32.28"→32.28、"1:28.23"→88.23;数字直接过;
+// null/''/无法解析 → null。生产 Data Hub 返回字符串,旧数据可能是数字,两者都兼容。
+function parseSwimTime(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const str = String(value).trim();
+  const mmss = /^(\d+):(\d{2}(?:\.\d+)?)$/.exec(str);
+  if (mmss) return +mmss[1] * 60 + +mmss[2];
+  const sec = Number(str);
+  return Number.isFinite(sec) ? sec : null;
+}
+
+// 泳姿缩写归一化:FREE→FR、FLY→FL、BACK→BK、BREAST→BR;其余保留(IM/FR 等)。
+function normalizeStrokeCode(stroke) {
+  const alias = { FREE: 'FR', FLY: 'FL', BACK: 'BK', BREAST: 'BR' };
+  const up = String(stroke || '').toUpperCase();
+  return alias[up] || up;
+}
+
+// 解析 eventCode → { distance, stroke, course }。
+// 主格式 "50 FL SCY";旧数据可能是 "50 FR"(无 course)→ 用 meet.courseCode 兜底。
+// 解析失败返回 null(调用方丢点)。
+function parseEventCode(eventCode, meet) {
+  const code = String(eventCode || '').trim();
+  if (!code) return null;
+  const withCourse = /^(\d+)\s+([A-Za-z]{2,4})\s+([A-Za-z]{2,3})$/.exec(code);
+  const noCourse = /^(\d+)\s+([A-Za-z]{2,4})$/.exec(code);
+  if (!withCourse && !noCourse) return null;
+  const m = withCourse || noCourse;
+  const distance = +m[1];
+  const stroke = normalizeStrokeCode(m[2]);
+  const course = withCourse ? m[3].toUpperCase() : (meet?.courseCode || '').toUpperCase() || null;
+  if (!Number.isFinite(distance) || !stroke || !course) return null;
+  return { distance, stroke, course };
+}
+
+// 汇总某运动员某项目的历史成绩点。eventKey 形如 "50 FR SCY"(大写)。
+// 同一 meet 同项目取最快(预赛/决赛去重);meet 日期或成绩解析失败丢点(warn)。
+// 返回 { points, count },points 按日期升序。点携带 tooltip 所需全部字段。
+function buildTrendData(meets, eventKey) {
+  const key = String(eventKey || '').toUpperCase().trim();
+  const points = [];
+  for (const [meetId, meet] of Object.entries(meets || {})) {
+    // 与 loadAthleteDataStatus 相同的状态回退约定:旧数据无 status 按 swims 判断
+    const st = meet.status || (Array.isArray(meet.swims) && meet.swims.length ? 'ok' : 'empty');
+    if (st !== 'ok' || !Array.isArray(meet.swims) || meet.swims.length === 0) continue;
+    const dateTs = parseMeetStartDate(meet);
+    if (dateTs == null) {
+      console.warn('[Trend] no parseable meet date for', meetId, meet.meetDates);
+      continue;
+    }
+    let best = null;
+    for (const sw of meet.swims) {
+      const parsed = parseEventCode(sw.eventCode || `${sw.distance || ''} ${sw.strokeAbbreviation || ''}`, meet);
+      if (!parsed || `${parsed.distance} ${parsed.stroke} ${parsed.course}` !== key) continue;
+      const seconds = parseSwimTime(sw.swimTime);
+      if (seconds == null) continue;
+      if (!best || seconds < best.seconds) best = { seconds, course: parsed.course, sw };
+    }
+    if (!best) continue;
+    points.push({
+      meetId,
+      meetName: meet.meetName || '',
+      dateTs,
+      dateLabel: meet.meetDates || '',
+      seconds: best.seconds,
+      timeText: formatSwimTime(best.seconds),
+      timeStandard: best.sw.timeStandard ?? null,
+      timeDrop: best.sw.timeDrop ?? null,
+      finishPosition: best.sw.finishPosition ?? null,
+      sessionName: best.sw.sessionName ?? null,
+      course: best.course,
+    });
+  }
+  points.sort((a, b) => a.dateTs - b.dateTs || a.meetId.localeCompare(b.meetId));
+  return { points, count: points.length };
+}
+
+// 列出该运动员所有已抓取的项目(去重后点数),供事件下拉使用。
+function buildEventOptions(meets) {
+  const tally = new Map(); // key → { distance, stroke, course, count }
+  for (const meet of Object.values(meets || {})) {
+    const st = meet.status || (Array.isArray(meet.swims) && meet.swims.length ? 'ok' : 'empty');
+    if (st !== 'ok' || !Array.isArray(meet.swims)) continue;
+    const seen = new Set();
+    for (const sw of meet.swims) {
+      const parsed = parseEventCode(sw.eventCode || `${sw.distance || ''} ${sw.strokeAbbreviation || ''}`, meet);
+      if (!parsed) continue;
+      const key = `${parsed.distance} ${parsed.stroke} ${parsed.course}`;
+      if (seen.has(key)) continue; // 同一 meet 同项目只计一个点
+      seen.add(key);
+      const e = tally.get(key);
+      if (e) e.count++;
+      else tally.set(key, { distance: parsed.distance, stroke: parsed.stroke, course: parsed.course, count: 1 });
+    }
+  }
+  const strokeOrder = { FR: 0, BK: 1, BR: 2, FL: 3, IM: 4 };
+  const courseOrder = { SCY: 0, LCM: 1, SCM: 2 };
+  return [...tally.values()]
+    .sort((a, b) =>
+      a.distance - b.distance ||
+      (strokeOrder[a.stroke] ?? 9) - (strokeOrder[b.stroke] ?? 9) ||
+      (courseOrder[a.course] ?? 9) - (courseOrder[b.course] ?? 9))
+    .map((e) => ({
+      key: `${e.distance} ${e.stroke} ${e.course}`,
+      label: `${e.distance} ${STROKE_LABELS[e.stroke] || e.stroke} · ${e.course}`,
+      count: e.count,
+    }));
+}
+
+// 图例:六档标准色 + 文字(级别信息永不只靠颜色传达 — dataviz 校验 AA/AAAA 邻对
+// 正常视觉 ΔE 9.9 低于 15,靠文字/尺寸二次编码兜底)。
+function trendLegendMarkup() {
+  return TREND_LEVELS.map(([label, cls]) => `
+    <span style="display:inline-flex;align-items:center;gap:0.35rem;">
+      <span class="trend-legend-dot ts-dot ${cls}"></span>${label}
+    </span>`).join('');
+}
+
+// tooltip 文本(经 escapeHtml 后放入 SVG <title>)。
+function buildTrendTooltip(p) {
+  const dropText = p.timeDrop == null
+    ? '—'
+    : (typeof p.timeDrop === 'number' ? (p.timeDrop > 0 ? '+' : '') + p.timeDrop.toFixed(2) + 's' : String(p.timeDrop));
+  return [
+    p.meetName,
+    `${p.dateLabel} (${p.course})`,
+    `Time: ${p.timeText} · ${p.timeStandard || '—'}`,
+    `Drop: ${dropText} · Place: ${p.finishPosition ?? '—'}`,
+  ].join('\n');
+}
+
+// 画成绩趋势 SVG(纯字符串,无 DOM,内联样式+CSS 变量深浅主题自适应)。
+// levelLines:未来标准线层 [{level, thresholdSeconds, color}],null/[] 时整层跳过
+// (当前 src/data/timeStandards.js 返回 null — 标准表数据就绪后自动启用,图表代码不改)。
+// 纵轴倒置(时间越小越靠上);点按 timeStandard 着色(ts-dot 类);
+// tooltip 用 SVG <title> + 透明大号 hit-target(零 JS、无障碍、触屏可用)。
+function renderTrendChart(points, levelLines, opts = {}) {
+  const { width = 720, height = 300, margin = { top: 14, right: 44, bottom: 26, left: 48 } } = opts;
+  if (!points || points.length === 0) {
+    return '<p class="trend-empty">No swims for this event.</p>';
+  }
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+
+  // x 缩放:日期时间戳,两端垫 5%;单点/同日时至少 1 天跨度
+  const minTs = Math.min(...points.map((p) => p.dateTs));
+  const maxTs = Math.max(...points.map((p) => p.dateTs));
+  const span = Math.max(maxTs - minTs, 24 * 3600 * 1000);
+  const x0 = minTs - span * 0.05;
+  const x1 = maxTs + span * 0.05;
+  const x = (ts) => margin.left + ((ts - x0) / (x1 - x0)) * plotW;
+
+  // y 缩放:包含标准线阈值,垫 8%,倒置(最快在顶 — minSec 映射到顶部)
+  const thresholds = (levelLines || []).map((l) => l.thresholdSeconds);
+  const secs = points.map((p) => p.seconds);
+  let minSec = Math.min(...secs, ...thresholds);
+  let maxSec = Math.max(...secs, ...thresholds);
+  const pad = (maxSec - minSec || 1) * 0.08;
+  minSec -= pad;
+  maxSec += pad;
+  const y = (sec) => margin.top + ((sec - minSec) / (maxSec - minSec)) * plotH;
+
+  // y 刻度:1/2/5×10^k 步长,最多 6 个
+  const niceStep = (raw) => {
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / pow;
+    const f = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+    return f * pow;
+  };
+  const step = niceStep((maxSec - minSec) / 4);
+  const yTicks = [];
+  for (let t = Math.ceil(minSec / step) * step; t <= maxSec + 1e-9; t += step) {
+    yTicks.push(+t.toFixed(3));
+    if (yTicks.length >= 6) break;
+  }
+
+  // 网格(仅 y 向,recessive)+ y 轴标签
+  const yTickMarkup = yTicks.map((t) => {
+    const ty = y(t);
+    return `
+      <line x1="${margin.left}" x2="${width - margin.right}" y1="${ty.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="var(--border-color)" stroke-opacity="0.4" stroke-width="1" />
+      <text x="${margin.left - 6}" y="${(ty + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--text-muted)" font-family="var(--font-sans, sans-serif)">${formatSwimTime(t)}</text>`;
+  }).join('');
+
+  // x 轴:5 个均匀刻度,中间重复标签跳过;首尾对齐两端
+  let prevLabel = '';
+  const xTickMarkup = [];
+  for (let i = 0; i < 5; i++) {
+    const ts = x0 + ((x1 - x0) * i) / 4;
+    const label = new Date(ts).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    if (i > 0 && i < 4 && label === prevLabel) continue;
+    prevLabel = label;
+    const anchor = i === 0 ? 'start' : i === 4 ? 'end' : 'middle';
+    xTickMarkup.push(`<text x="${x(ts).toFixed(1)}" y="${height - 8}" text-anchor="${anchor}" font-size="10" fill="var(--text-muted)" font-family="var(--font-sans, sans-serif)">${label}</text>`);
+  }
+
+  // 成绩线:2px 品牌金;单点不画线只画点
+  const lineMarkup = points.length >= 2
+    ? `<polyline points="${points.map((p) => `${x(p.dateTs).toFixed(1)},${y(p.seconds).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`
+    : '';
+
+  // 点:ts-dot 类着色(与 badge 六色一致,深色模式 CSS 加亮);
+  // AAAA 加大一号(AA/AAAA 琥珀系对比弱,尺寸做二次编码);
+  // 同日多点组内 ±3px 抖动;透明 r=10 hit-target 挂 <title>
+  const byDate = new Map();
+  points.forEach((p) => {
+    const arr = byDate.get(p.dateTs) || [];
+    arr.push(p);
+    byDate.set(p.dateTs, arr);
+  });
+  const pointMarkup = [];
+  for (const [ts, group] of byDate) {
+    group.forEach((p, i) => {
+      let px = x(ts);
+      if (group.length > 1) px += (i - (group.length - 1) / 2) * 6;
+      const std = p.timeStandard ? String(p.timeStandard).toUpperCase() : '';
+      const cls = `ts-dot ${getTimeStandardClass(std) || 'ts-none'}`;
+      const r = std === 'AAAA' ? 5.5 : 4.5;
+      const title = escapeHtml(buildTrendTooltip(p));
+      pointMarkup.push(`
+        <circle class="${cls}" cx="${px.toFixed(1)}" cy="${y(p.seconds).toFixed(1)}" r="${r}" />
+        <circle cx="${px.toFixed(1)}" cy="${y(p.seconds).toFixed(1)}" r="10" fill="transparent" style="cursor:pointer;">
+          <title>${title}</title>
+        </circle>`);
+    });
+  }
+
+  // 标准线层(未来):按阈值升序画 6% 色带 + 虚线 + 右侧级别标签
+  let levelMarkup = '';
+  if (Array.isArray(levelLines) && levelLines.length > 0) {
+    const sorted = [...levelLines].sort((a, b) => a.thresholdSeconds - b.thresholdSeconds);
+    let prevY = null;
+    for (const l of sorted) {
+      const ly = y(l.thresholdSeconds);
+      if (prevY != null) {
+        levelMarkup += `<rect x="${margin.left}" y="${ly.toFixed(1)}" width="${plotW}" height="${(prevY - ly).toFixed(1)}" fill="${l.color}" fill-opacity="0.06" />`;
+      }
+      levelMarkup += `
+        <line x1="${margin.left}" x2="${width - margin.right}" y1="${ly.toFixed(1)}" y2="${ly.toFixed(1)}" stroke="${l.color}" stroke-width="1.2" stroke-dasharray="5 4" />
+        <text x="${width - margin.right - 4}" y="${(ly + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="var(--font-sans, sans-serif)">${escapeHtml(String(l.level))}</text>`;
+      prevY = ly;
+    }
+  }
+
+  return `
+    <svg class="trend-chart-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Swim time trend chart for ${escapeHtml(String(points[0]?.course || ''))}">
+      <text x="${margin.left}" y="${margin.top - 4}" font-size="9" fill="var(--text-muted)" font-family="var(--font-sans, sans-serif)">faster ↑</text>
+      ${levelMarkup}
+      ${yTickMarkup}
+      ${lineMarkup}
+      ${pointMarkup}
+      ${xTickMarkup}
+    </svg>`;
+}
+
 // ── Render Swimmer Results (coach view) ──
 
 // 解析 meet 的开始日期时间戳(用于 season 内排序)。
@@ -1327,15 +1634,43 @@ async function loadAthleteResults(memberId) {
   content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">⏳ Loading...</p>';
 
   try {
-    const snap = await getDoc(doc(db, 'swimResults', memberId));
-    if (!snap.exists()) {
-      content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">No results data yet. Run a fetch first.</p>';
-      return;
+    // mock 模式读内存 store(真实模式读 Firestore),两者产出同构的
+    // { bestTimes, meets, lastUpdated } — 此前无条件读真实库导致 mock 下看板为空
+    let data;
+    if (MOCK_MODE) {
+      mockSeed(memberId);
+      data = mockStore.get(memberId) || { meets: {}, bestTimes: [] };
+    } else {
+      const snap = await getDoc(doc(db, 'swimResults', memberId));
+      if (!snap.exists()) {
+        content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">No results data yet. Run a fetch first.</p>';
+        return;
+      }
+      data = snap.data();
     }
-
-    const data = snap.data();
     console.log('[Results] Loaded data for', memberId, ':', data);
     console.log('[Results] bestTimes:', data.bestTimes?.length, 'meets:', Object.keys(data.meets || {}).length);
+
+    // 趋势区:仅当有可画事件时显示;默认选点数最多的事件并立即渲染。
+    // 数据已在内存(getDoc 结果),换事件只重渲染图,不重新请求。
+    const eventOptions = buildEventOptions(data.meets);
+    let trendSection = '';
+    if (eventOptions.length > 0) {
+      const defaultKey = [...eventOptions].sort((a, b) => b.count - a.count)[0].key;
+      const initial = buildTrendData(data.meets, defaultKey);
+      trendSection = `
+      <div style="margin-top:1.5rem;">
+        <h4 style="margin:0 0 0.75rem 0;">📈 Performance Trend</h4>
+        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;">
+          <select id="trend-event-select" class="form-input" style="max-width:260px;">
+            ${eventOptions.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === defaultKey ? 'selected' : ''}>${escapeHtml(o.label)} (${o.count})</option>`).join('')}
+          </select>
+          <span id="trend-event-count" style="font-size:0.8rem;color:var(--text-muted);">${initial.count} swim${initial.count === 1 ? '' : 's'}</span>
+        </div>
+        <div class="trend-legend">${trendLegendMarkup()}</div>
+        <div class="trend-chart" id="trend-chart">${renderTrendChart(initial.points, getTimeStandardLevels({}))}</div>
+      </div>`;
+    }
 
     content.innerHTML = `
       <div style="margin-bottom:1.5rem;">
@@ -1354,6 +1689,8 @@ async function loadAthleteResults(memberId) {
           ${renderMeetHistory(data.meets)}
         </div>
       </div>
+
+      ${trendSection}
 
       <details style="margin-top:1.5rem;border-top:1px solid var(--border-color);padding-top:1rem;">
         <summary style="cursor:pointer;color:var(--text-muted);font-size:0.8rem;">🔍 Debug: Raw JSON</summary>
@@ -1384,6 +1721,16 @@ async function loadAthleteResults(memberId) {
         panel.style.display = isOpen ? 'none' : 'block';
         if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
       });
+    });
+
+    // Trend event selector — 换事件只重渲染图(数据已在内存,无新请求)
+    document.getElementById('trend-event-select')?.addEventListener('change', (e) => {
+      const chartEl = document.getElementById('trend-chart');
+      const countEl = document.getElementById('trend-event-count');
+      if (!chartEl) return;
+      const res = buildTrendData(data.meets, e.target.value);
+      chartEl.innerHTML = renderTrendChart(res.points, getTimeStandardLevels({}));
+      if (countEl) countEl.textContent = `${res.count} swim${res.count === 1 ? '' : 's'}`;
     });
 
   } catch (err) {
