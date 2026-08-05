@@ -266,6 +266,9 @@ function renderDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'meets' ? 'active' : ''}" data-tab="meets">
               <span class="dash-nav-icon">🏆</span> ${t('dash_swimmer_meets_label')}
             </button>
+            <button class="dash-nav-item ${currentTab === 'results' ? 'active' : ''}" data-tab="results">
+              <span class="dash-nav-icon">🏊</span> ${t('dash_swimmer_results_label')}
+            </button>
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
               <span class="dash-nav-icon">📅</span> ${t('dash_swimmer_schedule_label')}
             </button>
@@ -325,6 +328,10 @@ function renderDashboard(user) {
   bindEvents();
   initTheme();
   updateSidebarThemeIcon();
+
+  // Results tab:innerHTML 已就位,此时加载默认孩子成绩
+  // (refreshUI 是异步的,导航点击处立即调用会因 DOM 未渲染而空跑)
+  if (currentTab === 'results') initFamilyResults();
 }
 
 // ── Coach Dashboard ──
@@ -451,6 +458,7 @@ function getTabTitle(tab, role = 'swimmer') {
     'profile': t('dash_swimmer_tab_profile'),
     'plans': t('dash_swimmer_tab_plans'),
     'meets': t('dash_swimmer_tab_meets'),
+    'results': t('dash_swimmer_tab_results'),
     'schedule': t('dash_swimmer_tab_schedule'),
   };
   return titles[tab] || t('dash_swimmer_tab_overview');
@@ -462,6 +470,7 @@ function getTabSubtitle(tab) {
     'profile': t('dash_swimmer_profile_sub'),
     'plans': t('dash_swimmer_plans_sub'),
     'meets': t('dash_swimmer_meets_sub'),
+    'results': t('dash_swimmer_results_sub'),
     'schedule': t('dash_swimmer_schedule_sub'),
   };
   return subs[tab] || '';
@@ -485,6 +494,7 @@ function renderTabContent(tab, role = 'swimmer') {
     case 'profile': return renderProfile();
     case 'plans': return renderSwimPlans();
     case 'meets': return renderSwimMeets();
+    case 'results': return renderFamilyResults();
     case 'schedule': return renderSchedule();
     default: return '';
   }
@@ -573,9 +583,10 @@ if (MOCK_MODE) {
 
 // ── Mock mode (dev only, ?mock=1) ──
 // 不发真实 API 请求、不写 Firestore,用内存数据安全测试限速/重试/熔断/断点续传。
+// dob/gender 供趋势图标准线层演示(MOCK-A → 13-14 年龄组,MOCK-B → 15-16;仅 mock 生效)。
 const MOCK_SWIMMERS = [
-  { name: 'Mock A (incremental + fail/circuit-break)', usaSwimmingId: 'MOCK-A', hasId: true },
-  { name: 'Mock B (batch pause)', usaSwimmingId: 'MOCK-B', hasId: true },
+  { name: 'Mock A (incremental + fail/circuit-break)', usaSwimmingId: 'MOCK-A', hasId: true, dob: '2013-06-01', gender: 'female' },
+  { name: 'Mock B (batch pause)', usaSwimmingId: 'MOCK-B', hasId: true, dob: '2011-02-14', gender: 'male' },
 ];
 const MOCK_BEST_TIMES = [
   { strokeAbbreviation: 'FR', strokeName: 'Freestyle', distance: 50, swimTime: '28.32', courseCode: 'SCY' },
@@ -1186,6 +1197,78 @@ function renderCoachResults() {
   `;
 }
 
+// ── Family Results(家庭端 Results tab)──
+// 家庭只能看到自家孩子;复用教练端 loadAthleteResults 的渲染核心,
+// 差异:无 Debug JSON、meet 历史只显示 ok 场次、文案走 i18n、mock 映射到 MOCK-A/B。
+
+function renderFamilyResults() {
+  if (!familyData) {
+    return `<div class="dash-panel" style="text-align: center; padding: 3rem;">
+      <p class="dash-empty">${t('dash_swimmer_results_no_usa_id')}</p>
+    </div>`;
+  }
+  const swimmers = (familyData.swimmers || []).filter(s => !s.deleted && s.usaSwimmingId);
+  if (swimmers.length === 0) {
+    return `<div class="dash-panel" style="text-align: center; padding: 3rem;">
+      <p class="dash-empty">${t('dash_swimmer_results_no_usa_id')}</p>
+    </div>`;
+  }
+
+  const swimmerName = (s) => [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ');
+
+  return `
+    <div class="dash-panel">
+      ${swimmers.length > 1 ? `
+      <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: var(--space-md); flex-wrap: wrap;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">${t('dash_swimmer_results_select_label')}</span>
+        <select class="form-input" id="family-results-select" style="max-width: 300px;">
+          ${swimmers.map((s) => `<option value="${escapeHtml(s.usaSwimmingId)}">${escapeHtml(swimmerName(s))}</option>`).join('')}
+        </select>
+      </div>
+      ` : ''}
+      <div id="results-viewer" style="display: none;">
+        <div id="results-content"></div>
+      </div>
+    </div>
+  `;
+}
+
+// Results tab 渲染后调用(镜像教练端 loadAthleteDataStatus 时机):绑孩子下拉 + 加载第一个孩子。
+function initFamilyResults() {
+  const select = document.getElementById('family-results-select');
+  select?.addEventListener('change', (e) => {
+    if (e.target.value) loadFamilySwimmerResults(e.target.value);
+  });
+  const swimmers = (familyData?.swimmers || []).filter(s => !s.deleted && s.usaSwimmingId);
+  if (swimmers.length > 0) loadFamilySwimmerResults(swimmers[0].usaSwimmingId);
+}
+
+// 家庭端编排:真实 usaSwimmingId → swimResults/{id};mock 下按下标映射 MOCK-A/B
+// (mockSeed 的预置语义是教练端断点续传测试的依赖,映射必须放调用侧,不碰 mockSeed)。
+function loadFamilySwimmerResults(usaId) {
+  const swimmers = (familyData?.swimmers || []).filter(s => !s.deleted && s.usaSwimmingId);
+  const idx = swimmers.findIndex(s => s.usaSwimmingId === usaId);
+  if (idx < 0) return;
+  const child = swimmers[idx];
+  const mappedId = MOCK_MODE ? (idx % 2 === 0 ? 'MOCK-A' : 'MOCK-B') : usaId;
+  // mock 下补齐缺失的 dob/gender(来自 MOCK_SWIMMERS 同位记录),标准线可演示;
+  // 生产下原样透传,缺 dob/gender → 不画线(设计行为)。
+  const meta = MOCK_MODE
+    ? { dob: child.dob || MOCK_SWIMMERS[idx % 2].dob, gender: child.gender || MOCK_SWIMMERS[idx % 2].gender }
+    : { dob: child.dob || null, gender: child.gender || null };
+  loadAthleteResults(mappedId, {
+    swimmerMeta: meta,
+    showDebug: false,
+    onlyOkMeets: true,
+    texts: {
+      loading: t('dash_swimmer_results_loading'),
+      noData: t('dash_swimmer_results_no_data'),
+      bestTimesEmpty: t('dash_swimmer_results_no_best_times'),
+      meetHistoryEmpty: t('dash_swimmer_results_no_meets'),
+    },
+  });
+}
+
 // ── Swim Time Formatting Helpers ──
 
 function formatSwimTime(seconds) {
@@ -1373,8 +1456,8 @@ function buildTrendTooltip(p) {
 }
 
 // 画成绩趋势 SVG(纯字符串,无 DOM,内联样式+CSS 变量深浅主题自适应)。
-// levelLines:未来标准线层 [{level, thresholdSeconds, color}],null/[] 时整层跳过
-// (当前 src/data/timeStandards.js 返回 null — 标准表数据就绪后自动启用,图表代码不改)。
+// levelLines:标准线层 [{level, thresholdSeconds, color}],null/[] 时整层跳过
+// (数据来自 src/data/timeStandards.js 的 USAS 2024-2028 标准表,按运动员 dob/gender 选年龄组)。
 // 纵轴倒置(时间越小越靠上);点按 timeStandard 着色(ts-dot 类);
 // tooltip 用 SVG <title> + 透明大号 hit-target(零 JS、无障碍、触屏可用)。
 function renderTrendChart(points, levelLines, opts = {}) {
@@ -1542,9 +1625,20 @@ function groupMeetsBySeason(meets) {
   return sorted;
 }
 
-function renderBestTimesTable(bestTimes) {
+// 只保留 status==='ok' 的场次(家庭端用 — 抓取失败的场次对家长是噪音)。
+// 状态回退约定与 buildTrendData 逐字一致,否则旧数据(无 status 字段)会被漏滤。
+function filterOkMeets(meets) {
+  const out = {};
+  for (const [meetId, meet] of Object.entries(meets || {})) {
+    const st = meet.status || (Array.isArray(meet.swims) && meet.swims.length ? 'ok' : 'empty');
+    if (st === 'ok') out[meetId] = meet;
+  }
+  return out;
+}
+
+function renderBestTimesTable(bestTimes, emptyText = 'No best times recorded.') {
   if (!bestTimes || bestTimes.length === 0) {
-    return '<p style="color:var(--text-muted);text-align:center;padding:1rem;">No best times recorded.</p>';
+    return `<p style="color:var(--text-muted);text-align:center;padding:1rem;">${escapeHtml(emptyText)}</p>`;
   }
 
   // Sort by stroke then distance
@@ -1579,9 +1673,9 @@ function renderBestTimesTable(bestTimes) {
   `;
 }
 
-function renderMeetHistory(meets) {
+function renderMeetHistory(meets, emptyText = 'No meet history recorded.') {
   if (!meets || Object.keys(meets).length === 0) {
-    return '<p style="color:var(--text-muted);text-align:center;padding:1rem;">No meet history recorded.</p>';
+    return `<p style="color:var(--text-muted);text-align:center;padding:1rem;">${escapeHtml(emptyText)}</p>`;
   }
 
   const grouped = groupMeetsBySeason(meets);
@@ -1647,13 +1741,22 @@ function renderMeetHistory(meets) {
   return html;
 }
 
-async function loadAthleteResults(memberId) {
+// opts 供家庭端复用:{ swimmerMeta, showDebug, onlyOkMeets, texts }。
+// 缺省 = 教练端现有行为(逐字一致),教练端调用处零改动。
+async function loadAthleteResults(memberId, opts = {}) {
+  const { swimmerMeta = null, showDebug = true, onlyOkMeets = false, texts = {} } = opts;
+  const T = {
+    loading: texts.loading || '⏳ Loading...',
+    noData: texts.noData || 'No results data yet. Run a fetch first.',
+    bestTimesEmpty: texts.bestTimesEmpty || 'No best times recorded.',
+    meetHistoryEmpty: texts.meetHistoryEmpty || 'No meet history recorded.',
+  };
   const viewer = document.getElementById('results-viewer');
   const content = document.getElementById('results-content');
   if (!viewer || !content) return;
 
   viewer.style.display = 'block';
-  content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">⏳ Loading...</p>';
+  content.innerHTML = `<p style="text-align:center;padding:2rem;color:var(--text-muted);">${T.loading}</p>`;
 
   try {
     // mock 模式读内存 store(真实模式读 Firestore),两者产出同构的
@@ -1665,7 +1768,7 @@ async function loadAthleteResults(memberId) {
     } else {
       const snap = await getDoc(doc(db, 'swimResults', memberId));
       if (!snap.exists()) {
-        content.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-muted);">No results data yet. Run a fetch first.</p>';
+        content.innerHTML = `<p style="text-align:center;padding:2rem;color:var(--text-muted);">${T.noData}</p>`;
         return;
       }
       data = snap.data();
@@ -1676,8 +1779,11 @@ async function loadAthleteResults(memberId) {
     // 趋势区:仅当有可画事件时显示;默认选点数最多的事件并立即渲染。
     // 数据已在内存(getDoc 结果),换事件只重渲染图,不重新请求。
     const eventOptions = buildEventOptions(data.meets);
-    // 运动员元数据(dob/gender)供标准线层用;声明在块外 — change handler 也要引用
-    const swimmer = getSwimmersWithUsaId().find((s) => s.usaSwimmingId === memberId) || null;
+    // 运动员元数据(dob/gender)供标准线层用;声明在块外 — change handler 也要引用。
+    // 优先级:显式参数(家庭端)> mock 查找 > 教练端全量查询(家庭端 allRegistrations 不监听,恒空)。
+    const swimmer = swimmerMeta || (MOCK_MODE
+      ? (MOCK_SWIMMERS.find((s) => s.usaSwimmingId === memberId) || null)
+      : (getSwimmersWithUsaId().find((s) => s.usaSwimmingId === memberId) || null));
     let trendSection = '';
     if (eventOptions.length > 0) {
       const defaultKey = [...eventOptions].sort((a, b) => b.count - a.count)[0].key;
@@ -1704,6 +1810,8 @@ async function loadAthleteResults(memberId) {
       </div>`;
     }
 
+    // 家庭端(onlyOkMeets)只展示抓取成功的场次,计数同步用过滤后的数量
+    const meetsForHistory = onlyOkMeets ? filterOkMeets(data.meets) : (data.meets || {});
     content.innerHTML = `
       <div style="margin-bottom:1.5rem;">
         <h4 style="margin:0 0 0.75rem 0;display:flex;align-items:center;gap:0.5rem;">
@@ -1712,22 +1820,24 @@ async function loadAthleteResults(memberId) {
             Last updated: ${data.lastUpdated ? new Date(data.lastUpdated).toLocaleString() : '—'}
           </span>
         </h4>
-        ${renderBestTimesTable(data.bestTimes)}
+        ${renderBestTimesTable(data.bestTimes, T.bestTimesEmpty)}
       </div>
 
       <div>
-        <h4 style="margin:0 0 0.75rem 0;">📅 Meet History (${Object.keys(data.meets || {}).length} meets)</h4>
+        <h4 style="margin:0 0 0.75rem 0;">📅 Meet History (${Object.keys(meetsForHistory).length} meets)</h4>
         <div id="meet-history-container">
-          ${renderMeetHistory(data.meets)}
+          ${renderMeetHistory(meetsForHistory, T.meetHistoryEmpty)}
         </div>
       </div>
 
       ${trendSection}
 
+      ${showDebug ? `
       <details style="margin-top:1.5rem;border-top:1px solid var(--border-color);padding-top:1rem;">
         <summary style="cursor:pointer;color:var(--text-muted);font-size:0.8rem;">🔍 Debug: Raw JSON</summary>
         <pre style="background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:0.75rem;max-height:400px;overflow:auto;font-size:0.7rem;line-height:1.4;margin-top:0.5rem;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
       </details>
+      ` : ''}
     `;
 
     // Bind expand/collapse for seasons and meets

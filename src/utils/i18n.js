@@ -203,6 +203,17 @@ const translations = {
         dash_swimmer_plans_sub: 'Track and manage your training plans',
         dash_swimmer_meets_sub: 'View registered and upcoming competitions',
         dash_swimmer_schedule_sub: 'Your weekly practice timetable',
+
+        // ── Dashboard — Swimmer Results ──
+        dash_swimmer_results_label: 'Results',
+        dash_swimmer_tab_results: 'Performance Results',
+        dash_swimmer_results_sub: 'Best times, meet history and performance trends',
+        dash_swimmer_results_loading: '⏳ Loading...',
+        dash_swimmer_results_select_label: 'Swimmer',
+        dash_swimmer_results_no_usa_id: 'No USA Swimming ID is on file for your swimmers yet. Ask your coach to add one so results can be displayed.',
+        dash_swimmer_results_no_data: 'No results yet — your coach hasn\'t pulled swim times for this swimmer yet. Please check back soon.',
+        dash_swimmer_results_no_best_times: 'No best times recorded yet.',
+        dash_swimmer_results_no_meets: 'No completed meets recorded yet.',
         dash_swimmer_username_fallback: 'Swimmer',
         dash_swimmer_total_plans: 'Total Plans',
         dash_swimmer_active_plans: 'Active Plans',
