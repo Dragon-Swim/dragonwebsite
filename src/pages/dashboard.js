@@ -3036,6 +3036,7 @@ function renderProfile() {
   const p = familyData.parent || {};
   const spouse = familyData.spouse;
   const swimmers = familyData.swimmers || [];
+  const activeSwimmers = swimmers.filter(s => !s.deleted);
   const ec = familyData.emergencyContact || {};
 
   return `
@@ -3125,7 +3126,7 @@ function renderProfile() {
       <div class="profile-col">
         <div class="dash-panel">
           <div class="dash-panel-header">
-            <h3>${t('dash_profile_swimmers_title')} (${swimmers.length})</h3>
+            <h3>${t('dash_profile_swimmers_title')} (${activeSwimmers.length})</h3>
             <button class="btn btn-outline btn-sm" id="add-swimmer-toggle-btn">${t('dash_profile_add_swimmer')}</button>
           </div>
           <div id="add-swimmer-form" style="display: none; margin-bottom: var(--space-md); padding: var(--space-md); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
@@ -3168,7 +3169,7 @@ function renderProfile() {
               <button class="btn btn-outline btn-sm" id="cancel-swimmer-btn">${t('dash_profile_cancel_swimmer')}</button>
             </div>
           </div>
-          ${swimmers.filter(s => !s.deleted).length === 0 ? `<p class="dash-empty">${t('dash_profile_no_swimmers')}</p>` : swimmers.map((s, i) => s.deleted ? '' : `
+          ${activeSwimmers.length === 0 ? `<p class="dash-empty">${t('dash_profile_no_swimmers')}</p>` : swimmers.map((s, i) => s.deleted ? '' : `
 
             <div class="swimmer-profile-card">
               <div class="swimmer-profile-info">
