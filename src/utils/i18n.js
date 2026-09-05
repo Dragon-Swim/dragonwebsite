@@ -411,8 +411,8 @@ const translations = {
 
         // ── Dashboard — Season Slot Enrollment (2026-09) ──
         sched2_period_label: 'Period',
-        sched2_title: 'Practice Sessions & Sign-ups',
         sched2_subtitle: 'Coach marks swimmers per session after consulting families. Confirmed swimmers fill each session; undecided are shown as pending.',
+        sched2_title: 'Practice Sessions & Sign-ups',
         sched2_no_slots: 'No practice sessions set up for this period yet.',
         sched2_add_slot: '+ Add Session',
         sched2_new_slot_title: 'New Session',
