@@ -1626,3 +1626,15 @@ input[readonly].profile-edit-field {
 [data-theme="dark"] .ts-dot.ts-aa { fill: #FBBF24; }
 [data-theme="dark"] .ts-dot.ts-aaa { fill: #F87171; }
 [data-theme="dark"] .ts-dot.ts-aaaa { fill: #FB923C; }
+
+/* Season slot registration — athlete matrix & collapsible names (2026-09) */
+.ath-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-card); }
+.ath-matrix { border-collapse: collapse; font-size: 0.8rem; min-width: max-content; width: 100%; }
+.ath-matrix th, .ath-matrix td { border: 1px solid var(--border-color); padding: 4px 6px; text-align: center; white-space: nowrap; }
+.ath-matrix thead th { background: var(--bg-secondary); position: sticky; top: 0; z-index: 1; font-weight: 600; }
+.ath-matrix td.ath-name { text-align: left; font-weight: 500; min-width: 110px; max-width: 180px; background: var(--bg-card); }
+.ath-matrix tr.ath-family td { background: var(--bg-secondary); text-align: left; font-weight: 600; padding: 6px 10px; color: var(--text-muted); letter-spacing: 0.02em; }
+.ath-cell-btn { width: 100%; min-width: 34px; height: 26px; border-radius: 6px; border: 1px solid var(--border-color); cursor: pointer; font-weight: 700; font-size: 0.85rem; background: transparent; color: var(--text-muted); padding: 0 4px; }
+.ath-cell-btn.st-confirmed { background: #16a34a; color: #fff; border-color: #16a34a; }
+.ath-cell-btn.st-undecided { background: #d97706; color: #fff; border-color: #d97706; }
+.sched-view-toggle .btn { padding: 4px 10px; }

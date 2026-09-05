@@ -446,6 +446,11 @@ const translations = {
         sched2_saved_ok: 'Saved.',
         sched2_remove_ok: 'Removed.',
         sched2_err: 'Save failed. Please try again.',
+        sched2_show_names: 'Names',
+        sched2_view_slot: 'Slot view',
+        sched2_view_athlete: 'Athlete view',
+        sched2_matrix_hint: 'Click a cell to cycle: empty → ✓ Confirmed → ? Undecided → empty. Overlapping sessions for the same athlete are blocked.',
+        sched2_swimmer: 'Swimmer',
 
         // ── Dashboard — Fee Summary ──
         dash_coach_fee_summary_label: 'Fee Summary',

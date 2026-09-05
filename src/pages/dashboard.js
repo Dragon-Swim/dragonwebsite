@@ -41,6 +41,7 @@ let allRegistrations = [];
 let deposits = [];
 let currentSeason = getDefaultSeason();
 let currentPeriod = getCurrentPeriodId();
+let scheduleViewMode = 'slot';
 
 const coachRoster = [
   { id: 101, name: 'Alice Thompson', group: 'Competitive', age: 14, rank: 'Regional' },
@@ -3282,6 +3283,7 @@ function renderSchedule() {
     sessionSlots,
     enrollments,
     currentPeriod,
+    viewMode: scheduleViewMode,
     allRegistrations,
     dbRole,
     activeSwimmers: userRole === 'coach' ? getCoachActiveSwimmers() : [],
@@ -4459,10 +4461,12 @@ function bindEvents() {
       sessionSlots,
       enrollments,
       currentPeriod,
+      viewMode: scheduleViewMode,
       allRegistrations,
       dbRole,
       activeSwimmers: getCoachActiveSwimmers(),
       onPeriodChange: (value) => { currentPeriod = value; refreshUI(); },
+      onViewChange: (view) => { scheduleViewMode = view; refreshUI(); },
     };
     wireScheduleTabEvents(schedSt);
 

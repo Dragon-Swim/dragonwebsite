@@ -110,20 +110,27 @@ function slotStats(st, slot) {
   };
 }
 
-function rosterHtml(st, slot) {
+function slotNamesList(st, slot) {
   const stats = slotStats(st, slot);
-  const confirmed = stats.confirmed.map(e => {
-    const info = athleteInfo(st, e.regId, e.swimmerIndex);
-    return '<span style="display:inline-block;background:var(--bg-card, #f0fdf4);border:1px solid var(--border-color,#16a34a33);color:var(--text-primary,#16a34a);border-radius:999px;padding:2px 10px;margin:2px 4px 2px 0;font-size:0.8rem;">' + esc(info.name) + '</span>';
-  });
-  const undecided = stats.undecided.map(e => {
-    const info = athleteInfo(st, e.regId, e.swimmerIndex);
-    return '<span style="display:inline-block;background:var(--bg-card,#fffbeb);border:1px dashed var(--border-color,#d97706);color:var(--text-muted,#d97706);border-radius:999px;padding:2px 10px;margin:2px 4px 2px 0;font-size:0.8rem;">' + esc(info.name) + ' ?</span>';
-  });
+  const namesFor = (es) => es
+    .map(e => athleteInfo(st, e.regId, e.swimmerIndex).name)
+    .filter(n => n && n !== 'Unknown')
+    .sort((a, b) => a.localeCompare(b));
+  const confirmed = namesFor(stats.confirmed);
+  const undecided = namesFor(stats.undecided);
   if (confirmed.length === 0 && undecided.length === 0) {
-    return '<p class="dash-empty-sm" style="color:var(--text-muted);font-size:0.85rem;margin:6px 0 0;">' + t('sched2_no_signups') + '</p>';
+    return '<p style="margin:0;color:var(--text-muted);font-size:0.85rem;">' + t('sched2_no_signups') + '</p>';
   }
-  return '<div style="margin-top:6px;">' + confirmed.join('') + undecided.join('') + '</div>';
+  let html = '';
+  if (confirmed.length > 0) {
+    html += '<div style="margin:2px 0;"><span style="font-weight:600;">' + t('sched2_confirmed') + ':</span> '
+      + esc(confirmed.join(', ')) + '</div>';
+  }
+  if (undecided.length > 0) {
+    html += '<div style="margin:2px 0;color:#d97706;"><span style="font-weight:600;">' + t('sched2_undecided') + ':</span> '
+      + esc(undecided.join(', ')) + '</div>';
+  }
+  return html;
 }
 
 // ── Family (parent) read-only view ─────────────────────────────
@@ -160,6 +167,9 @@ export function renderFamilySchedule(st) {
 // ── Coach schedule view ────────────────────────────────────────
 
 export function renderCoachSchedule(st) {
+  if (st.viewMode === 'athlete') {
+    return renderAthleteSchedule(st);
+  }
   const canEdit = st.dbRole === 'admin';
   const slots = sortSlots((st.sessionSlots || []).filter(s => s.period === st.currentPeriod));
   const groups = groupLocations(slots);
@@ -171,7 +181,11 @@ export function renderCoachSchedule(st) {
         <h2 style="font-size:1.5rem;font-weight:600;color:var(--text-primary);margin:0;">${t('sched2_title')}</h2>
         <p style="margin:4px 0 0;color:var(--text-muted);font-size:0.85rem;max-width:560px;">${t('sched2_subtitle')}</p>
       </div>
-      <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;"><div class="sched-view-toggle" style="display:inline-flex;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;margin-right:2px;">
+          <button type="button" id="sched-view-slot" class="btn btn-sm ${st.viewMode === 'slot' ? 'btn-primary' : 'btn-outline'}" style="border-radius:0;">${t('sched2_view_slot')}</button>
+          <button type="button" id="sched-view-athlete" class="btn btn-sm ${st.viewMode === 'athlete' ? 'btn-primary' : 'btn-outline'}" style="border-radius:0;">${t('sched2_view_athlete')}</button>
+        </div>
+
         <div style="display:flex;align-items:center;gap:0.5rem;">
           <label class="season-selector-label" for="sched-period-select">${t('sched2_period_label')}:</label>
           <select id="sched-period-select" class="season-select">
@@ -219,6 +233,7 @@ export function renderCoachSchedule(st) {
   `;
 }
 
+
 function renderCoachSlot(st, slot, canEdit) {
   const stats = slotStats(st, slot);
   const confirmed = stats.confirmed.length;
@@ -226,43 +241,154 @@ function renderCoachSlot(st, slot, canEdit) {
   const hasCap = slot.capacity != null && slot.capacity !== '';
   const cap = hasCap ? Number(slot.capacity) : null;
   const open = cap == null ? null : Math.max(0, cap - confirmed);
-  const capHtml = hasCap
+  const countHtml = hasCap
     ? '<strong>' + confirmed + ' / ' + cap + '</strong>' + (open === 0
-        ? ' <span style="color:var(--color-accent,#dc2626);font-size:0.8rem;">' + t('sched2_full') + '</span>'
+        ? ' <span style="color:#dc2626;font-size:0.8rem;">' + t('sched2_full') + '</span>'
         : ' <span style="color:#16a34a;font-size:0.8rem;">' + t('sched2_open', { open: String(open) }) + '</span>')
     : '<strong>' + confirmed + '</strong> <span style="color:var(--text-muted);font-size:0.8rem;">(' + t('sched2_no_capacity') + ')</span>';
+  const meta = t('sched2_confirmed') + ': ' + countHtml
+    + (undecided > 0 ? ' · ' + t('sched2_undecided') + ': <span style="color:#d97706;">' + undecided + '</span>' : '');
 
-  const controls = canEdit ? `
-    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
-      <label style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">${t('sched2_capacity')}
-        <input type="number" min="0" class="slot-capacity-input" data-id="${slot.id}"
-          value="${hasCap ? cap : ''}" title="${t('sched2_capacity_hint')}"
-          style="width:70px;margin-left:6px;padding:3px 6px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);" />
-      </label>
-      <button class="btn btn-primary btn-sm slot-manage-btn" data-id="${slot.id}">${t('sched2_manage_roster')}</button>
-      <button class="btn btn-outline btn-sm slot-delete-btn" data-id="${slot.id}" style="color:var(--color-accent,#dc2626);">${t('sched2_delete_slot')}</button>
-    </div>
-  ` : '';
+  const controls = canEdit
+    ? '<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">'
+      + '<label style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">' + t('sched2_capacity')
+      + '<input type="number" min="0" class="slot-capacity-input" data-id="' + slot.id + '" value="' + (hasCap ? cap : '') + '" title="' + t('sched2_capacity_hint') + '" style="width:70px;margin-left:6px;padding:3px 6px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);" />'
+      + '</label>'
+      + '<button class="btn btn-primary btn-sm slot-manage-btn" data-id="' + slot.id + '">' + t('sched2_manage_roster') + '</button>'
+      + '<button class="btn btn-outline btn-sm slot-delete-btn" data-id="' + slot.id + '" style="color:#dc2626;">' + t('sched2_delete_slot') + '</button>'
+      + '</div>'
+    : '';
 
-  return `
-    <div class="dash-schedule-item" style="padding:0.9rem 1rem;border:1px solid var(--border-color);border-radius:10px;margin-bottom:0.8rem;background:var(--bg-card);">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:600;">${esc(slotTitle(slot))}
-            ${slot.groupLabel ? '<span style="display:inline-block;margin-left:8px;background:var(--bg-secondary);color:var(--text-muted);border-radius:6px;padding:1px 8px;font-size:0.75rem;font-weight:500;">' + esc(slot.groupLabel) + '</span>' : ''}
-          </div>
-          <div style="margin-top:4px;color:var(--text-muted);font-size:0.85rem;">
-            ${t('sched2_confirmed')}: ${capHtml}
-            ${undecided > 0 ? ' · ' + t('sched2_undecided') + ': <span style="color:#d97706;">' + undecided + '</span>' : ''}
-          </div>
-        </div>
-        ${controls}
-      </div>
-      ${rosterHtml(st, slot)}
-    </div>
-  `;
+  const groupChip = slot.groupLabel
+    ? '<span style="display:inline-block;margin-left:8px;background:var(--bg-secondary);color:var(--text-muted);border-radius:6px;padding:1px 8px;font-size:0.75rem;font-weight:500;">' + esc(slot.groupLabel) + '</span>'
+    : '';
+
+  return '<div class="dash-schedule-item" style="padding:0.9rem 1rem;border:1px solid var(--border-color);border-radius:10px;margin-bottom:0.8rem;background:var(--bg-card);">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">'
+      + '<div>'
+        + '<div style="font-weight:600;">' + esc(slotTitle(slot)) + groupChip + '</div>'
+        + '<div style="margin-top:4px;color:var(--text-muted);font-size:0.85rem;">' + meta + '</div>'
+      + '</div>'
+      + controls
+    + '</div>'
+    + '<div style="display:flex;justify-content:flex-end;margin-top:6px;">'
+      + '<button type="button" class="slot-names-toggle" data-id="' + slot.id + '" style="background:none;border:none;cursor:pointer;color:#2563eb;font-size:0.82rem;padding:2px 6px;">▸ ' + t('sched2_show_names') + '</button>'
+    + '</div>'
+    + '<div class="slot-names" id="slot-names-' + slot.id + '" style="display:none;margin-top:4px;padding-top:6px;border-top:1px dashed var(--border-color);font-size:0.85rem;">'
+      + slotNamesList(st, slot)
+    + '</div>'
+  + '</div>';
 }
 
+
+// ── Athlete matrix view (families × athletes rows, slots as columns) ──
+
+const LOC_SHORT = {
+  'Claude Moore Recreation Center': 'CM',
+  'Dulles South Recreation Center': 'DS',
+  'Tysons — OneLife Fitness Tysons': 'TY',
+};
+
+function locationShort(loc) {
+  return LOC_SHORT[loc] || String(loc || '').slice(0, 2).toUpperCase();
+}
+
+function shortTime(t) {
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(String(t || '').trim());
+  if (!m) return t || '';
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ap = (m[3] || '').toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  let hh = h % 12;
+  if (hh === 0) hh = 12;
+  const suffix = h >= 12 ? 'p' : 'a';
+  return hh + (min ? ':' + String(min).padStart(2, '0') : '') + suffix;
+}
+
+function familyGroups(st) {
+  const out = [];
+  for (const reg of st.allRegistrations || []) {
+    const parent = reg.parent || {};
+    const active = (reg.swimmers || [])
+      .map((s, i) => ({ s, i }))
+      .filter(x => !x.s.deleted);
+    if (active.length === 0) continue;
+    out.push({
+      regId: reg.id,
+      parentName: [parent.firstName, parent.lastName].filter(Boolean).join(' ') || '—',
+      swimmers: active,
+    });
+  }
+  out.sort((a, b) => a.parentName.localeCompare(b.parentName));
+  return out;
+}
+
+function slotColumnHeader(slot) {
+  const day = (slot.day || '').slice(0, 3);
+  const detail = [slot.day, slot.startTime + '–' + slot.endTime, slot.location, slot.groupLabel].filter(Boolean).join(' · ');
+  return '<th title="' + esc(detail) + '">' + esc(day) + ' ' + esc(shortTime(slot.startTime))
+    + '<br><span style="font-weight:400;font-size:0.68rem;color:var(--text-muted);">' + esc(locationShort(slot.location)) + '</span></th>';
+}
+
+function athleteCell(st, slot, regId, swIndex, canEdit) {
+  const e = enrollmentStatus(st, slot.id, regId, swIndex);
+  const status = e ? e.status : null;
+  const cls = status === 'confirmed' ? 'st-confirmed' : (status === 'undecided' ? 'st-undecided' : '');
+  const mark = status === 'confirmed' ? '✓' : (status === 'undecided' ? '?' : '');
+  if (!canEdit) {
+    return '<td><span class="ath-cell-btn ' + cls + '" style="display:inline-flex;align-items:center;justify-content:center;border:none;cursor:default;">' + mark + '</span></td>';
+  }
+  return '<td><button type="button" class="ath-cell-btn ' + cls + '" data-slot="' + slot.id + '" data-reg="' + esc(regId) + '" data-idx="' + swIndex + '" data-cur="' + (status || '') + '" title="' + esc(slotTitle(slot)) + '">' + mark + '</button></td>';
+}
+
+function renderAthleteSchedule(st) {
+  const canEdit = st.dbRole === 'admin';
+  const slots = sortSlots((st.sessionSlots || []).filter(s => s.period === st.currentPeriod));
+  const families = familyGroups(st);
+  const options = periodOptions(st);
+  const label = periodLabel(st.currentPeriod);
+
+  let html = '';
+  html += '<div class="dash-section-header" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;gap:1rem;flex-wrap:wrap;">'
+    + '<div style="flex:1;min-width:260px;"><h2 style="font-size:1.5rem;font-weight:600;color:var(--text-primary);margin:0;">' + t('sched2_title') + '</h2>'
+    + '<p style="margin:4px 0 0;color:var(--text-muted);font-size:0.85rem;">' + t('sched2_subtitle') + '</p></div>'
+    + '<div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">'
+    + '<div class="sched-view-toggle" style="display:inline-flex;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;">'
+    + '<button type="button" id="sched-view-slot" class="btn btn-sm btn-outline" style="border-radius:0;">' + t('sched2_view_slot') + '</button>'
+    + '<button type="button" id="sched-view-athlete" class="btn btn-sm btn-primary" style="border-radius:0;">' + t('sched2_view_athlete') + '</button>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:0.5rem;"><label class="season-selector-label" for="sched-period-select">' + t('sched2_period_label') + ':</label>'
+    + '<select id="sched-period-select" class="season-select">'
+    + options.map(per => '<option value="' + esc(per) + '"' + (per === st.currentPeriod ? ' selected' : '') + '>' + esc(periodLabel(per)) + '</option>').join('')
+    + '</select></div>'
+    + '</div></div>';
+
+  html += '<p style="color:var(--text-muted);font-size:0.82rem;margin:0 0 0.9rem;">' + t('sched2_matrix_hint') + ' — ' + esc(label) + '</p>';
+
+  if (slots.length === 0 || families.length === 0) {
+    html += '<p class="dash-empty">' + (slots.length === 0 ? t('sched2_no_slots') : t('sched2_no_swimmers')) + '</p>';
+    return html;
+  }
+
+  html += '<div class="ath-wrap"><table class="ath-matrix" id="ath-matrix">';
+  html += '<thead><tr><th>' + t('sched2_swimmer') + '</th>' + slots.map(slotColumnHeader).join('') + '</tr></thead>';
+  html += '<tbody>';
+  for (const fam of families) {
+    html += '<tr class="ath-family"><td colspan="' + (1 + slots.length) + '">' + esc(fam.parentName) + '</td></tr>';
+    for (const row of fam.swimmers) {
+      const sw = row.s;
+      const i = row.i;
+      const name = [sw.firstName, sw.lastName].filter(Boolean).join(' ') || 'Unknown';
+      html += '<tr><td class="ath-name">' + esc(name) + '</td>'
+        + slots.map(slot => athleteCell(st, slot, fam.regId, i, canEdit)).join('')
+        + '</tr>';
+    }
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
 
 // ── Manage roster overlay ──────────────────────────────────────
 
@@ -505,6 +631,63 @@ export function wireScheduleTabEvents(st) {
         alert(t('sched2_err'));
       }
     });
+  });
+
+  // View toggle: Slot view / Athlete view
+  document.getElementById('sched-view-slot')?.addEventListener('click', () => {
+    if (st.onViewChange) st.onViewChange('slot');
+  });
+  document.getElementById('sched-view-athlete')?.addEventListener('click', () => {
+    if (st.onViewChange) st.onViewChange('athlete');
+  });
+
+  // Expand/collapse the names list under a slot card
+  document.querySelectorAll('.slot-names-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const box = document.getElementById('slot-names-' + btn.dataset.id);
+      if (!box) return;
+      const hidden = !box.style.display || box.style.display === 'none';
+      box.style.display = hidden ? 'block' : 'none';
+      btn.textContent = (hidden ? '▾ ' : '▸ ') + t('sched2_show_names');
+    });
+  });
+
+  // Athlete matrix: click a cell to cycle empty → confirmed → undecided → empty
+  const matrix = document.getElementById('ath-matrix');
+  matrix?.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button.ath-cell-btn');
+    if (!btn) return;
+    if ((st.dbRole || '') !== 'admin') {
+      alert(t('sched2_err'));
+      return;
+    }
+    const slot = (st.sessionSlots || []).find(s => s.id === btn.dataset.slot);
+    if (!slot) return;
+    const regId = btn.dataset.reg;
+    const swIndex = Number(btn.dataset.idx);
+    const cur = btn.dataset.cur || '';
+    const next = cur === '' ? 'confirmed' : (cur === 'confirmed' ? 'undecided' : '');
+    if (next === 'confirmed') {
+      const conflict = findOverlapConflict(st, { enrollments: st.enrollments || [] }, slot, regId, swIndex);
+      if (conflict) {
+        const sw = (st.activeSwimmers || []).find(x => x._regId === regId && Number(x._swimmerIndex) === swIndex);
+        const nm = sw ? [sw.firstName, sw.lastName].filter(Boolean).join(' ') : 'Unknown';
+        alert(t('sched2_conflict_msg', {
+          name: nm,
+          slot: slotTitle(conflict),
+          time: (conflict.day || '') + ' ' + (conflict.startTime || '') + '–' + (conflict.endTime || ''),
+        }));
+        return;
+      }
+    }
+    const sw = (st.activeSwimmers || []).find(x => x._regId === regId && Number(x._swimmerIndex) === swIndex);
+    const nm = sw ? [sw.firstName, sw.lastName].filter(Boolean).join(' ') : 'Unknown';
+    try {
+      await persistEnrollment(slot, regId, swIndex, next || null, nm);
+    } catch (err) {
+      console.error('Enrollment save failed:', err);
+      alert(t('sched2_err'));
+    }
   });
 }
 
