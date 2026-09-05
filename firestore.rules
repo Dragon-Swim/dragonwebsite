@@ -103,13 +103,21 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // ── schedules — practice schedules (admin-managed, coach read-only) ─
+    // ── sessionSlots — season practice slots (admin-managed, authenticated read) ─
 
-    match /schedules/{docId} {
-      // All authenticated users can view schedules
+    match /sessionSlots/{docId} {
+      // All authenticated users can view the season schedule
       allow read: if isAuth();
-      // Only admins can create, update, or delete
-      // (includes CSV batch import via writeBatch)
+      // Only admins create/update/delete slots and capacities
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── enrollments — swimmer sign-ups per slot (admin-managed) ─
+
+    match /enrollments/{docId} {
+      // Authenticated users may read (kept open for the future family view)
+      allow read: if isAuth();
+      // Only admins mark/update/remove enrollments
       allow create, update, delete: if isAdmin();
     }
 

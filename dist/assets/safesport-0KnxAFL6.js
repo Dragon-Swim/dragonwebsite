@@ -1,4 +1,4 @@
-import{i as e}from"./i18n-D7Xb-x_Z.js";import{a as s,r as t}from"./footer-CHxCfdHX.js";e();s();const o=document.getElementById("app");o.innerHTML=`
+import{i as e}from"./i18n-Dg58q0gr.js";import{a as s,r as t}from"./footer-Dm3a1Mzj.js";e();s();const o=document.getElementById("app");o.innerHTML=`
   <section class="section safesport-page">
     <div class="container safesport-container">
       <h1 class="section-title">Safe Sport</h1>

@@ -10,6 +10,8 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js';
+import { LOCATION_ORDER, DAY_ORDER, periodLabel, getCurrentPeriodId } from '../data/seasonSchedule.data.js';
+import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
@@ -28,8 +30,8 @@ const swimPlans = [
 // ── State Storage ──
 let swimMeets = [];
 let editingMeetId = null;
-let practiceSchedules = [];
-let editingSessionId = null;
+let sessionSlots = [];
+let enrollments = [];
 let currentUser = null;
 let userRole = 'swimmer';
 let dbRole = null;
@@ -38,6 +40,7 @@ let familyDataId = null;
 let allRegistrations = [];
 let deposits = [];
 let currentSeason = getDefaultSeason();
+let currentPeriod = getCurrentPeriodId();
 
 const coachRoster = [
   { id: 101, name: 'Alice Thompson', group: 'Competitive', age: 14, rank: 'Regional' },
@@ -137,12 +140,21 @@ function initDataListeners() {
     console.error("Error listening to meets:", error);
   });
 
-  const qSchedules = query(collection(db, "schedules"), orderBy("createdAt", "asc"));
-  onSnapshot(qSchedules, (snapshot) => {
-    practiceSchedules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  // Season slot schedule (replaces legacy schedules CSV collection, 2026-09)
+  const qSlots = query(collection(db, "sessionSlots"));
+  onSnapshot(qSlots, (snapshot) => {
+    sessionSlots = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     refreshUI();
   }, (error) => {
-    console.error("Error listening to schedules:", error);
+    console.error("Error listening to sessionSlots:", error);
+  });
+
+  const qEnrollments = query(collection(db, "enrollments"));
+  onSnapshot(qEnrollments, (snapshot) => {
+    enrollments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    refreshUI();
+  }, (error) => {
+    console.error("Error listening to enrollments:", error);
   });
 
   if (userRole === 'coach') {
@@ -3008,7 +3020,7 @@ function miniMeetCard(meet) {
 function renderTodayPractice() {
   const todayIndex = new Date().getDay();
   const today = getDayName(todayIndex);
-  const todayPractices = practiceSchedules.filter(s => s.day === today);
+  const todayPractices = sessionSlots.filter(s => s.period === currentPeriod && s.day === today);
 
   if (todayPractices.length === 0) {
     return `<p class="dash-empty">${t('dash_swimmer_rest_day')} (${today}). Rest day! 🎉</p>`;
@@ -3264,63 +3276,17 @@ function renderSwimMeets() {
   `;
 }
 
-// ── Schedule Tab ──
+// ── Schedule Tab (Season Slot Registration, 2026-09) ──
 function renderSchedule() {
-  const canEdit = dbRole === 'admin';
-  const dayNames = [0, 1, 2, 3, 4, 5, 6].map(i => getDayName(i));
-  // Week starts Monday
-  const scheduleDays = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
-
-  return `
-    <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_schedule_weekly')}</h2>
-      ${canEdit ? `<button class="btn btn-primary btn-sm" id="add-session-btn">${t('dash_schedule_add')}</button><button class="btn btn-outline btn-sm" id="import-csv-btn">${t('dash_schedule_import_csv')}</button>` : ''}
-    </div>
-
-    ${canEdit ? `
-      <div id="add-session-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
-        <h3 style="margin-bottom: 1rem;" id="session-form-title">${t('dash_schedule_new_title')}</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
-          <select id="session-day" class="form-input">
-            ${scheduleDays.map(d => `<option value="${getDayName(d)}">${getDayName(d)}</option>`).join('')}
-          </select>
-          <input type="text" id="session-start-time" placeholder="${t('dash_schedule_start_time_placeholder')}" class="form-input">
-          <input type="text" id="session-end-time" placeholder="${t('dash_schedule_end_time_placeholder')}" class="form-input">
-          <input type="text" id="session-location" placeholder="${t('dash_schedule_location_placeholder')}" class="form-input">
-        </div>
-        <div style="margin-top: 1rem; display: flex; gap: 1rem;">
-          <button class="btn btn-primary btn-sm" id="save-session-btn">${t('dash_schedule_save')}</button>
-          <button class="btn btn-outline btn-sm" id="cancel-session-btn">${t('dash_schedule_cancel')}</button>
-        </div>
-      </div>
-    ` : ''}
-
-    <div class="dash-schedule-grid">
-      ${scheduleDays.map(dayIndex => {
-    const dayName = getDayName(dayIndex);
-    const sessions = practiceSchedules.filter(s => s.day === dayName);
-    return `
-          <div class="dash-schedule-day">
-            <h3 class="dash-schedule-day-name">${dayName}</h3>
-            ${sessions.length === 0
-        ? `<p class="dash-empty-sm">${t('dash_schedule_no_practice')}</p>`
-        : sessions.map(s => `
-                <div class="dash-schedule-item">
-                  <div class="dash-schedule-time">${s.startTime} – ${s.endTime}</div>
-                  <div class="dash-schedule-focus">${s.location || ''}</div>
-                  <div class="dash-schedule-meta" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
-                    ${canEdit ? `
-                      <button class="edit-session" data-id="${s.id}" data-day="${s.day}" data-start="${s.startTime || ''}" data-end="${s.endTime || ''}" data-location="${s.location || ''}" style="background: none; border: none; font-size: 1rem; cursor: pointer; color: var(--color-primary); padding: 0 5px;" title="Edit">✎</button>
-                      <button class="delete-session" data-id="${s.id}" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--color-accent); padding: 0 5px;" title="Delete">&times;</button>
-                    ` : ''}
-                  </div>
-                </div>
-              `).join('')}
-          </div>
-        `;
-  }).join('')}
-    </div>
-  `;
+  const st = {
+    sessionSlots,
+    enrollments,
+    currentPeriod,
+    allRegistrations,
+    dbRole,
+    activeSwimmers: userRole === 'coach' ? getCoachActiveSwimmers() : [],
+  };
+  return userRole === 'coach' ? renderCoachSchedule(st) : renderFamilySchedule(st);
 }
 
 // ── Confirmation Modal ──
@@ -4488,103 +4454,17 @@ function bindEvents() {
       });
     });
 
-    // Session Management
-    const addForm = document.getElementById('add-session-form');
-    const saveBtn = document.getElementById('save-session-btn');
-    const cancelBtn = document.getElementById('cancel-session-btn');
-    const formTitle = document.getElementById('session-form-title');
-
-    document.getElementById('add-session-btn')?.addEventListener('click', () => {
-      editingSessionId = null;
-      formTitle.textContent = t('dash_schedule_new_title');
-      saveBtn.textContent = t('dash_schedule_save');
-      document.getElementById('session-day').value = getDayName(1); // Monday
-      document.getElementById('session-start-time').value = '';
-      document.getElementById('session-end-time').value = '';
-      document.getElementById('session-location').value = '';
-      addForm.style.display = 'block';
-    });
-    cancelBtn?.addEventListener('click', () => {
-      addForm.style.display = 'none';
-      editingSessionId = null;
-    });
-    saveBtn?.addEventListener('click', async () => {
-      const day = document.getElementById('session-day').value;
-      const startTime = document.getElementById('session-start-time').value.trim();
-      const endTime = document.getElementById('session-end-time').value.trim();
-      const location = document.getElementById('session-location').value.trim();
-
-      if (!day || !startTime || !endTime) {
-        alert(t('dash_schedule_required_fields'));
-        return;
-      }
-
-      try {
-        if (editingSessionId) {
-          // Update existing session
-          await updateDoc(doc(db, "schedules", editingSessionId), {
-            day,
-            startTime,
-            endTime,
-            location,
-          });
-        } else {
-          // Add new session
-          await addDoc(collection(db, "schedules"), {
-            day,
-            startTime,
-            endTime,
-            location,
-            createdAt: new Date()
-          });
-        }
-        addForm.style.display = 'none';
-        editingSessionId = null;
-      } catch (err) {
-        console.error("Error saving session:", err);
-      }
-    });
-
-    // Edit session
-    document.querySelectorAll('.edit-session').forEach(btn => {
-      btn.addEventListener('click', () => {
-        editingSessionId = btn.dataset.id;
-        formTitle.textContent = t('dash_schedule_edit_title');
-        saveBtn.textContent = t('dash_schedule_update');
-        document.getElementById('session-day').value = btn.dataset.day;
-        document.getElementById('session-start-time').value = btn.dataset.start;
-        document.getElementById('session-end-time').value = btn.dataset.end;
-        document.getElementById('session-location').value = btn.dataset.location;
-        addForm.style.display = 'block';
-        addForm.scrollIntoView({ behavior: 'smooth' });
-      });
-    });
-
-    // Delete session
-    document.querySelectorAll('.delete-session').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (confirm(t('dash_schedule_delete_confirm'))) {
-          try {
-            await deleteDoc(doc(db, "schedules", btn.dataset.id));
-            if (editingSessionId === btn.dataset.id) {
-              addForm.style.display = 'none';
-              editingSessionId = null;
-            }
-          } catch (err) {
-            console.error("Error deleting session:", err);
-          }
-        }
-      });
-    });
-
-    // CSV Import
-    document.getElementById('import-csv-btn')?.addEventListener('click', () => {
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.accept = '.csv';
-      fileInput.addEventListener('change', handleCSVFileSelect);
-      fileInput.click();
-    });
+    // Season Slot Registration (Schedule tab) — bindings live in schedule-registration module
+    const schedSt = {
+      sessionSlots,
+      enrollments,
+      currentPeriod,
+      allRegistrations,
+      dbRole,
+      activeSwimmers: getCoachActiveSwimmers(),
+      onPeriodChange: (value) => { currentPeriod = value; refreshUI(); },
+    };
+    wireScheduleTabEvents(schedSt);
 
     // ── Fee Summary — Season Selector ──
     document.getElementById('season-select')?.addEventListener('change', (e) => {
