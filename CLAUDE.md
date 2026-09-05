@@ -49,6 +49,7 @@ Directory structure:
 .tmp/ - All intermediate files (dossiers, scraped data, temp exports). Never commit, always regenerated.
 execution/ - Python scripts (the deterministic tools)
 directives/ - SOPs in Markdown (the instruction set)
+docs/ - Site documentation (app behaviors & workflows; see docs/swim-results-fetch.md for the swim-results fetch pipeline)
 .env - Environment variables and API keys
 credentials.json, token.json - Google OAuth credentials (required files, in .gitignore)
 Key principle: Local files are only for processing. Deliverables live in cloud services (Google Sheets, Slides, etc.) where the user can access them. Everything in .tmp/ can be deleted and regenerated.
