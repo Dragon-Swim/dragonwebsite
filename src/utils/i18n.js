@@ -453,8 +453,8 @@ const translations = {
         sched2_swimmer: 'Swimmer',
 
         // ── Dashboard — Fee Summary ──
-        dash_coach_fee_summary_label: 'Fee Summary',
-        dash_coach_tab_fee_summary: 'Fee Summary',
+        dash_coach_fee_summary_label: 'Meet Fee Summary',
+        dash_coach_tab_fee_summary: 'Meet Fee Summary',
         dash_fee_summary_total_swimmers: 'Swimmers with Fees',
         dash_fee_summary_total_fees: 'Total Meet Fees',
         dash_fee_summary_total_deposits: 'Total Deposits',
@@ -490,8 +490,8 @@ const translations = {
         dash_fee_summary_deposit_amount_positive: 'Deposit amount must be a positive number.',
 
         // ── Dashboard — Deposits Tab ──
-        dash_coach_deposits_label: 'Deposits',
-        dash_coach_tab_deposits: 'Deposits',
+        dash_coach_deposits_label: 'Meet Fee Deposits',
+        dash_coach_tab_deposits: 'Meet Fee Deposits',
 
         // ── Admin — Families ──
         admin_family_tab: 'Add Family',

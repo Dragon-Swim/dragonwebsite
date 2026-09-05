@@ -368,14 +368,11 @@ function renderCoachDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'roster' ? 'active' : ''}" data-tab="roster">
               <span class="dash-nav-icon">👥</span> ${t('dash_coach_roster_label')}
             </button>
-            <button class="dash-nav-item ${currentTab === 'meets' ? 'active' : ''}" data-tab="meets">
-              <span class="dash-nav-icon">🏁</span> ${t('dash_coach_meets_label')}
-            </button>
             <button class="dash-nav-item ${currentTab === 'schedule' ? 'active' : ''}" data-tab="schedule">
               <span class="dash-nav-icon">⏱️</span> ${t('dash_coach_schedule_label')}
             </button>
-            <button class="dash-nav-item ${currentTab === 'results' ? 'active' : ''}" data-tab="results">
-              <span class="dash-nav-icon">🏊</span> Swim Times
+            <button class="dash-nav-item ${currentTab === 'meets' ? 'active' : ''}" data-tab="meets">
+              <span class="dash-nav-icon">🏁</span> ${t('dash_coach_meets_label')}
             </button>
             ${dbRole === 'admin' ? `
             <button class="dash-nav-item ${currentTab === 'feesummary' ? 'active' : ''}" data-tab="feesummary">
@@ -385,6 +382,9 @@ function renderCoachDashboard(user) {
               <span class="dash-nav-icon">🏦</span> ${t('dash_coach_deposits_label')}
             </button>
             ` : ''}
+            <button class="dash-nav-item ${currentTab === 'results' ? 'active' : ''}" data-tab="results">
+              <span class="dash-nav-icon">🏊</span> Swim Times
+            </button>
           </div>
           <div class="dash-nav-section" style="margin-top: auto;">
             <span class="dash-nav-label">${t('dash_sidebar_system')}</span>
@@ -2117,7 +2117,9 @@ function buildFeeSummaryData(season) {
   const feeMap = new Map();
 
   for (const meet of swimMeets) {
-    if (meet.season && meet.season !== season) continue; // filter by season
+    // Skip meets outside the selected season. Legacy meets without a season
+    // field are bucketed by their start date; un-dateable meets are excluded.
+    if (getMeetSeason(meet) !== season) continue;
     const fd = meet.feeData;
     if (!fd || !fd.swimmers || fd.swimmers.length === 0) continue;
 
@@ -2148,7 +2150,7 @@ function buildFeeSummaryData(season) {
   // Build deposit map for the selected season
   const depositMap = new Map();
   for (const d of deposits) {
-    if (d.season && d.season !== season) continue; // filter by season
+    if (d.season !== season) continue; // filter by season
     const key = normalize(d.swimmerName);
     if (!key) continue;
     depositMap.set(key, { id: d.id, total: depositTotal(d) });
@@ -2836,6 +2838,28 @@ function getDefaultSeason() {
   } else {
     return `${year - 1}-${year}`;
   }
+}
+
+/** Infer which swim season a date belongs to. New season starts in September.
+ *  Handles ISO "YYYY-MM-DD" and Date-parseable values; null when unparseable. */
+function getSeasonFromDate(dateStr) {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  const m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    return mo >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  }
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  const mo = d.getMonth() + 1;
+  return mo >= 9 ? `${d.getFullYear()}-${d.getFullYear() + 1}` : `${d.getFullYear() - 1}-${d.getFullYear()}`;
+}
+
+/** Season a meet belongs to: explicit field wins, otherwise inferred from its start date. */
+function getMeetSeason(meet) {
+  return meet.season || getSeasonFromDate(meet.startDate || meet.date || null);
 }
 
 /** Collect unique seasons from meets, deposits, and auto-generate nearby seasons. */
