@@ -380,7 +380,7 @@ export function showSlotManager(st, slotId) {
     const regId = btn.dataset.reg;
     const swimmerIndex = Number(btn.dataset.idx);
     const action = btn.dataset.action; // confirm | undecided | remove
-    const newStatus = action === 'remove' ? null : action;
+    const newStatus = action === 'remove' ? null : (action === 'confirm' ? 'confirmed' : 'undecided');
     const sw = (st.activeSwimmers || []).find(x => x._regId === regId && Number(x._swimmerIndex) === swimmerIndex);
     const fullName = sw ? [sw.firstName, sw.lastName].filter(Boolean).join(' ') : 'Unknown';
 
