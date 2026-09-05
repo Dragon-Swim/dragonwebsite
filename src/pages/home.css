@@ -501,3 +501,97 @@
         align-items: center;
     }
 }
+
+/* ── Meet The Team — Photo Slideshow ── */
+.team-slideshow {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: 400px;
+    margin: 0 auto;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+.team-slide {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 1s ease-in-out;
+}
+
+.team-slide.active {
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .team-slideshow {
+        height: 240px;
+    }
+}
+
+/* ── Seasons — Schedule & Locations ── */
+.season-schedule {
+    margin-top: var(--space-2xl);
+}
+
+.season-schedule-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-bold);
+    text-align: center;
+    margin-bottom: var(--space-sm);
+    color: var(--text-primary);
+}
+
+.season-schedule-dates {
+    text-align: center;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    line-height: 1.7;
+    max-width: 780px;
+    margin: 0 auto;
+}
+
+.season-location-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-lg);
+    margin-top: var(--space-lg);
+    text-align: left;
+}
+
+.season-location-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.season-location-name {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    color: var(--text-primary);
+    margin-bottom: var(--space-md);
+}
+
+.season-location-line {
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: var(--space-sm);
+}
+
+.season-location-line:last-child {
+    margin-bottom: 0;
+}
+
+.season-location-line strong {
+    color: var(--color-accent);
+    margin-right: 4px;
+}

@@ -15,6 +15,12 @@ import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import { t } from '../utils/i18n.js';
 
+// Meet The Team 轮播照片:把照片放进 src/assets/team-photos/ 即可自动收录。
+// 顺序按文件名排序(推荐 01-xxx.jpg、02-xxx.jpg …)。
+const teamPhotoModules = import.meta.glob('../assets/team-photos/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}', { eager: true, import: 'default' });
+const teamPhotos = Object.keys(teamPhotoModules).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((key) => teamPhotoModules[key]);
+const TEAM_SLIDE_MS = 3500; // 每张照片停留 3.5 秒(想改快/改慢改这里)
+
 initTheme();
 renderNavbar();
 
@@ -32,6 +38,10 @@ app.innerHTML = `
       <div class="hero-right">
         <div class="hero-float-grid">
           <!-- Floating feature cards -->
+          <div class="hero-float-card hfc-1">
+            <div class="hfc-icon">📰</div>
+            <div class="hfc-label">News</div>
+          </div>
           <a href="${import.meta.env.BASE_URL}signin.html" class="hero-float-card hfc-2">
             <div class="hfc-icon">🏆</div>
             <div class="hfc-label">Swim Meets</div>
@@ -61,20 +71,8 @@ app.innerHTML = `
     <div class="corner-dot corner-br"></div>
   </section>
 
-  <!-- Mission & Vision Section -->
-  <section class="section mission-section" style="background: var(--bg-secondary);">
-    <div class="container" style="max-width: 800px; text-align: center;">
-      <div class="animate-on-scroll">
-        <span class="badge badge-primary">${t('home_mission_badge')}</span>
-        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_mission_title')}</h2>
-        <div class="divider" style="margin: var(--space-md) auto;"></div>
-        <p class="mission-statement">${t('home_mission_text')}</p>
-      </div>
-    </div>
-  </section>
-
   <!-- Why Dragon Swim Section -->
-  <section class="section features-section">
+  <section class="section features-section" style="background: var(--bg-secondary);">
     <div class="container">
       <div class="text-center features-header animate-on-scroll" style="margin: 0 auto var(--space-2xl);">
         <span class="badge badge-primary features-label">${t('why_title')}</span>
@@ -106,40 +104,6 @@ app.innerHTML = `
     </div>
   </section>
 
-  <!-- Meet the Team Section -->
-  <section class="section team-intro-section">
-    <div class="container">
-      <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
-        <span class="badge badge-primary">${t('home_journey_badge')}</span>
-        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_team_title')}</h2>
-        <div class="divider" style="margin: var(--space-md) auto;"></div>
-        <p class="section-subtitle" style="margin: 0 auto;">${t('home_team_subtitle')}</p>
-      </div>
-      
-      <div class="team-photo-wrapper animate-on-scroll" style="margin-bottom: var(--space-2xl); text-align: center;">
-        <div style="width: 100%; max-width: 900px; height: 400px; background: var(--bg-secondary); border-radius: var(--radius-lg); display: inline-flex; align-items: center; justify-content: center; border: 2px dashed var(--border-color); margin: 0 auto;">
-          <span style="color: var(--text-muted); font-weight: var(--fw-medium);">[ Team Photo ]</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Meet the Coaches Section -->
-  <section class="section coaches-section" style="background: var(--bg-secondary);">
-    <div class="container">
-      <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
-        <span class="badge badge-primary">${t('home_leadership_badge')}</span>
-        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_coaches_title')}</h2>
-        <div class="divider" style="margin: var(--space-md) auto;"></div>
-      </div>
-      <div class="team-grid animate-on-scroll" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg);">
-        ${teamCard('Coach Kevin', 'Head Coach', 'As an ASCA Level 5 Coach and ASCA Life Member, Coach Kevin brings elite, nationally recognized expertise to the pool deck. Consistently ranked among the country\'s best, Coach Kevin was named to the ASCA Top 50 Age Group Coaches list in 2019 and the Top 25 Age Group Coaches for Small Teams in 2025. Under his leadership, the team achieved ASCA Top 100 Age Group Team honors in both 2020 and 2021. Most recently, Coach Kevin\'s dedication to athlete development was recognized on a national scale as a finalist for the 2024 ASCA Top 4 Impact Coach award.')}
-        ${teamCard('Coach Lisa', 'Coach', 'Coach Lisa understands that in competitive swimming, details dictate success. Dedicated to building an unbreakable foundation for every athlete, Coach Lisa is an expert in stroke technique and fundamentals. By utilizing precise stroke breakdown and biomechanical analysis, they optimize each swimmer\'s entry angle, catch, and pulling efficiency. Beyond meticulous underwater technique, Coach Lisa places a heavy emphasis on core strength, seamlessly bridging the gap between dryland conditioning and holding a flawless underwater streamline. Whether working with developing swimmers or elite athletes aiming for national cuts, Coach Lisa helps them find their breakthrough through zero-flaw fundamentals, allowing them to move through the water with maximum efficiency and injury prevention.')}
-        ${teamCard('Coach Sue', 'Coach', 'Coach Sue is a master of aquatic conditioning and race strategy, focused on unlocking an athlete\'s full physiological potential through scientific and dynamic comprehensive training. Coach Sue eliminates the monotony of one-dimensional practices by designing highly engaging, multi-stroke swim sets that seamlessly transition between butterfly, backstroke, breaststroke, and freestyle. This high-intensity, comprehensive approach not only significantly boosts a swimmer\'s Individual Medley (IM) prowess but also precisely targets different energy systems—from the aerobic base to anaerobic lactate threshold sprinting. In Coach Sue\'s practices, every meticulously crafted set is designed to build stroke control under extreme fatigue, finely tune pacing awareness, and forge mental toughness for race day.')}
-      </div>
-    </div>
-  </section>
-
   <!-- Seasons Overview -->
   <section class="section seasons-section">
     <div class="container">
@@ -154,6 +118,56 @@ app.innerHTML = `
         ${seasonCard('summer', '☀️', '#F59E0B')}
         ${seasonCard('fall', '🍂', '#E84D25')}
         ${seasonCard('winter', '❄️', '#3B82F6')}
+      </div>
+
+      <div class="season-schedule animate-on-scroll">
+        <h3 class="season-schedule-title">2026–2027 Season Schedule &amp; Locations</h3>
+        <p class="season-schedule-dates"><strong>Season dates:</strong> Fall: Sep 8 – Nov 9 &nbsp;·&nbsp; Winter: Nov 10 – Feb 17 &nbsp;·&nbsp; Spring: Feb 18 – Jun 11 &nbsp;·&nbsp; Summer: Jun 12 – Labor Day</p>
+        <div class="season-location-grid">
+          <div class="season-location-card">
+            <h4 class="season-location-name">Claude Moore Recreation Center</h4>
+            <p class="season-location-line"><strong>Fall &amp; Spring:</strong> Mon &amp; Wed 6:30–8:30 pm (Advanced — group determined by the Head Coach), 7:30–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
+            <p class="season-location-line"><strong>Winter:</strong> Mon &amp; Wed 6–7:30 pm (Advanced), 7:30–9 pm (All levels); Fri 7:30–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
+            <p class="season-location-line"><strong>Summer:</strong> Wed &amp; Fri 6:30–8:30 pm; Sun 12–2 pm &amp; 2–4 pm</p>
+          </div>
+          <div class="season-location-card">
+            <h4 class="season-location-name">Dulles South Recreation Center</h4>
+            <p class="season-location-line"><strong>Fall, Spring &amp; Winter:</strong> Mon &amp; Fri 7:30–9 pm; Sat &amp; Sun 3–5 pm</p>
+            <p class="season-location-line"><strong>Summer:</strong> Mon 7:30–9 pm; Sat 2–4 pm</p>
+          </div>
+          <div class="season-location-card">
+            <h4 class="season-location-name">Tysons — OneLife Fitness Tysons</h4>
+            <p class="season-location-line"><strong>Year-round:</strong> Tue &amp; Wed 6:30–8:30 pm; Sat &amp; Sun 8–10 am</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Meet the Coaches Section -->
+  <section class="section coaches-section" style="background: var(--bg-secondary);">
+    <div class="container">
+      <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
+        <span class="badge badge-primary">${t('home_leadership_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_coaches_title')}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+      </div>
+      <div class="team-grid animate-on-scroll" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg);">
+        ${teamCard('Coach Kevin', 'Head Coach', 'As an ASCA Level 5 Coach and ASCA Life Member, Coach Kevin brings elite, nationally recognized expertise to the pool deck. Consistently ranked among the country\'s best, Coach Kevin was named to the ASCA Top 50 Age Group Coaches list in 2019, the Top 25 Age Group Coaches for Small Teams list in 2025, and the Top 5 Age Group Coaches for Small Teams list in 2026. Under his leadership, the team achieved ASCA Top 100 Age Group Team honors in both 2020 and 2021 and Top 50 Age Group Small Team honors in both 2025 and 2026! Most recently, Coach Kevin\'s dedication to athlete development was recognized on a national scale as a finalist for the 2024 ASCA Top 4 Impact Coach Award and one of five finalists for the 2026 ASCA Age Group Coach of the Year Award in the Small Team Division!')}
+        ${teamCard('Coach Lisa', 'Coach & Manager', 'Coach Lisa is an expert in stroke technique and fundamentals. By utilizing precise stroke breakdown and biomechanical analysis, she optimizes each swimmer\'s entry angle, catch, and pulling efficiency. As a team manager, Coach Lisa also truly cares about swimmers\' mental health. She is skilled at noticing emotional changes and helping swimmers overcome issues arising from swimming and life, enabling them to achieve their best in a healthy, happy state of mind.')}
+        ${teamCard('Coach Sue', 'Coach', 'Coach Sue has been with Dragon Swim Team for more than 15 years and has more than 20 years of coaching experience. She is a master of aquatic conditioning and race strategy, focused on unlocking an athlete\'s full physiological potential through scientific, dynamic, and comprehensive training. Coach Sue eliminates the monotony of one-dimensional practices by designing highly engaging, multi-stroke swim sets that seamlessly transition between butterfly, backstroke, breaststroke, and freestyle. This high-intensity, comprehensive approach not only significantly boosts a swimmer\'s Individual Medley (IM) prowess but also precisely targets different energy systems—from the aerobic base to anaerobic lactate threshold sprinting.')}
+      </div>
+    </div>
+  </section>
+
+  <!-- Mission & Vision Section -->
+  <section class="section mission-section">
+    <div class="container" style="max-width: 800px; text-align: center;">
+      <div class="animate-on-scroll">
+        <span class="badge badge-primary">${t('home_mission_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_mission_title')}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+        <p class="mission-statement">${t('home_mission_text')}</p>
       </div>
     </div>
   </section>
@@ -202,6 +216,22 @@ app.innerHTML = `
     </div>
   </section>
 
+  <!-- Meet the Team Section -->
+  <section class="section team-intro-section">
+    <div class="container">
+      <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
+        <span class="badge badge-primary">${t('home_journey_badge')}</span>
+        <h2 class="section-title" style="margin-top: var(--space-md);">${t('home_team_title')}</h2>
+        <div class="divider" style="margin: var(--space-md) auto;"></div>
+        <p class="section-subtitle" style="margin: 0 auto;">${t('home_team_subtitle')}</p>
+      </div>
+      
+      <div class="team-photo-wrapper animate-on-scroll" style="margin-bottom: var(--space-2xl); text-align: center;">
+        ${renderTeamSlideshow()}
+      </div>
+    </div>
+  </section>
+
 `;
 
 renderFooter();
@@ -225,6 +255,55 @@ const observer = new IntersectionObserver((entries, observer) => {
 document.querySelectorAll('.animate-on-scroll').forEach(el => {
   observer.observe(el);
 });
+
+// ── Meet The Team 照片轮播 ──
+// 每张停留 TEAM_SLIDE_MS(默认 3 秒),淡入淡出切换,循环播放;鼠标悬停暂停。
+// 系统开启"减少动态效果"(prefers-reduced-motion)时保持第一张,不自动轮播。
+const teamSlideshow = document.getElementById('team-slideshow');
+if (teamSlideshow) {
+  const slides = Array.from(teamSlideshow.querySelectorAll('.team-slide'));
+  const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (slides.length > 1 && !reducedMotion) {
+    let slideIndex = 0;
+    let slideTimer = null;
+    const showSlide = (index) => {
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+    };
+    const stopSlideshow = () => {
+      if (slideTimer) {
+        clearInterval(slideTimer);
+        slideTimer = null;
+      }
+    };
+    const startSlideshow = () => {
+      stopSlideshow();
+      slideTimer = setInterval(() => {
+        slideIndex = (slideIndex + 1) % slides.length;
+        showSlide(slideIndex);
+      }, TEAM_SLIDE_MS);
+    };
+    showSlide(0);
+    startSlideshow();
+    teamSlideshow.addEventListener('mouseenter', stopSlideshow);
+    teamSlideshow.addEventListener('mouseleave', startSlideshow);
+  }
+}
+
+// ── 渲染轮播(空照片时显示原占位) ──
+function renderTeamSlideshow() {
+  if (teamPhotos.length === 0) {
+    return `
+      <div style="width: 100%; max-width: 900px; height: 400px; background: var(--bg-secondary); border-radius: var(--radius-lg); display: inline-flex; align-items: center; justify-content: center; border: 2px dashed var(--border-color); margin: 0 auto;">
+        <span style="color: var(--text-muted); font-weight: var(--fw-medium);">[ Team Photo ]</span>
+      </div>
+    `;
+  }
+  return `
+    <div class="team-slideshow" id="team-slideshow" role="region" aria-label="Dragon Swim team photos">
+      ${teamPhotos.map((src, i) => `<img class="team-slide${i === 0 ? ' active' : ''}" src="${src}" alt="Dragon Swim team photo ${i + 1}" />`).join('')}
+    </div>
+  `;
+}
 
 // ── Helpers ──
 function seasonCard(season, emoji, accentColor) {
