@@ -15,7 +15,7 @@ const translations = {
 
         // Home Page
         hero_title: 'Train, Compete & Grow with',
-        hero_subtitle: 'Top 50 Age Group Small Team in both 2025 and 2026! Best Small Team in PVS Swimming! Our head coach is one of five finalists for the 2026 Age Group Coach of the Year — and an ASCA Level 5 (the highest level) coach who has been named Age Group Coach of the Year in 2024, 2025, and 2026!',
+        hero_subtitle: 'Top 50 Age Group Small Team in both 2025 and 2026! Best Small Team in PVS Swimming! Our head coach is one of five finalists for the 2026 Age Group Coach of the Year — and an ASCA Level 5 (the highest level) Age Group Coach in 2024, 2025, and 2026!',
         hero_cta: 'Register Now',
         hero_cta_secondary: 'Learn More',
         home_mission_badge: 'Our Mission',
