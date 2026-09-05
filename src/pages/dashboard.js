@@ -3177,8 +3177,17 @@ function renderProfile() {
                 <div class="swimmer-profile-meta">
                   <span>${s.gender || '—'}</span>
                   <span>DOB: ${s.dob || '—'}</span>
-                  ${s.usaSwimmingId ? `<span>USA ID: ${s.usaSwimmingId}</span>` : ''}
                   ${s.joinDate ? `<span>Joined: ${s.joinDate}</span>` : ''}
+                </div>
+                <div class="swimmer-usa-id" style="display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+                  <span style="font-size: 0.8rem; color: var(--text-muted);">USA ID:</span>
+                  <strong style="font-size: 0.8rem;">${s.usaSwimmingId ? escapeHtml(s.usaSwimmingId) : '—'}</strong>
+                  <button type="button" class="btn btn-outline btn-sm usa-id-edit-btn" data-index="${i}" style="padding: 0 8px; font-size: 0.7rem;">${s.usaSwimmingId ? t('dash_profile_edit') : t('dash_profile_usa_add')}</button>
+                  <span class="usa-id-edit-form" data-usa-form="${i}" style="display: none; align-items: center; gap: 6px;">
+                    <input type="text" class="form-input usa-id-input" data-input="${i}" value="${escapeHtml(s.usaSwimmingId || '')}" placeholder="USA Swimming ID" style="width: 170px; padding: 2px 8px; font-size: 0.75rem;" />
+                    <button type="button" class="btn btn-primary btn-sm usa-id-save-btn" data-index="${i}" style="padding: 0 8px; font-size: 0.7rem;">${t('dash_profile_save')}</button>
+                    <button type="button" class="btn btn-outline btn-sm usa-id-cancel-btn" data-index="${i}" style="padding: 0 8px; font-size: 0.7rem;">${t('dash_profile_cancel')}</button>
+                  </span>
                 </div>
               </div>
               <button class="btn btn-outline btn-sm delete-swimmer-btn" data-index="${i}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_profile_remove')}</button>
@@ -3351,6 +3360,44 @@ function showDeleteConfirm(swimmerName, swimmerIndex) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
+}
+
+// ── USA ID helpers (Profile tab) ──
+function normalizeUsaId(raw) {
+  const value = (raw || '').trim().toUpperCase();
+  return value || null;
+}
+
+function isValidUsaId(id) {
+  return /^[0-9A-F]{14}$/.test(id);
+}
+
+// Find an active swimmer (other than self) already using this USA ID.
+// Returns the conflicting swimmer object, or null when the ID is free.
+async function findUsaIdConflict(id, selfSwimmerIndex) {
+  const familySwimmers = familyData?.swimmers || [];
+  for (let i = 0; i < familySwimmers.length; i++) {
+    const s = familySwimmers[i];
+    if (i === selfSwimmerIndex || s.deleted) continue;
+    if (s.usaSwimmingId && s.usaSwimmingId.toUpperCase() === id) return s;
+  }
+
+  // Cross-family check. firestore.rules already grants signed-in users read access to
+  // registrations, and the team is small, so a one-shot read on save is acceptable.
+  try {
+    const snap = await getDocs(collection(db, 'registrations'));
+    for (const regDoc of snap.docs) {
+      if (regDoc.id === familyDataId) continue;
+      const reg = regDoc.data();
+      for (const s of (reg.swimmers || [])) {
+        if (s.deleted) continue;
+        if (s.usaSwimmingId && s.usaSwimmingId.toUpperCase() === id) return s;
+      }
+    }
+  } catch (err) {
+    console.warn('USA ID duplicate check skipped:', err);
+  }
+  return null;
 }
 
 // ── Password Change Modal ──
@@ -4169,13 +4216,25 @@ function bindEvents() {
       alert(t('dash_profile_swimmer_required'));
       return;
     }
+    const usaId = normalizeUsaId(document.getElementById('new-swimmer-usaId').value);
+    if (usaId && !isValidUsaId(usaId)) {
+      alert(t('dash_profile_usa_invalid'));
+      return;
+    }
+    if (usaId) {
+      const conflict = await findUsaIdConflict(usaId, -1);
+      if (conflict) {
+        alert(t('dash_profile_usa_duplicate'));
+        return;
+      }
+    }
     const newSwimmer = {
       firstName,
       lastName,
       middleName: document.getElementById('new-swimmer-middle').value.trim() || null,
       gender: document.getElementById('new-swimmer-gender').value || null,
       dob: document.getElementById('new-swimmer-dob').value || null,
-      usaSwimmingId: document.getElementById('new-swimmer-usaId').value.trim() || null,
+      usaSwimmingId: usaId,
       joinDate: null,
     };
     const newSwimmers = [...familyData.swimmers, newSwimmer];
@@ -4197,6 +4256,68 @@ function bindEvents() {
       const swimmer = familyData.swimmers[idx];
       const name = [swimmer.firstName, swimmer.lastName].filter(Boolean).join(' ');
       showDeleteConfirm(name, idx);
+    });
+  });
+
+  // ── Edit Swimmer USA ID ──
+  document.querySelectorAll('.usa-id-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index);
+      const editForm = document.querySelector(`.usa-id-edit-form[data-usa-form='${idx}']`);
+      if (editForm) {
+        editForm.style.display = 'flex';
+        btn.style.display = 'none';
+        editForm.querySelector('.usa-id-input').focus();
+      }
+    });
+  });
+
+  document.querySelectorAll('.usa-id-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index);
+      const editForm = document.querySelector(`.usa-id-edit-form[data-usa-form='${idx}']`);
+      const editBtn = document.querySelector(`.usa-id-edit-btn[data-index='${idx}']`);
+      if (editForm) editForm.style.display = 'none';
+      if (editBtn) editBtn.style.display = '';
+    });
+  });
+
+  document.querySelectorAll('.usa-id-save-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = parseInt(btn.dataset.index);
+      const swimmer = familyData.swimmers[idx];
+      if (!swimmer) return;
+      const input = document.querySelector(`.usa-id-input[data-input='${idx}']`);
+      const newId = normalizeUsaId(input?.value);
+      const oldId = swimmer.usaSwimmingId ? swimmer.usaSwimmingId.toUpperCase() : null;
+
+      if (newId && !isValidUsaId(newId)) {
+        alert(t('dash_profile_usa_invalid'));
+        return;
+      }
+      if (newId === oldId) {
+        document.querySelector(`.usa-id-cancel-btn[data-index='${idx}']`)?.click();
+        return;
+      }
+      if (newId) {
+        const conflict = await findUsaIdConflict(newId, idx);
+        if (conflict) {
+          alert(t('dash_profile_usa_duplicate'));
+          return;
+        }
+      }
+
+      const swimmers = [...familyData.swimmers];
+      swimmers[idx] = { ...swimmer, usaSwimmingId: newId };
+      try {
+        await updateDoc(doc(db, 'registrations', familyDataId), { swimmers });
+        familyData.swimmers = swimmers;
+        currentTab = 'profile';
+        refreshUI();
+      } catch (err) {
+        console.error('Error updating swimmer USA ID:', err);
+        alert(t('dash_profile_save_failed'));
+      }
     });
   });
 
