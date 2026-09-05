@@ -595,3 +595,8 @@
     color: var(--color-accent);
     margin-right: 4px;
 }
+/* Preserve paragraph breaks in copy (2026-09-05) */
+.hero-subtitle,
+.team-desc {
+    white-space: pre-line;
+}
