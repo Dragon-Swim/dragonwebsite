@@ -410,8 +410,7 @@ function renderCoachDashboard(user) {
               <span></span><span></span><span></span>
             </button>
             <div>
-              <h1 class="dash-page-title">Coach: ${getTabTitle(currentTab, 'coach')}</h1>
-              <p class="dash-page-subtitle">${t('dash_coach_topbar_sub')}</p>
+              <h1 class="dash-page-title">${getTabTitle(currentTab, 'coach')}</h1>
             </div>
           </div>
           <div class="dash-topbar-right">
@@ -3248,12 +3247,79 @@ function renderSwimPlans() {
 }
 
 // ── Swim Meets Tab ──
+
+/** Parse an ISO/plain date string ("YYYY-MM-DD") into a UTC midnight timestamp (ms). */
+function parseMeetDateUTC(dateStr) {
+  if (!dateStr) return null;
+  const m = String(dateStr).trim().match(/^(\d{4})[-/.]\d{1,2}[-/.]\d{1,2}/);
+  if (!m) return null;
+  const parts = String(m[0]).split(/[-/.]/);
+  return Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+}
+
+/** Badge + group for a meet, derived purely from dates (stored status is not trusted for display). */
+function getMeetDisplay(meet, now = new Date()) {
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = parseMeetDateUTC(meet.startDate || meet.date);
+  const end = parseMeetDateUTC(meet.endDate || meet.date || meet.startDate);
+  if (end != null && end < today) return { bucket: 'past', label: 'Completed', cls: 'status-completed' };
+  if (start != null && end != null && start <= today && today <= end) return { bucket: 'upcoming', label: 'In Progress', cls: 'status-in-progress' };
+  return { bucket: 'upcoming', label: 'Upcoming', cls: 'status-open' };
+}
+
 function renderSwimMeets() {
   const canEdit = dbRole === 'admin';
+  const now = new Date();
+
+  // Only meets in the currently selected season (explicit season or inferred from date)
+  const seasonMeets = swimMeets
+    .filter((m) => getMeetSeason(m) === currentSeason)
+    .sort((a, b) => String(a.startDate || a.date || '').localeCompare(String(b.startDate || b.date || '')));
+
+  const displayed = seasonMeets.map((m) => ({ meet: m, disp: getMeetDisplay(m, now) }));
+  const upcoming = displayed.filter((x) => x.disp.bucket === 'upcoming'); // ascending by date
+  const past = displayed.filter((x) => x.disp.bucket === 'past').reverse(); // newest first
+
+  const meetCard = (m, disp) => {
+    const dimStyle = disp.bucket === 'past' ? ' style="opacity: 0.78;"' : '';
+    const source = m.sourceUrl
+      ? `<span>🔗 <a href="${escapeHtml(m.sourceUrl)}" target="_blank" rel="noopener noreferrer">Meet Page</a></span>`
+      : '';
+    const dateText = escapeHtml(m.startDate && m.endDate ? `${m.startDate} – ${m.endDate}` : (m.date || ''));
+    return `
+        <div class="dash-card"${dimStyle}>
+          <div class="dash-card-header">
+            <h3 class="dash-card-title">${escapeHtml(m.name || 'Unnamed Meet')}</h3>
+            <span class="status-badge ${disp.cls}">${disp.label}</span>
+          </div>
+          <div class="dash-card-body">
+            <div class="dash-card-meta">
+              <span>📅 ${dateText}</span>
+              <span>📍 ${escapeHtml(m.location || '')}</span>
+              ${source}
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+              ${canEdit ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${escapeHtml(m.name || '')}">${t('dash_meets_fee')}</button>` : ''}
+              ${canEdit ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${escapeHtml(m.name || '')}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${escapeHtml(m.location || '')}" data-season="${m.season || currentSeason}" data-source="${escapeHtml(m.sourceUrl || '')}">${t('dash_meets_edit')}</button>` : ''}
+              ${canEdit ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+  };
+
+  const groupSection = (list, title) => list.length
+    ? `
+        <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 1.5rem 0 0.75rem;">${title} (${list.length})</h3>
+        <div class="dash-cards-grid">
+          ${list.map((x) => meetCard(x.meet, x.disp)).join('')}
+        </div>
+      `
+    : '';
 
   return `
-    <div class="dash-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-      <h2 style="font-size: 1.5rem; font-weight: 600; color: var(--text-primary);">${t('dash_meets_upcoming')}</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
+      ${renderSeasonSelector(currentSeason)}
       ${canEdit ? `<button class="btn btn-primary btn-sm" id="add-meet-btn">${t('dash_meets_add')}</button>` : ''}
     </div>
 
@@ -3265,8 +3331,9 @@ function renderSwimMeets() {
           <input type="date" id="meet-start-date" class="form-input" title="${t('dash_meets_start_date_placeholder')}">
           <input type="date" id="meet-end-date" class="form-input" title="${t('dash_meets_end_date_placeholder')}">
           <input type="text" id="meet-location" placeholder="${t('dash_meets_location_placeholder')}" class="form-input">
+          <input type="url" id="meet-source" placeholder="${t('dash_meets_source_placeholder')}" class="form-input">
           <select id="meet-season" class="form-input">
-            ${getSeasonOptions().map(s => `<option value="${s}" ${s === currentSeason ? 'selected' : ''}>${s}</option>`).join('')}
+            ${getSeasonOptions().map((s) => `<option value="${s}" ${s === currentSeason ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
@@ -3276,28 +3343,16 @@ function renderSwimMeets() {
       </div>
     ` : ''}
 
-    <div class="dash-cards-grid">
-      ${swimMeets.length === 0 ? `<p class="dash-empty">${t('dash_meets_no_meets')}</p>` :
-      swimMeets.map(m => `
-        <div class="dash-card">
-          <div class="dash-card-header">
-            <h3 class="dash-card-title">${m.name}</h3>
-            <span class="status-badge status-${(m.status || 'Open').toLowerCase().replace(' ', '-')}">${m.status || 'Open'}</span>
-          </div>
-          <div class="dash-card-body">
-            <div class="dash-card-meta">
-              <span>📅 ${m.startDate && m.endDate ? `${m.startDate} – ${m.endDate}` : m.date || ''}</span>
-              <span>📍 ${m.location}</span>
-            </div>
-            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-              ${canEdit ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${m.name || ''}">${t('dash_meets_fee')}</button>` : ''}
-              ${canEdit ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${m.name || ''}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${m.location || ''}" data-season="${m.season || currentSeason}">${t('dash_meets_edit')}</button>` : ''}
-              ${canEdit ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
-            </div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
+    ${seasonMeets.length === 0 ? `
+      <div class="dash-panel" style="text-align: center; padding: 3rem 2rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📅</div>
+        <p style="color: var(--text-secondary); max-width: 460px; margin: 0 auto;">${t('dash_meets_no_meets_for_season', { season: currentSeason })}</p>
+        ${canEdit ? `<p style="margin: 1rem 0 0;"><button class="btn btn-primary btn-sm" id="add-meet-btn-empty">${t('dash_meets_add')}</button></p>` : ''}
+      </div>
+    ` : `
+      ${groupSection(upcoming, t('dash_meets_upcoming'))}
+      ${groupSection(past, t('dash_meets_past'))}
+    `}
   `;
 }
 
@@ -4384,7 +4439,7 @@ function bindEvents() {
     const meetCancelBtn = document.getElementById('cancel-meet-btn');
     const meetFormTitle = document.getElementById('meet-form-title');
 
-    document.getElementById('add-meet-btn')?.addEventListener('click', () => {
+    const openMeetForm = () => {
       editingMeetId = null;
       meetFormTitle.textContent = t('dash_meets_new_title');
       meetSaveBtn.textContent = t('dash_meets_save');
@@ -4392,8 +4447,11 @@ function bindEvents() {
       document.getElementById('meet-start-date').value = '';
       document.getElementById('meet-end-date').value = '';
       document.getElementById('meet-location').value = '';
+      document.getElementById('meet-source').value = '';
       meetForm.style.display = 'block';
-    });
+    };
+    document.getElementById('add-meet-btn')?.addEventListener('click', openMeetForm);
+    document.getElementById('add-meet-btn-empty')?.addEventListener('click', openMeetForm);
     meetCancelBtn?.addEventListener('click', () => {
       meetForm.style.display = 'none';
       editingMeetId = null;
@@ -4403,6 +4461,7 @@ function bindEvents() {
       const startDate = document.getElementById('meet-start-date').value;
       const endDate = document.getElementById('meet-end-date').value;
       const location = document.getElementById('meet-location').value.trim();
+      const source = document.getElementById('meet-source')?.value.trim() || null;
       const season = document.getElementById('meet-season')?.value || currentSeason;
 
       if (!name || !startDate || !endDate) {
@@ -4419,6 +4478,7 @@ function bindEvents() {
             endDate,
             location,
             season,
+            sourceUrl: source,
           });
         } else {
           // Add new meet
@@ -4429,6 +4489,7 @@ function bindEvents() {
             location,
             season,
             status: 'Open',
+            sourceUrl: source,
             createdAt: new Date()
           });
         }
@@ -4449,6 +4510,7 @@ function bindEvents() {
         document.getElementById('meet-start-date').value = btn.dataset.start;
         document.getElementById('meet-end-date').value = btn.dataset.end;
         document.getElementById('meet-location').value = btn.dataset.location;
+        document.getElementById('meet-source').value = btn.dataset.source || '';
         const seasonEl = document.getElementById('meet-season');
         if (seasonEl) seasonEl.value = btn.dataset.season || currentSeason;
         meetForm.style.display = 'block';

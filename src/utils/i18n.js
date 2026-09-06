@@ -235,7 +235,6 @@ const translations = {
         dash_coach_tab_roster: 'Team Roster',
         dash_coach_tab_meets: 'Meet Management',
         dash_coach_tab_schedule: 'Season Schedule',
-        dash_coach_topbar_sub: 'Managing the Dragon Swim Team roster and sessions',
         dash_coach_badge: 'Coach Mode',
         dash_coach_username_fallback: 'Coach',
         dash_coach_active_athletes: 'Active Athletes',
@@ -333,6 +332,9 @@ const translations = {
         dash_meets_edit: 'Edit',
         dash_meets_register: 'Register',
         dash_meets_no_meets: 'No meets scheduled yet.',
+        dash_meets_no_meets_for_season: 'No meets scheduled for {season} yet.',
+        dash_meets_past: 'Past Meets',
+        dash_meets_source_placeholder: 'Meet link (optional)',
         dash_meets_confirm_delete: 'Are you sure you want to delete this meet?',
         dash_meets_name_date_required: 'Please provide a name, start date, and end date.',
 
