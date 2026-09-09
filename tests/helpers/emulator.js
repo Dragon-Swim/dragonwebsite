@@ -3,8 +3,12 @@
  *
  * `npm test` wraps `playwright test` in `firebase emulators:exec`, so the Auth
  * and Firestore emulators are already up when these helpers run. Seeding goes
- * through the emulator's REST API (an admin interface that bypasses security
- * rules), because the `families` whitelist is admin-writable only.
+ * through the emulator's REST API, because the `families` whitelist is
+ * admin-writable only (firestore.rules L130: `allow create, delete: if isAdmin()`).
+ *
+ * The REST API still enforces security rules, so every write must carry the
+ * emulator's admin credential `Authorization: Bearer owner` — without it the
+ * create is denied with `false for 'create' @ L130`.
  *
  * The project ID must match the one the app uses in emulator mode — see
  * USE_EMULATOR in src/utils/firebase.js and the npm "test" script.
@@ -50,7 +54,12 @@ export async function assertEmulatorReady() {
 export async function seedFamily(email, parentName = "Playwright Test Parent") {
   const res = await fetch(documentsUrl("families"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      // Emulator-only admin credential: bypasses security rules. Has no effect
+      // outside the emulator, and the emulator rejects every other token.
+      Authorization: "Bearer owner",
+    },
     body: JSON.stringify({
       fields: {
         email: { stringValue: email },
