@@ -6,12 +6,18 @@
  *
  * Prerequisites:
  *   - serviceAccountKey.json in project root
+ *   - ADMIN_EMAIL / ADMIN_PASSWORD in .env.local (gitignored)
+ *     optional: COACH_EMAIL / COACH_PASSWORD / COACH_NAME
+ *
+ * ⚠️ Credentials are NEVER hardcoded here: this repo is public, so any password
+ *    committed to it must be treated as compromised.
  */
 
 import admin from "firebase-admin";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { requireEnv, optionalEnv } from "./lib/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const keyPath = resolve(__dirname, "..", "serviceAccountKey.json");
@@ -24,9 +30,26 @@ const db = app.firestore();
 console.log(` Connected to project: ${serviceAccount.project_id}\n`);
 
 const accounts = [
-  { email: "admin@dragonswim.com", password: "admin1234", displayName: "Admin", role: "admin" },
-  { email: "coach.thompson@dragonswim.com", password: "coach1234", displayName: "Coach Thompson", role: "coach" },
+  {
+    email: requireEnv("ADMIN_EMAIL"),
+    password: requireEnv("ADMIN_PASSWORD"),
+    displayName: optionalEnv("ADMIN_NAME", "Admin"),
+    role: "admin",
+  },
 ];
+
+const coachEmail = optionalEnv("COACH_EMAIL");
+const coachPassword = optionalEnv("COACH_PASSWORD");
+if (coachEmail && coachPassword) {
+  accounts.push({
+    email: coachEmail,
+    password: coachPassword,
+    displayName: optionalEnv("COACH_NAME", "Coach"),
+    role: "coach",
+  });
+} else {
+  console.log(" ℹ️  COACH_EMAIL / COACH_PASSWORD not set — skipping coach account\n");
+}
 
 let success = 0;
 let failed = 0;

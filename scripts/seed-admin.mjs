@@ -19,6 +19,7 @@ import admin from "firebase-admin";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { requireEnv } from "./lib/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const keyPath = resolve(__dirname, "..", "serviceAccountKey.json");
@@ -40,9 +41,13 @@ const auth = app.auth();
 const db = app.firestore();
 
 console.log(` Connected to project: ${serviceAccount.project_id}\n`);
+console.log(" ⚠️  This writes TEST families into PRODUCTION. Run only when you");
+console.log("     intentionally need demo data, and clean up afterwards with");
+console.log("     execution/cleanup_test_accounts.mjs\n");
 
 // ── Seed data ─────────────────────────────────────────────────
-const PASSWORD = "test1234";
+// Never hardcode the password: this repo is public.
+const PASSWORD = requireEnv("TEST_ACCOUNT_PASSWORD");
 
 const families = [
   {

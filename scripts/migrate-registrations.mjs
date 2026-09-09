@@ -36,8 +36,17 @@ for (const line of envRaw.split("\n")) {
   env[trimmed.slice(0, eqIdx).trim()] = val;
 }
 
-const DRY_RUN = !process.argv.includes("--apply");
-if (DRY_RUN) {
+// Credentials come from .env.local / environment — never hardcoded: this repo is
+// public, so any committed password must be treated as compromised.
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || env.ADMIN_PASSWORD;
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error("❌ ADMIN_EMAIL / ADMIN_PASSWORD not set.");
+  console.error("   Add them to .env.local (gitignored) before running this migration.");
+  process.exit(1);
+}
+
+const DRY_RUN = !process.argv.includes("--apply");if (DRY_RUN) {
   console.log("🔍 DRY RUN — no changes will be made.\n  Run with --apply to actually update.\n");
 } else {
   console.log("⚠️  APPLY mode — will write changes to production!\n");
@@ -57,9 +66,9 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ── Sign in as admin ─────────────────────────────────────────────
-console.log("Signing in as admin@dragonswim.com ...");
+console.log(`Signing in as ${ADMIN_EMAIL} ...`);
 try {
-  await signInWithEmailAndPassword(auth, "admin@dragonswim.com", "admin1234");
+  await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
   console.log("Signed in.\n");
 } catch (e) {
   console.error("Failed to sign in as admin:", e.message);
