@@ -17,10 +17,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Email fallback handles bootstrap (first admin doc creation, when userRole() can't read yet).
-      // Short-circuit: if email matches, don't call userRole() which would throw on missing doc.
-      return (isAuth() && request.auth.token.email == 'admin@dragonswim.com')
-          || userRole() == 'admin';
+      // Admin rights come only from users/{uid}.role — never from the email in
+      // the token. The old email fallback let anyone who could create an account
+      // with that address (the public Auth REST API allows any address) act as
+      // admin, which is exactly what the leaked admin password made trivial.
+      return isAuth() && userRole() == 'admin';
     }
 
     // ── contacts — public contact form submissions ───────────────
@@ -38,8 +39,11 @@ service cloud.firestore {
       // Users can read their own profile; admins can read any
       allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
 
-      // Users create their own profile (normal signup or bootstrap admin)
-      allow create: if isAuth() && request.auth.uid == uid;
+      // A user may self-provision ONLY a family (swimmer) profile. Coach and
+      // admin roles are granted server-side (Admin SDK) or by an existing admin,
+      // so a client can never raise its own privileges.
+      allow create: if isAuth() && request.auth.uid == uid
+                    && request.resource.data.role == 'swimmer';
       // Admins can create users with any role (e.g., creating coaches)
       allow create: if isAdmin();
 
