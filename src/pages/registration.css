@@ -176,6 +176,37 @@
     color: var(--brand-primary, #e63946);
 }
 
+/* Required-field marker — small red asterisk appended to the label */
+.req-star {
+    color: #dc3545;
+    margin-left: 2px;
+    font-weight: var(--fw-bold);
+}
+
+/* Highlight a field the browser rejected as invalid */
+.form-input.is-invalid,
+.form-select.is-invalid,
+.form-textarea.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.12);
+}
+
+/* Message shown when the user submits an incomplete form */
+.reg-form-error {
+    display: none;
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid rgba(220, 53, 69, 0.35);
+    border-radius: var(--radius-md);
+    background: rgba(220, 53, 69, 0.06);
+    color: #b02a37;
+    font-size: var(--fs-sm);
+}
+
+.reg-form-error.is-visible {
+    display: block;
+}
+
 /* Submit */
 .reg-submit {
     width: 100%;

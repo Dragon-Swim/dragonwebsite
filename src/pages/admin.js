@@ -1073,7 +1073,7 @@ async function handleFamilyExcelUpload(event) {
     existingMap.set((fam.email || '').toLowerCase(), fam);
   }
 
-  // Check conflicts
+  // Classify each row against the existing whitelist
   const results = checkFamilyConflicts(parsedRows, existingMap);
 
   // Show modal
@@ -1084,14 +1084,13 @@ async function handleFamilyExcelUpload(event) {
  * Classify each Excel row against existing families.
  * @param {Array} rows - Parsed Excel rows [{email, name, rowNum, error?}]
  * @param {Map} existingMap - Map of email (lowercase) → family doc
- * @returns {{new: Array, update: Array, conflict: Array, skip: Array, errors: Array}}
+ * @returns {{new: Array, update: Array, skip: Array, errors: Array}}
  */
 function checkFamilyConflicts(rows, existingMap) {
   const result = {
     new: [],      // email not in system → can add
-    update: [],   // email exists, no name in system, has name in Excel → update name
-    conflict: [], // email exists, name differs → flag for review
-    skip: [],     // email exists, name matches → no-op
+    update: [],   // email exists and the file carries a name → the file's name wins
+    skip: [],     // nothing to change
     errors: [],   // parse errors (invalid email, duplicate, etc.)
   };
 
@@ -1112,22 +1111,16 @@ function checkFamilyConflicts(rows, existingMap) {
     const existingName = (existing.parentName || '').trim();
     const excelName = (row.name || '').trim();
 
-    if (!excelName && !existingName) {
-      // Both have no name — skip
+    if (!excelName) {
+      // The file has nothing to contribute for this email — never blank out
+      // a name the system already has.
       result.skip.push(row);
     } else if (existingName.toLowerCase() === excelName.toLowerCase()) {
-      // Names match (case-insensitive) — skip
+      // Already identical (case-insensitive) — nothing to do.
       result.skip.push(row);
-    } else if (!existingName && excelName) {
-      // System has no name, Excel has name — update
-      result.update.push({ ...row, existingId: existing.id });
     } else {
-      // Names differ — conflict
-      result.conflict.push({
-        ...row,
-        existingId: existing.id,
-        existingName: existingName,
-      });
+      // The file wins: fills in a missing name, or replaces a different one.
+      result.update.push({ ...row, existingId: existing.id, existingName });
     }
   }
 
@@ -1138,10 +1131,11 @@ function checkFamilyConflicts(rows, existingMap) {
  * Render the import results modal with summary counts, conflict table, and action buttons.
  */
 function showFamilyImportModal(results, filename) {
-  const { new: newRows, update: updateRows, conflict: conflictRows, skip: skipRows, errors: errorRows } = results;
-  const total = newRows.length + updateRows.length + conflictRows.length + skipRows.length + errorRows.length;
-  const hasConflicts = conflictRows.length > 0;
+  const { new: newRows, update: updateRows, skip: skipRows, errors: errorRows } = results;
+  const total = newRows.length + updateRows.length + skipRows.length + errorRows.length;
   const hasWork = (newRows.length + updateRows.length) > 0;
+  // Rows where the file's name replaces a different name already in the system.
+  const replacedNames = updateRows.filter(r => r.existingName).length;
 
   // Build status badge HTML for each category
   const renderBadge = (label, cls) => `<span class="status-badge ${cls}">${label}</span>`;
@@ -1150,7 +1144,6 @@ function showFamilyImportModal(results, filename) {
   const allRows = [
     ...newRows.map(r => ({ ...r, status: 'new' })),
     ...updateRows.map(r => ({ ...r, status: 'updated' })),
-    ...conflictRows.map(r => ({ ...r, status: 'conflict' })),
     ...skipRows.map(r => ({ ...r, status: 'skipped' })),
     ...errorRows.map(r => ({ ...r, status: 'error' })),
   ];
@@ -1163,6 +1156,7 @@ function showFamilyImportModal(results, filename) {
             <th>#</th>
             <th>Email</th>
             <th>${t('admin_family_conflict_col_excel_name')}</th>
+            <th>${t('admin_family_conflict_col_existing_name')}</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -1172,39 +1166,12 @@ function showFamilyImportModal(results, filename) {
               <td>${r.rowNum || '—'}</td>
               <td>${escapeHtml(r.email)}</td>
               <td>${escapeHtml(r.name || '—')}</td>
+              <td>${escapeHtml(r.existingName || '—')}</td>
               <td>${renderBadge(r.status, r.status)}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-    </div>
-  ` : '';
-
-  // Conflict details table (only when conflicts exist)
-  const conflictTableHtml = hasConflicts ? `
-    <div class="family-conflict-block">
-      <p class="family-conflict-title">${t('admin_family_upload_conflicts_title')}</p>
-      <p class="family-conflict-hint">${t('admin_family_upload_conflict_hint')}</p>
-      <div class="family-conflict-table-wrapper">
-        <table class="family-conflict-table">
-          <thead>
-            <tr>
-              <th>${t('admin_family_conflict_col_email')}</th>
-              <th>${t('admin_family_conflict_col_excel_name')}</th>
-              <th>${t('admin_family_conflict_col_existing_name')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${conflictRows.map(r => `
-              <tr>
-                <td>${escapeHtml(r.email)}</td>
-                <td>${escapeHtml(r.name || '—')}</td>
-                <td>${escapeHtml(r.existingName || '—')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
     </div>
   ` : '';
 
@@ -1216,22 +1183,20 @@ function showFamilyImportModal(results, filename) {
       <p class="family-import-filename">${t('admin_family_upload_file')}: <strong>${escapeHtml(filename)}</strong></p>
 
       <div class="family-summary">
-        <span class="family-summary-item new">${t('admin_family_upload_summary', { total: String(total), new: String(newRows.length), updated: String(updateRows.length), conflict: String(conflictRows.length), skipped: String(skipRows.length) })}</span>
+        <span class="family-summary-item new">${t('admin_family_upload_summary', { total: String(total), new: String(newRows.length), updated: String(updateRows.length), skipped: String(skipRows.length) })}</span>
         ${errorRows.length > 0 ? `<span class="family-summary-item conflict">⚠ ${errorRows.length} errors</span>` : ''}
       </div>
 
-      ${conflictTableHtml}
-
-      ${hasConflicts
-        ? `<p class="confirm-warning" style="text-align: center;">${t('admin_family_upload_conflict_hint')}</p>`
-        : `<p style="text-align: center; color: #16A34A; font-weight: var(--fw-semibold); margin-bottom: 1rem;">✅ ${t('admin_family_upload_no_conflicts')}</p>`
+      ${replacedNames > 0
+        ? `<p class="confirm-warning" style="text-align: center;">${t('admin_family_upload_replace_hint', { count: String(replacedNames) })}</p>`
+        : ''
       }
 
       ${previewTableHtml}
 
       <div class="confirm-actions">
         <button class="btn btn-outline btn-sm" id="family-import-cancel">${t('admin_family_upload_cancel')}</button>
-        ${hasWork && !hasConflicts ? `<button class="btn btn-primary btn-sm" id="family-import-confirm">${t('admin_family_upload_confirm', { count: String(newRows.length + updateRows.length) })}</button>` : ''}
+        ${hasWork ? `<button class="btn btn-primary btn-sm" id="family-import-confirm">${t('admin_family_upload_confirm', { count: String(newRows.length + updateRows.length) })}</button>` : ''}
       </div>
     </div>
   `;

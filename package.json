@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "playwright test",
-    "test:ui": "playwright test --ui"
+    "pretest": "node scripts/free-emulator-ports.mjs",
+    "test": "firebase emulators:exec --only auth,firestore --project demo-dragon-swim \"playwright test\"",
+    "test:ui": "node scripts/free-emulator-ports.mjs && firebase emulators:exec --only auth,firestore --project demo-dragon-swim \"playwright test --ui\""
   },
   "devDependencies": {
     "@faker-js/faker": "^10.4.0",

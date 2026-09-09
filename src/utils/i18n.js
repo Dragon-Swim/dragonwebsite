@@ -97,6 +97,12 @@ const translations = {
         // Notes & Submit
         reg_notes: 'Additional Notes',
         reg_submit: 'Submit Registration',
+        reg_required_error: 'Please fill in all required fields (marked with *) before submitting.',
+        reg_conflict_error: 'Please fix the highlighted fields — some values match the account holder.',
+        reg_err_spouse_name_same: 'Spouse name must be different from the account holder.',
+        reg_err_spouse_email_same: 'Spouse email must be different from the account holder.',
+        reg_err_emergency_name_same: 'Emergency contact must be someone other than the account holder.',
+        reg_err_emergency_phone_same: 'Emergency contact phone must be different from the account holder\'s phone.',
         reg_success: 'Registration submitted successfully! We\'ll be in touch soon.',
 
         // SafeSport
@@ -509,17 +515,14 @@ const translations = {
         admin_family_upload_btn: 'Upload Excel',
         admin_family_upload_title: 'Import Families from Excel',
         admin_family_upload_file: 'File',
-        admin_family_upload_summary: 'Found {total} rows. {new} new, {updated} updated, {conflict} conflicts, {skipped} skipped.',
-        admin_family_upload_conflicts_title: '⚠️ Conflicts — Please Fix',
-        admin_family_upload_conflict_hint: 'These rows have email matches but different names. Fix the Excel file and re-upload.',
-        admin_family_upload_no_conflicts: 'No conflicts detected. Ready to import.',
+        admin_family_upload_summary: 'Found {total} rows. {new} new, {updated} updated, {skipped} skipped.',
+        admin_family_upload_replace_hint: '{count} existing name(s) will be replaced with the name from the file.',
         admin_family_upload_confirm: 'Import {count} Families',
         admin_family_upload_cancel: 'Cancel',
         admin_family_upload_success: 'Successfully imported {count} families.',
         admin_family_upload_error: 'Failed to import. Please try again.',
         admin_family_upload_parse_error: 'Could not parse the Excel file. Make sure it has "email" and "name" columns.',
         admin_family_upload_empty: 'No data rows found in the file.',
-        admin_family_conflict_col_email: 'Email',
         admin_family_conflict_col_excel_name: 'Name in Excel',
         admin_family_conflict_col_existing_name: 'Name in System',
 

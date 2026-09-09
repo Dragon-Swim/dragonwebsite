@@ -26,6 +26,44 @@ const app = document.getElementById('app');
 
 // ── Template helpers ─────────────────────────────────────────────
 
+/**
+ * Renders a label's text, appending a small red asterisk when the field is
+ * required. The asterisk is decorative (aria-hidden) — the `required` attribute
+ * on the control itself is what assistive technology announces.
+ */
+function reqLabel(text, isRequired = true) {
+  return isRequired
+    ? `${text}<span class="req-star" aria-hidden="true">*</span>`
+    : text;
+}
+
+/**
+ * Normalizes a name for comparison: case, surrounding/duplicate whitespace and
+ * punctuation people sprinkle into names ("John A. Smith" vs "john a smith").
+ */
+function normalizeName(value) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/[.,'’`\-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Joins a first/last pair into one comparable name. */
+function fullName(first, last) {
+  return normalizeName(`${first || ''} ${last || ''}`);
+}
+
+/**
+ * Digits only, with a leading US country code dropped, so the same number
+ * written as "555-111-2222", "5551112222" or "+1 (555) 111 2222" compares equal.
+ */
+function normalizePhone(value) {
+  let digits = (value || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  return digits;
+}
+
 function genderOptions() {
   return `
     <option value="" disabled selected>Select...</option>
@@ -39,22 +77,22 @@ function personFields(prefix, opts = {}) {
   return `
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label" for="${prefix}-first">${t('reg_first')}</label>
+        <label class="form-label" for="${prefix}-first">${reqLabel(t('reg_first'))}</label>
         <input class="form-input" type="text" id="${prefix}-first" required />
       </div>
       <div class="form-group">
-        <label class="form-label" for="${prefix}-last">${t('reg_last')}</label>
+        <label class="form-label" for="${prefix}-last">${reqLabel(t('reg_last'))}</label>
         <input class="form-input" type="text" id="${prefix}-last" required />
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label" for="${prefix}-middle">${middleOptional ? t('reg_middle_optional') : t('reg_middle')}</label>
-        <input class="form-input" type="text" id="${prefix}-middle" />
+        <label class="form-label" for="${prefix}-middle">${reqLabel(middleOptional ? t('reg_middle_optional') : t('reg_middle'), !middleOptional)}</label>
+        <input class="form-input" type="text" id="${prefix}-middle" ${middleOptional ? '' : 'required'} />
       </div>
       ${showGender ? `
         <div class="form-group">
-          <label class="form-label" for="${prefix}-gender">${t('reg_gender')}</label>
+          <label class="form-label" for="${prefix}-gender">${reqLabel(t('reg_gender'))}</label>
           <select class="form-select" id="${prefix}-gender" required>
             ${genderOptions()}
           </select>
@@ -71,18 +109,18 @@ function parentSection(email) {
       ${personFields('parent')}
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="parent-phone">${t('reg_phone')}</label>
+          <label class="form-label" for="parent-phone">${reqLabel(t('reg_phone'))}</label>
           <input class="form-input" type="tel" id="parent-phone" required />
         </div>
         <div class="form-group">
-          <label class="form-label" for="parent-email">${t('reg_email')}</label>
+          <label class="form-label" for="parent-email">${reqLabel(t('reg_email'))}</label>
           <input class="form-input" type="email" id="parent-email" value="${email || ''}" readonly required
             title="Email is linked to your sign-in account and cannot be changed here." />
           <p class="reg-email-note" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Email is tied to your sign-in account. Contact admin@dragonswim.com if you need to change it.</p>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label" for="parent-address">${t('reg_address')}</label>
+        <label class="form-label" for="parent-address">${reqLabel(t('reg_address'))}</label>
         <input class="form-input" type="text" id="parent-address" required />
       </div>
 
@@ -119,11 +157,11 @@ function swimmerCard(index) {
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="swimmer-${index}-first">${t('reg_swimmer_first')}</label>
+          <label class="form-label" for="swimmer-${index}-first">${reqLabel(t('reg_swimmer_first'))}</label>
           <input class="form-input" type="text" id="swimmer-${index}-first" required />
         </div>
         <div class="form-group">
-          <label class="form-label" for="swimmer-${index}-last">${t('reg_swimmer_last')}</label>
+          <label class="form-label" for="swimmer-${index}-last">${reqLabel(t('reg_swimmer_last'))}</label>
           <input class="form-input" type="text" id="swimmer-${index}-last" required />
         </div>
       </div>
@@ -133,7 +171,7 @@ function swimmerCard(index) {
           <input class="form-input" type="text" id="swimmer-${index}-middle" />
         </div>
         <div class="form-group">
-          <label class="form-label" for="swimmer-${index}-gender">${t('reg_swimmer_gender')}</label>
+          <label class="form-label" for="swimmer-${index}-gender">${reqLabel(t('reg_swimmer_gender'))}</label>
           <select class="form-select" id="swimmer-${index}-gender" required>
             ${genderOptions()}
           </select>
@@ -141,7 +179,7 @@ function swimmerCard(index) {
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="swimmer-${index}-dob">${t('reg_swimmer_dob')}</label>
+          <label class="form-label" for="swimmer-${index}-dob">${reqLabel(t('reg_swimmer_dob'))}</label>
           <input class="form-input" type="date" id="swimmer-${index}-dob" required />
         </div>
         <div class="form-group">
@@ -178,11 +216,11 @@ function emergencySection() {
       <h2 class="subsection-title">${t('reg_emergency_title')}</h2>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="emergency-name">${t('reg_emergency_name')}</label>
+          <label class="form-label" for="emergency-name">${reqLabel(t('reg_emergency_name'))}</label>
           <input class="form-input" type="text" id="emergency-name" required />
         </div>
         <div class="form-group">
-          <label class="form-label" for="emergency-phone">${t('reg_emergency_phone')}</label>
+          <label class="form-label" for="emergency-phone">${reqLabel(t('reg_emergency_phone'))}</label>
           <input class="form-input" type="tel" id="emergency-phone" required />
         </div>
       </div>
@@ -203,7 +241,7 @@ function render() {
           <p class="section-subtitle" style="margin: 0 auto;">${t('reg_subtitle')}</p>
         </div>
 
-        <div class="reg-form-wrapper" id="reg-form-wrapper">
+        <form class="reg-form-wrapper" id="reg-form">
           ${parentSection(currentUser?.email || '')}
           ${swimmersSection()}
           ${emergencySection()}
@@ -215,13 +253,15 @@ function render() {
             </div>
           </div>
 
+          <div class="reg-form-error" id="reg-form-error" role="alert"></div>
+
           <button type="submit" class="btn btn-primary btn-lg reg-submit" id="reg-submit">${t('reg_submit')}</button>
 
           <div class="reg-success" id="reg-success" style="display: none;">
             <div class="success-icon">✅</div>
             <p>${t('reg_success')}</p>
           </div>
-        </div>
+        </form>
 
       </div>
     </section>
@@ -233,10 +273,21 @@ function render() {
 // ── Events ───────────────────────────────────────────────────────
 
 function bindEvents() {
-  // Spouse toggle
-  document.getElementById('has-spouse').addEventListener('change', (e) => {
-    document.getElementById('spouse-section').style.display = e.target.checked ? 'block' : 'none';
-  });
+  // Spouse toggle. Hidden controls are disabled as well: a control that is only
+  // display:none is still constraint-validated by the browser, which would
+  // block submission on fields the user cannot see or fill in.
+  const spouseToggle = document.getElementById('has-spouse');
+  const spouseSection = document.getElementById('spouse-section');
+
+  function applySpouseVisibility() {
+    const show = spouseToggle.checked;
+    spouseSection.style.display = show ? 'block' : 'none';
+    spouseSection.querySelectorAll('input, select, textarea').forEach((el) => {
+      el.disabled = !show;
+    });
+  }
+  spouseToggle.addEventListener('change', applySpouseVisibility);
+  applySpouseVisibility();
 
   // Add swimmer
   document.getElementById('btn-add-swimmer').addEventListener('click', () => {
@@ -264,8 +315,103 @@ function bindEvents() {
   }
   bindRemoveButtons();
 
-  // Submit
-  document.getElementById('reg-submit').addEventListener('click', async () => {
+  // ── Validation ───────────────────────────────────────────────────
+  const form = document.getElementById('reg-form');
+  const errorBox = document.getElementById('reg-form-error');
+
+  // Disabled controls are skipped by constraint validation, which is why the
+  // hidden spouse block is disabled while collapsed (see applySpouseVisibility).
+  // `invalid` does not bubble — listen in the capture phase.
+  form.addEventListener('invalid', (e) => {
+    e.target.classList.add('is-invalid');
+  }, true);
+
+  // ── Cross-field rules ────────────────────────────────────────────
+  // Expressed through setCustomValidity so they ride the same native validation
+  // path as the required attributes: browser bubble, red border, summary line.
+  /**
+   * - a spouse must not share the account holder's name or email
+   * - the emergency contact must not be the account holder (name or phone)
+   * Rules only apply to fields that are filled in; the spouse block is skipped
+   * entirely while it is collapsed.
+   */
+  function applyCrossFieldRules() {
+    const value = (id) => document.getElementById(id).value.trim();
+    const setError = (id, message) => {
+      document.getElementById(id).setCustomValidity(message || '');
+    };
+
+    const holderName = fullName(value('parent-first'), value('parent-last'));
+    const holderEmail = value('parent-email').toLowerCase();
+    const holderPhone = normalizePhone(value('parent-phone'));
+
+    // Spouse — optional block, only checked while enabled.
+    const spouseEnabled = document.getElementById('has-spouse').checked;
+    const spouseName = fullName(value('spouse-first'), value('spouse-last'));
+    setError('spouse-last',
+      spouseEnabled && holderName && spouseName && spouseName === holderName
+        ? t('reg_err_spouse_name_same')
+        : '');
+
+    const spouseEmail = value('spouse-email').toLowerCase();
+    setError('spouse-email',
+      spouseEnabled && holderEmail && spouseEmail && spouseEmail === holderEmail
+        ? t('reg_err_spouse_email_same')
+        : '');
+
+    // Emergency contact — always required, so always compared.
+    const emergencyName = normalizeName(value('emergency-name'));
+    setError('emergency-name',
+      holderName && emergencyName && emergencyName === holderName
+        ? t('reg_err_emergency_name_same')
+        : '');
+
+    const emergencyPhone = normalizePhone(value('emergency-phone'));
+    setError('emergency-phone',
+      holderPhone && emergencyPhone && emergencyPhone === holderPhone
+        ? t('reg_err_emergency_phone_same')
+        : '');
+  }
+
+  /**
+   * Runs native validation (which fires `invalid` and therefore marks fields)
+   * and reports which kind of problem is left, if any.
+   */
+  function validationFailure() {
+    form.checkValidity();
+    const controls = [...form.elements].filter((el) => el.validity && el.willValidate);
+    if (controls.some((el) => el.validity.valueMissing)) return 'missing';
+    if (controls.some((el) => !el.validity.valid)) return 'conflict';
+    return null;
+  }
+
+  // Keep the rules current on every edit, so an implicit submit (pressing Enter
+  // in a text field, which never clicks the button) is validated too.
+  const revalidate = (e) => {
+    e.target.classList?.remove('is-invalid');
+    applyCrossFieldRules();
+  };
+  form.addEventListener('input', revalidate);
+  form.addEventListener('change', revalidate);
+
+  // Clicking submit fires this *before* native validation runs, so it is where
+  // we can explain why nothing happened.
+  document.getElementById('reg-submit').addEventListener('click', () => {
+    applyCrossFieldRules();
+    const failure = validationFailure();
+    errorBox.textContent =
+      failure === 'missing' ? t('reg_required_error') :
+      failure === 'conflict' ? t('reg_conflict_error') : '';
+    errorBox.classList.toggle('is-visible', failure !== null);
+  });
+
+  // Submit — the browser only fires this once every rendered required field has
+  // a value, so nothing below runs on an incomplete form.
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorBox.textContent = '';
+    errorBox.classList.remove('is-visible');
+
     const btn = document.getElementById('reg-submit');
     btn.disabled = true;
 
@@ -314,9 +460,13 @@ function bindEvents() {
       phone: document.getElementById('emergency-phone').value.trim(),
     };
 
-    // Build parentEmails for spouse access lookup
+    // Build parentEmails for spouse access lookup. Deduped to mirror the admin
+    // panel: a shared address must never appear twice in the array.
     const parentEmails = [parent.email.toLowerCase().trim()];
-    if (spouse && spouse.email) parentEmails.push(spouse.email.toLowerCase().trim());
+    if (spouse && spouse.email) {
+      const spouseEmail = spouse.email.toLowerCase().trim();
+      if (!parentEmails.includes(spouseEmail)) parentEmails.push(spouseEmail);
+    }
 
     try {
       await setDoc(doc(db, 'registrations', currentUser.uid), {

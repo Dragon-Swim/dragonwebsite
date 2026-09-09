@@ -23,7 +23,15 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    // Never reuse a running dev server: it may have been started without the
+    // emulator flag, in which case the app would talk to the real Firebase
+    // project. Failing on a busy port is better than silently testing prod.
+    reuseExistingServer: false,
+    timeout: 60000,
+    env: {
+      // Read by src/utils/firebase.js — points the app at the local emulators
+      // on the demo-dragon-swim project instead of the real one.
+      VITE_USE_FIREBASE_EMULATOR: "true",
+    },
   },
 });
