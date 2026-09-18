@@ -1446,6 +1446,47 @@ function trendLegendMarkup() {
     </span>`).join('');
 }
 
+// eventKey "50 FL SCY" → 可读标签 "50 Fly SCY"(说明文案用)。
+function trendEventLabel(eventKey) {
+  const [dist, stroke, course] = String(eventKey || '').trim().split(/\s+/);
+  return [dist, STROKE_LABELS[stroke] || stroke, course].filter(Boolean).join(' ');
+}
+
+// 标准线上下文:线层 + 标题行说明 + 图例/原因说明。
+// 初次渲染与切换事件共用,避免切换后图例/说明与当前事件不一致。
+// 「有图例却没有线」最容易让人以为图表坏了 —— 官方标准表缺该事件时
+// (如 15-16 / 17-18 没有 50 FL/BK/BR,只有 50 FR),改为显示一行明确说明。
+function trendLevelContext(points, eventKey, swimmer) {
+  const levelLines = trendLevelLines(points, eventKey, swimmer);
+  const hasLines = Array.isArray(levelLines) && levelLines.length > 0;
+  const hasPoints = Array.isArray(points) && points.length > 0;
+  const lastTs = hasPoints ? points[points.length - 1].dateTs : null;
+  const lastAge = ageAtDate(swimmer?.dob, lastTs);
+  const ageGroup = lastAge != null ? ageGroupForAge(lastAge) : null;
+  let note = '';
+  if (hasPoints && !hasLines) {
+    if (!swimmer?.dob || !swimmer?.gender || ageGroup == null) {
+      note = "Add the swimmer's date of birth and gender to show time standard lines.";
+    } else {
+      note = `No time standard lines: USA Swimming publishes no motivational time standards for ${trendEventLabel(eventKey)} in the ${ageGroup} age group.`;
+    }
+  }
+  return { levelLines, hasLines, lastAge, ageGroup, note };
+}
+
+// 标题行右侧的年龄组说明(无线层时留空,由 trendMetaMarkup 的 note 解释原因)。
+function trendCaptionText(ctx, swimmer) {
+  if (!ctx.hasLines || ctx.ageGroup == null) return '';
+  const g = swimmer?.gender ? String(swimmer.gender)[0].toUpperCase() : '?';
+  return `Level lines: ${ctx.ageGroup} · ${g}`;
+}
+
+// 图例(有线层)或原因说明(无线层)。
+function trendMetaMarkup(ctx) {
+  if (ctx.hasLines) return `<div class="trend-legend">${trendLegendMarkup()}</div>`;
+  return ctx.note ? `<p class="trend-note">${escapeHtml(ctx.note)}</p>` : '';
+}
+
 // tooltip 文本(经 escapeHtml 后放入 SVG <title>)。
 function buildTrendTooltip(p) {
   const dropText = p.timeDrop == null
@@ -1792,13 +1833,9 @@ async function loadAthleteResults(memberId, opts = {}) {
     if (eventOptions.length > 0) {
       const defaultKey = [...eventOptions].sort((a, b) => b.count - a.count)[0].key;
       const initial = buildTrendData(data.meets, defaultKey);
-      // 标准线层:运动员 dob/gender 决定年龄组;无 dob/gender → null → 不画线
-      const levelLines = trendLevelLines(initial.points, defaultKey, swimmer);
-      const lastTs = initial.points.length ? initial.points[initial.points.length - 1].dateTs : null;
-      const lastAge = ageAtDate(swimmer?.dob, lastTs);
-      const levelCaption = (lastAge != null && levelLines)
-        ? `<span style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;">Level lines: ${ageGroupForAge(lastAge)} · ${swimmer.gender ? String(swimmer.gender)[0].toUpperCase() : '?'}</span>`
-        : '';
+      // 标准线上下文:运动员 dob/gender 决定年龄组;
+      // 事件在官方标准表缺失(如 15-16 的 50 FL/BK/BR)时不画线,改由 trendMetaMarkup 说明原因。
+      const ctx = trendLevelContext(initial.points, defaultKey, swimmer);
       trendSection = `
       <div style="margin-top:1.5rem;">
         <h4 style="margin:0 0 0.75rem 0;">📈 Performance Trend</h4>
@@ -1807,10 +1844,10 @@ async function loadAthleteResults(memberId, opts = {}) {
             ${eventOptions.map(o => `<option value="${escapeHtml(o.key)}" ${o.key === defaultKey ? 'selected' : ''}>${escapeHtml(o.label)} (${o.count})</option>`).join('')}
           </select>
           <span id="trend-event-count" style="font-size:0.8rem;color:var(--text-muted);">${initial.count} swim${initial.count === 1 ? '' : 's'}</span>
-          ${levelCaption}
+          <span id="trend-level-caption" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;">${escapeHtml(trendCaptionText(ctx, swimmer))}</span>
         </div>
-        <div class="trend-legend">${trendLegendMarkup()}</div>
-        <div class="trend-chart" id="trend-chart">${renderTrendChart(initial.points, levelLines)}</div>
+        <div id="trend-legend-slot">${trendMetaMarkup(ctx)}</div>
+        <div class="trend-chart" id="trend-chart">${renderTrendChart(initial.points, ctx.levelLines)}</div>
       </div>`;
     }
 
@@ -1873,9 +1910,14 @@ async function loadAthleteResults(memberId, opts = {}) {
     document.getElementById('trend-event-select')?.addEventListener('change', (e) => {
       const chartEl = document.getElementById('trend-chart');
       const countEl = document.getElementById('trend-event-count');
+      const legendEl = document.getElementById('trend-legend-slot');
+      const captionEl = document.getElementById('trend-level-caption');
       if (!chartEl) return;
       const res = buildTrendData(data.meets, e.target.value);
-      chartEl.innerHTML = renderTrendChart(res.points, trendLevelLines(res.points, e.target.value, swimmer));
+      const ctx = trendLevelContext(res.points, e.target.value, swimmer);
+      chartEl.innerHTML = renderTrendChart(res.points, ctx.levelLines);
+      if (legendEl) legendEl.innerHTML = trendMetaMarkup(ctx);
+      if (captionEl) captionEl.textContent = trendCaptionText(ctx, swimmer);
       if (countEl) countEl.textContent = `${res.count} swim${res.count === 1 ? '' : 's'}`;
     });
 
