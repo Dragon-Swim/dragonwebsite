@@ -296,6 +296,15 @@
     letter-spacing: 0.08em;
 }
 
+.dash-stat-sub {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+    text-transform: none;
+    letter-spacing: normal;
+    overflow-wrap: anywhere;
+}
+
 /* ── Panels ── */
 .dash-overview-grid {
     display: grid;
@@ -348,6 +357,10 @@
 .dash-mini-meta {
     font-size: var(--fs-xs);
     color: var(--text-muted);
+}
+
+.dash-mini-missing {
+    color: var(--color-accent);
 }
 
 /* ── Cards Grid ── */

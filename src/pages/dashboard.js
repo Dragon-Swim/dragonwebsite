@@ -540,6 +540,32 @@ function getCoachRecentRegistrations() {
   });
 }
 
+// 「Needs Attention」= 资料缺失的家庭(只读展示,不改数据)。
+// 口径对齐 execution/audit_registration_completeness.mjs 必填项里「教练可行动」的部分:
+//   家长 phone/address/email、紧急联系人 phone、队员 dob/gender;
+//   另加 USA Swimming ID —— 没有它就无法抓成绩,趋势图也画不了标准线。
+// 完整审计(含姓名、spouse 等)仍以该脚本为准。
+function getCoachAttentionItems() {
+  const blank = (v) => v == null || String(v).trim() === '';
+  const items = [];
+  for (const reg of allRegistrations) {
+    const missing = [];
+    if (blank(reg.parent?.phone)) missing.push(t('dash_attn_parent_phone'));
+    if (blank(reg.parent?.address)) missing.push(t('dash_attn_parent_address'));
+    if (blank(reg.parent?.email)) missing.push(t('dash_attn_parent_email'));
+    if (blank(reg.emergencyContact?.phone)) missing.push(t('dash_attn_emergency_phone'));
+    for (const sw of (reg.swimmers || [])) {
+      if (sw.deleted) continue;
+      const who = [sw.firstName, sw.lastName].filter(Boolean).join(' ') || t('dash_coach_unnamed');
+      if (blank(sw.usaSwimmingId)) missing.push(`${who}: ${t('dash_attn_usa_id')}`);
+      if (blank(sw.dob)) missing.push(`${who}: ${t('dash_attn_dob')}`);
+      if (blank(sw.gender)) missing.push(`${who}: ${t('dash_attn_gender')}`);
+    }
+    if (missing.length) items.push({ name: getParentNameFromReg(reg), missing });
+  }
+  return items;
+}
+
 // ══════════════════════════════════════════════
 // Swim Times Management — Phase 1
 // ══════════════════════════════════════════════
@@ -1932,7 +1958,19 @@ async function loadAthleteResults(memberId, opts = {}) {
 function renderCoachOverview() {
   const activeSwimmers = getCoachActiveSwimmers();
   const newRegistrations = getCoachRecentRegistrations();
-  const upcomingMeets = swimMeets.filter(m => m.status !== 'Completed');
+  const attention = getCoachAttentionItems();
+
+  // 「Upcoming Meets」与 Meets tab 保持同一口径:当前赛季 + 按日期分桶。
+  // 不能用 meet.status —— 表单只会写 'Open',代码里没有任何地方写 'Completed',
+  // 用它会把已结束的历史 meet 也算进来(2026-09 实测 4 vs 2)。
+  const now = new Date();
+  const upcomingMeets = swimMeets
+    .filter((m) => getMeetSeason(m) === currentSeason)
+    .map((m) => ({ meet: m, disp: getMeetDisplay(m, now) }))
+    .filter((x) => x.disp.bucket === 'upcoming')
+    .sort((a, b) => String(a.meet.startDate || a.meet.date || '').localeCompare(String(b.meet.startDate || b.meet.date || '')));
+  const nextMeet = upcomingMeets[0]?.meet || null;
+  const nextMeetText = nextMeet ? `${escapeHtml(nextMeet.name || '')} · ${escapeHtml(nextMeet.startDate || nextMeet.date || '')}` : '';
 
   return `
     <div class="dash-stats-row">
@@ -1947,6 +1985,7 @@ function renderCoachOverview() {
       <div class="dash-stat-card accent">
         <div class="dash-stat-number">${upcomingMeets.length}</div>
         <div class="dash-stat-label">${t('dash_coach_upcoming_meets')}</div>
+        ${nextMeet ? `<div class="dash-stat-sub">${t('dash_coach_next_meet')}: ${nextMeetText}</div>` : ''}
       </div>
       <div class="dash-stat-card">
         <div class="dash-stat-number">${allRegistrations.length}</div>
@@ -1956,18 +1995,17 @@ function renderCoachOverview() {
 
     <div class="dash-overview-grid">
       <div class="dash-panel">
-        <h3 class="dash-panel-title">${t('dash_coach_top_athletes')}</h3>
+        <h3 class="dash-panel-title">${t('dash_coach_needs_attention')}${attention.length ? ` (${attention.length})` : ''}</h3>
         <div class="dash-panel-body">
-          ${activeSwimmers.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_swimmers')}</p>` :
-          activeSwimmers.slice(0, 5).map(s => `
+          ${attention.length === 0 ? `<p class="dash-empty">${t('dash_coach_needs_attention_empty')}</p>` :
+          attention.slice(0, 5).map(a => `
             <div class="dash-mini-card">
-               <div class="dash-mini-top">
-                <span class="dash-mini-name">${[s.firstName, s.lastName].filter(Boolean).join(' ')}</span>
-                <span class="badge badge-primary">${s.parentName}</span>
+              <div class="dash-mini-top">
+                <span class="dash-mini-name">${escapeHtml(a.name)}</span>
               </div>
-              <div class="dash-mini-meta">${s.gender || '—'} · Age: ${s.dob ? Math.floor((new Date() - new Date(s.dob)) / (365.25 * 24 * 60 * 60 * 1000)) : '—'}</div>
+              <div class="dash-mini-meta dash-mini-missing">${a.missing.map(escapeHtml).join(' · ')}</div>
             </div>
-          `).join('')}
+          `).join('') + (attention.length > 5 ? `<p class="dash-empty">+${attention.length - 5} …</p>` : '')}
         </div>
       </div>
       <div class="dash-panel">
