@@ -3,7 +3,7 @@
 parse_usas_standards.py — 从 USA Swimming 2024-2028 Motivational Standards PDF
 的文本抽取结果生成 `src/data/timeStandards.data.js`(纯数据,可再生成)。
 
-输入: .tmp/standards-raw.txt(由 pypdf 抽取的逐页文本,见下方 NOTES)
+输入: .tmp/standards-raw.txt(先跑 execution/extract_standards_text.py 从 PDF 抽取)
 输出: src/data/timeStandards.data.js — TIME_STANDARDS 数据对象
 
 数据布局(每"行"一条记录,12 个时间):
@@ -15,9 +15,10 @@ parse_usas_standards.py — 从 USA Swimming 2024-2028 Motivational Standards PD
 已知文本形态(抽取时已确认):
   - 行间 `*` 是脚注标记,不是分隔符,必须剥离
   - "200 MED-R" / "400 MED-R" 会被换行拆成两行(次行是裸 course 标记 "SCY"/"SCM"/"LCM")
-  - 页脚 "Page N of 9"、页眉 "USA Swimming…"、"10/7/…"、列头 "B BB A AA AAA AAAA …" 需跳过
+  - 页脚 "Page N of 12"、页眉 "USA Swimming…"、导出日期行(如 "10/10/2025 …")、列头 "B BB A AA AAA AAAA …" 需跳过
   - 年龄组标题行: "10 & under Girls Event 10 & under Boys"(决定本条及后续行的年龄组)
   - 每 course 段内年龄组固定顺序出现: 10 & under → 11-12 → 13-14 → 15-16 → 17-18
+  - 2025-10 官方修订:15-16 / 17-18 增补 50 BK / 50 BR / 50 FL(每组 19 → 22 事件)
 
 校验(脚本内断言):
   - 每行恰好 12 个时间
@@ -27,12 +28,19 @@ parse_usas_standards.py — 从 USA Swimming 2024-2028 Motivational Standards PD
 """
 import re
 import json
+import sys
 from pathlib import Path
+
+# 输出/管道重定向到非 UTF-8 控制台(Windows cp1252)时,print 中文会 UnicodeEncodeError。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 RAW = Path(__file__).resolve().parent.parent / ".tmp" / "standards-raw.txt"
 OUT = Path(__file__).resolve().parent.parent / "src" / "data" / "timeStandards.data.js"
 
 TIME_RE = re.compile(r"(?:\d+):(\d{2})\.(\d{2})|(\d{2})\.(\d{2})")
+# 页眉导出日期行(如 "10/10/2025 1:02:42 AM");月份/日期随导出时间变化,不能写死 "10/7/"
+EXPORT_DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\b")
 LEVELS_GIRLS = ["B", "BB", "A", "AA", "AAA", "AAAA"]  # 左→右
 LEVELS_BOYS = ["AAAA", "AAA", "AA", "A", "BB", "B"]   # 左→右(倒序)
 
@@ -85,7 +93,7 @@ def main() -> None:
     n_rows = 0
     for ln in merged:
         stripped = ln.strip()
-        if not stripped or stripped.startswith(("USA Swimming", "10/7/", "Page ")):
+        if not stripped or stripped.startswith(("USA Swimming", "Page ", "===")) or EXPORT_DATE_RE.match(stripped):
             continue
         if stripped.startswith("B BB A AA AAA AAAA"):  # 列头
             continue
@@ -131,14 +139,15 @@ def main() -> None:
         n_rows += 1
 
     # 3) 全量统计 + 完整性校验
-    # 期望事件数(2024-2028 官方表结构,经 pypdf+pymupdf 双引擎交叉确认):
-    #   15-16/17-18 无 50 BK/BR/FL(19);10&U LCM 无 100 IM(13);11-12 LCM 无 800 FR-R(21)
+    # 期望事件数(2024-2028 官方表结构,经 pypdf+pymupdf 双引擎交叉确认;
+    # 2025-10 官方修订后 15-16/17-18 增补 50 BK/BR/FL,均 22):
+    #   10&U LCM 无 100 IM(13);11-12 LCM 无 800 FR-R(21)
     EXPECTED = {
         ("10 & under", "SCY"): 14, ("10 & under", "SCM"): 14, ("10 & under", "LCM"): 13,
         ("11-12", "SCY"): 22, ("11-12", "SCM"): 22, ("11-12", "LCM"): 21,
         ("13-14", "SCY"): 22, ("13-14", "SCM"): 22, ("13-14", "LCM"): 22,
-        ("15-16", "SCY"): 19, ("15-16", "SCM"): 19, ("15-16", "LCM"): 19,
-        ("17-18", "SCY"): 19, ("17-18", "SCM"): 19, ("17-18", "LCM"): 19,
+        ("15-16", "SCY"): 22, ("15-16", "SCM"): 22, ("15-16", "LCM"): 22,
+        ("17-18", "SCY"): 22, ("17-18", "SCM"): 22, ("17-18", "LCM"): 22,
     }
     print(f"解析完成: {n_rows} 行 × 12 时间(期望 {sum(EXPECTED.values())} 行)")
     assert n_rows == sum(EXPECTED.values()), f"行数不符: {n_rows} vs 期望 {sum(EXPECTED.values())}"
@@ -155,7 +164,8 @@ def main() -> None:
     # 4) 生成 JS 数据模块
     js = (
         "// 自动生成 — 请勿手改。由 execution/parse_usas_standards.py 从\n"
-        "// .tmp/2028-motivational-standards-age-group.pdf 抽取(USAS 2024-2028 周期)。\n"
+        "// .tmp/2028-motivational-standards-age-group.pdf 抽取(USAS 2024-2028 周期;\n"
+        "// 2025-10 官方修订:15-16/17-18 增补 50 BK/BR/FL)。\n"
         "// 结构: ageGroup → course → '距离 泳姿' → { girls: {B..AAAA: 秒}, boys: {B..AAAA: 秒} }\n"
         '// 数值为"≤该秒数即达此级别"的阈值,单位秒;女生列序 B BB A AA AAA AAAA,\n'
         "// 男生同构(B..AAAA)。渲染与查找逻辑见 timeStandards.js。\n"

@@ -1,14 +1,16 @@
 /**
  * USA Swimming 时间标准(2024-2028 周期,官方 PDF 录入)。
  *
- * 数据来自 .tmp/2028-motivational-standards-age-group.pdf(USAS 官方表),
- * 由 execution/parse_usas_standards.py 解析生成到 ./timeStandards.data.js。
+ * 数据来自 .tmp/2028-motivational-standards-age-group.pdf(USAS 官方表):
+ * 先 execution/extract_standards_text.py 抽文本,再 execution/parse_usas_standards.py
+ * 生成到 ./timeStandards.data.js(两步均可重跑;数据文件勿手改)。
  * 结构: ageGroup → course → '距离 泳姿' → { girls, boys: { B..AAAA: 秒阈值 } }。
  *
  * 官方表结构要点(录入时已双引擎交叉确认):
- *   - 15-16 / 17-18 无 50 BK/BR/FL(仅 50 FR);10&U LCM 无 100 IM;11-12 LCM 无 800 FR-R
+ *   - 2025-10 官方修订:15-16 / 17-18 增补 50 BK/BR/FL(此前仅 50 FR);其余组/course 数值未变
+ *   - 仍缺:10&U LCM 无 100 IM;11-12 LCM 无 800 FR-R
  *   - 低龄组 B 档及 10&U 接力存在女生快于男生的官方特例(如 11-12 50 FL B 档三 course 均女快 0.20s)
- *   - 同一 meet 内年龄组按"比赛日年龄"归属;标准不随赛季变化(周期内固定)
+ *   - 同一 meet 内年龄组按"比赛日年龄"归属;周期内可能官方修订,以数据文件为准
  *
  * 返回契约:
  *   getTimeStandardLevels({ age, course, eventKey, gender }) → Array<{
