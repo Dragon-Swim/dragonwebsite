@@ -561,10 +561,29 @@ function getCoachAttentionItems() {
       if (blank(sw.dob)) missing.push(`${who}: ${t('dash_attn_dob')}`);
       if (blank(sw.gender)) missing.push(`${who}: ${t('dash_attn_gender')}`);
     }
-    if (missing.length) items.push({ name: getParentNameFromReg(reg), missing });
+    if (missing.length) items.push({ regId: reg.id, name: getParentNameFromReg(reg), missing });
   }
   return items;
 }
+
+// 相对时间("today" / "3d ago");createdAt 可能是 Firestore Timestamp 或 ISO 字符串。
+function formatRelativeAge(value) {
+  const d = value?.toDate?.() || (value ? new Date(value) : null);
+  if (!d || Number.isNaN(d.getTime())) return '';
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return t('dash_rel_today');
+  return t('dash_rel_days', { n: days });
+}
+
+// 该家庭在册(非软删除)队员的名字,逗号分隔。
+function getActiveSwimmerNames(reg) {
+  return (reg.swimmers || [])
+    .filter((s) => !s.deleted)
+    .map((s) => [s.firstName, s.lastName].filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join(', ');
+}
+
 
 // ══════════════════════════════════════════════
 // Swim Times Management — Phase 1
@@ -1959,20 +1978,40 @@ function renderCoachOverview() {
   const activeSwimmers = getCoachActiveSwimmers();
   const newRegistrations = getCoachRecentRegistrations();
   const attention = getCoachAttentionItems();
+  const attentionByReg = new Map(attention.map((a) => [a.regId, a.missing]));
 
   // 「Upcoming Meets」与 Meets tab 保持同一口径:当前赛季 + 按日期分桶。
   // 不能用 meet.status —— 表单只会写 'Open',代码里没有任何地方写 'Completed',
   // 用它会把已结束的历史 meet 也算进来(2026-09 实测 4 vs 2)。
   const now = new Date();
-  const upcomingMeets = swimMeets
-    .filter((m) => getMeetSeason(m) === currentSeason)
+  const seasonMeets = swimMeets.filter((m) => getMeetSeason(m) === currentSeason);
+  const upcomingMeets = seasonMeets
     .map((m) => ({ meet: m, disp: getMeetDisplay(m, now) }))
     .filter((x) => x.disp.bucket === 'upcoming')
     .sort((a, b) => String(a.meet.startDate || a.meet.date || '').localeCompare(String(b.meet.startDate || b.meet.date || '')));
   const nextMeet = upcomingMeets[0]?.meet || null;
   const nextMeetText = nextMeet ? `${escapeHtml(nextMeet.name || '')} · ${escapeHtml(nextMeet.startDate || nextMeet.date || '')}` : '';
 
+  // P2:当前赛季还没录 entry fee 的 meet
+  const meetsNeedingFees = seasonMeets
+    .filter((m) => !m.feeData || !Array.isArray(m.feeData.swimmers) || m.feeData.swimmers.length === 0)
+    .sort((a, b) => String(a.startDate || a.date || '').localeCompare(String(b.startDate || b.date || '')));
+
+  // P2:当前 period 的每周训练(按周几 + 开始时间排序)
+  const periodSlots = sessionSlots
+    .filter((s) => (s.period || '') === currentPeriod)
+    .sort((a, b) => (DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)) || String(a.startTime || '').localeCompare(String(b.startTime || '')));
+
+  const recentRows = newRegistrations.slice(0, 5).map((r) => ({
+    r,
+    when: formatRelativeAge(r.createdAt),
+    kids: getActiveSwimmerNames(r),
+    miss: attentionByReg.get(r.id),
+  }));
+
   return `
+    <p class="dash-overview-meta">${escapeHtml(t('dash_coach_overview_meta', { season: currentSeason }))}</p>
+
     <div class="dash-stats-row">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${activeSwimmers.length}</div>
@@ -2009,20 +2048,54 @@ function renderCoachOverview() {
         </div>
       </div>
       <div class="dash-panel">
+        <h3 class="dash-panel-title">${t('dash_coach_meets_needing_fees')}${meetsNeedingFees.length ? ` (${meetsNeedingFees.length})` : ''}</h3>
+        <div class="dash-panel-body">
+          ${meetsNeedingFees.length === 0 ? `<p class="dash-empty">${t('dash_coach_meets_needing_fees_empty')}</p>` :
+          meetsNeedingFees.slice(0, 5).map(m => `
+            <div class="dash-mini-card">
+              <div class="dash-mini-top">
+                <span class="dash-mini-name">${escapeHtml(m.name || 'Unnamed Meet')}</span>
+                <span class="dash-mini-when">${escapeHtml(m.startDate || m.date || '')}</span>
+              </div>
+              <div class="dash-mini-meta">${escapeHtml(m.location || '')}</div>
+            </div>
+          `).join('') + (meetsNeedingFees.length > 5 ? `<p class="dash-empty">+${meetsNeedingFees.length - 5} …</p>` : '')}
+        </div>
+      </div>
+      <div class="dash-panel">
         <h3 class="dash-panel-title">${t('dash_coach_recent_registrations')}</h3>
         <div class="dash-panel-body">
           ${newRegistrations.length === 0 ? `<p class="dash-empty">${t('dash_coach_no_recent')}</p>` :
-          newRegistrations.slice(0, 5).map(r => `
+          recentRows.map(({ r, when, kids, miss }) => `
             <div class="dash-mini-card">
-              <div class="dash-mini-top"><span class="dash-mini-name">${getParentNameFromReg(r)}</span></div>
-              <div class="dash-mini-meta">${r.swimmers ? r.swimmers.filter(s => !s.deleted).length : 0} swimmer(s)</div>
+              <div class="dash-mini-top">
+                <span class="dash-mini-name">${getParentNameFromReg(r)}</span>
+                ${when ? `<span class="dash-mini-when">${escapeHtml(when)}</span>` : ''}
+              </div>
+              <div class="dash-mini-meta">${escapeHtml(kids || '—')}${miss ? ` · <span class="dash-mini-missing">⚠ ${t('dash_attn_needs_info')}</span>` : ''}</div>
             </div>
           `).join('')}
+        </div>
+      </div>
+      <div class="dash-panel">
+        <h3 class="dash-panel-title">${t('dash_coach_practices')}${periodSlots.length ? ` (${periodSlots.length})` : ''}</h3>
+        <div class="dash-panel-body">
+          <div class="dash-mini-meta" style="margin-bottom:0.5rem;">${escapeHtml(periodLabel(currentPeriod))}</div>
+          ${periodSlots.length === 0 ? `<p class="dash-empty">${t('dash_coach_practices_empty')}</p>` :
+          periodSlots.slice(0, 4).map(s => `
+            <div class="dash-mini-card">
+              <div class="dash-mini-top">
+                <span class="dash-mini-name">${escapeHtml(s.day || '')} · ${escapeHtml(s.startTime || '')}</span>
+              </div>
+              <div class="dash-mini-meta">${escapeHtml(s.location || '')}${s.groupLabel ? ` · ${escapeHtml(s.groupLabel)}` : ''}</div>
+            </div>
+          `).join('') + (periodSlots.length > 4 ? `<p class="dash-empty">+${periodSlots.length - 4} …</p>` : '')}
         </div>
       </div>
     </div>
   `;
 }
+
 
 function renderCoachRoster() {
   const activeSwimmers = getCoachActiveSwimmers();
