@@ -730,20 +730,43 @@ function buildUsasHeaders(creds) {
   };
 }
 
+function describeFetchError(err, fallbackEndpoint = null) {
+  return {
+    endpoint: err?.endpoint || fallbackEndpoint || null,
+    httpStatus: Number.isInteger(err?.httpStatus) ? err.httpStatus : null,
+    message: err?.message || String(err),
+    retryable: !!err?.retryable,
+    authError: !!err?.authError,
+    at: new Date().toISOString(),
+  };
+}
+
+async function recordFetchError(memberId, err, fallbackEndpoint = null) {
+  const info = describeFetchError(err, fallbackEndpoint);
+  if (MOCK_MODE) {
+    mockSeed(memberId);
+    const entry = mockStore.get(memberId);
+    if (entry) entry.lastFetchError = info;
+    return info;
+  }
+  try {
+    await setDoc(doc(db, "swimResults", memberId), { lastFetchError: info }, { merge: true });
+  } catch (writeErr) {
+    console.warn("[fetchLog] failed to persist fetch error:", writeErr);
+  }
+  return info;
+}
+
 async function fetchBestTimes(creds, memberId) {
   if (MOCK_MODE) { await sleep(200); return MOCK_BEST_TIMES; }
   const url = `${USAS_BASE}/GetBestTimesForMember/${memberId}`;
-  const res = await fetch(url, { headers: buildUsasHeaders(creds) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return fetchJsonWithRetry(url, creds, `GetBestTimesForMember/${memberId}`);
 }
 
 async function fetchMeets(creds, memberId) {
   if (MOCK_MODE) { await sleep(200); return mockMeetsFor(memberId); }
   const url = `${USAS_BASE}/GetSwimmerMeets/${memberId}`;
-  const res = await fetch(url, { headers: buildUsasHeaders(creds) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return fetchJsonWithRetry(url, creds, `GetSwimmerMeets/${memberId}`);
 }
 
 // 单次请求。retryable=true 表示值得重试(限流/5xx/网络/超时)
@@ -757,14 +780,40 @@ async function tryFetchOnce(url, creds) {
     });
     clearTimeout(timeout);
     if (res.ok) return { ok: true, data: await res.json() };
-    let detail = '';
-    try { detail = await res.text(); } catch (e) { detail = '(could not read body)'; }
+    let detail = "";
+    try { detail = await res.text(); } catch (e) { detail = "(could not read body)"; }
     const err = new Error(`HTTP ${res.status}: ${detail.slice(0, 200)}`);
-    return { ok: false, error: err, retryable: RETRYABLE_HTTP.has(res.status) };
+    err.endpoint = url;
+    err.httpStatus = res.status;
+    err.authError = res.status === 401 || res.status === 403;
+    err.retryable = RETRYABLE_HTTP.has(res.status);
+    return { ok: false, error: err, retryable: err.retryable };
   } catch (err) {
     clearTimeout(timeout);
-    if (err.name === 'AbortError') return { ok: false, error: new Error('Timeout (15s)'), retryable: true };
+    if (err.name === "AbortError") {
+      const timeoutErr = new Error("Timeout (15s)");
+      timeoutErr.endpoint = url;
+      timeoutErr.retryable = true;
+      return { ok: false, error: timeoutErr, retryable: true };
+    }
+    err.endpoint = url;
+    err.retryable = true;
     return { ok: false, error: err, retryable: true }; // 网络错误可能自愈,可重试
+  }
+}
+
+// 通用重试:406/429/5xx/网络/超时 → 退避重试,仍失败则抛出带 endpoint/httpStatus 的错误
+async function fetchJsonWithRetry(url, creds, label) {
+  const delays = FETCH_POLICY.retryDelaysMs;
+  for (let attempt = 0; ; attempt++) {
+    const outcome = await tryFetchOnce(url, creds);
+    if (outcome.ok) return outcome.data;
+    const err = outcome.error;
+    err.endpoint = err.endpoint || url;
+    if (!outcome.retryable) throw err;
+    if (attempt >= delays.length) throw Object.assign(err, { retryable: true });
+    console.warn(`[fetch] ${label || url} attempt ${attempt + 1} failed: ${err.message} — retrying in ${delays[attempt]}ms`);
+    await sleep(delays[attempt]);
   }
 }
 
@@ -772,27 +821,19 @@ async function tryFetchOnce(url, creds) {
 async function fetchMeetTimes(creds, memberId, meetId) {
   if (MOCK_MODE) {
     await sleep(400);
-    if (meetId.includes('FAIL-RETRY')) {
+    if (meetId.includes("FAIL-RETRY")) {
       // 前 2 次 406,第 3 次成功 → 验证重试后恢复
       const n = (mockFailCounts.get(meetId) || 0) + 1;
       mockFailCounts.set(meetId, n);
-      if (n <= 2) throw Object.assign(new Error('HTTP 406: mock rate-limited (retryable)'), { retryable: true });
+      if (n <= 2) throw Object.assign(new Error("HTTP 406: mock rate-limited (retryable)"), { retryable: true });
     }
-    if (meetId.includes('FAIL-HARD')) {
-      throw Object.assign(new Error('HTTP 406: mock rate-limited (retryable)'), { retryable: true });
+    if (meetId.includes("FAIL-HARD")) {
+      throw Object.assign(new Error("HTTP 406: mock rate-limited (retryable)"), { retryable: true });
     }
     return mockSwimsForMeet(meetId);
   }
   const url = `${USAS_BASE}/GetSwimmerMeetTimes/${memberId}/${meetId}`;
-  const delays = FETCH_POLICY.retryDelaysMs;
-  for (let attempt = 0; ; attempt++) {
-    const outcome = await tryFetchOnce(url, creds);
-    if (outcome.ok) return outcome.data;
-    if (!outcome.retryable) throw outcome.error;
-    if (attempt >= delays.length) throw Object.assign(outcome.error, { retryable: true });
-    console.warn(`[fetchMeetTimes] ${memberId}/${meetId} attempt ${attempt + 1} failed: ${outcome.error.message} — retrying in ${delays[attempt]}ms`);
-    await sleep(delays[attempt]);
-  }
+  return fetchJsonWithRetry(url, creds, `GetSwimmerMeetTimes/${memberId}/${meetId}`);
 }
 
 async function loadSwimApiCredentials() {
@@ -840,8 +881,20 @@ function getSwimmersWithUsaId() {
 async function readExistingMeets(memberId) {
   if (MOCK_MODE) { mockSeed(memberId); return mockStore.get(memberId)?.meets || {}; }
   try {
-    const snap = await getDoc(doc(db, 'swimResults', memberId));
-    if (snap.exists()) return snap.data().meets || {};
+    const snap = await getDoc(doc(db, "swimResults", memberId));
+    if (snap.exists()) {
+      const data = snap.data();
+      if (!data.initialFullFetchAt && !data.fullFetchComplete && hasLegacyCompleteFetch(data)) {
+        setDoc(doc(db, "swimResults", memberId), {
+          initialFullFetchAt: new Date().toISOString(),
+          initialMeetCount: Object.keys(data.meets || {}).length,
+          migratedLegacyInitializedAt: new Date().toISOString(),
+        }, { merge: true }).catch((writeErr) => {
+          console.warn(`[fetchNew] failed to backfill legacy marker for ${memberId}:`, writeErr);
+        });
+      }
+      return data.meets || {};
+    }
   } catch (e) { /* ignore — 读不到就全量抓 */ }
   return {};
 }
@@ -937,30 +990,31 @@ async function loadAthleteDataStatus() {
 // 每场 meet 抓完立即写入 → 中断后重跑只补失败/缺失的(断点续传)
 // ⚠ 必须用 updateDoc:setDoc 的 {merge:true} 会把带点号的键(meets.12345)
 // 当成字面字段名存储(2026-08-01 踩坑,见 migrateSwimResultDocument)
-async function saveMeetResult(memberId, meet, swims, status) {
+async function saveMeetResult(memberId, meet, swims, status, errorInfo = null) {
+  const result = {
+    meetName: meet.meetName, meetDates: meet.meetDates, meetType: meet.meetType,
+    courseCode: meet.courseCode, season: meet.season, seasonYear: meet.seasonYear,
+    fetchedAt: new Date().toISOString(), status, swims,
+  };
+  if (errorInfo) result.error = errorInfo;
+
   if (MOCK_MODE) {
     mockSeed(memberId);
     const store = mockStore.get(memberId);
-    store.meets[meet.meetId] = {
-      meetName: meet.meetName, meetDates: meet.meetDates, meetType: meet.meetType,
-      courseCode: meet.courseCode, season: meet.season, seasonYear: meet.seasonYear,
-      fetchedAt: new Date().toISOString(), status, swims,
-    };
+    store.meets[meet.meetId] = result;
+    if (errorInfo) store.lastFetchError = errorInfo;
     return;
   }
   const update = {
-    [`meets.${meet.meetId}`]: {
-      meetName: meet.meetName, meetDates: meet.meetDates, meetType: meet.meetType,
-      courseCode: meet.courseCode, season: meet.season, seasonYear: meet.seasonYear,
-      fetchedAt: new Date().toISOString(), status, swims,
-    },
+    [`meets.${meet.meetId}`]: result,
     lastUpdated: new Date().toISOString(),
   };
-  await updateDoc(doc(db, 'swimResults', memberId), update);
+  if (errorInfo) update.lastFetchError = errorInfo;
+  await updateDoc(doc(db, "swimResults", memberId), update);
 }
 
 // 抓取单个运动员:限速 + 重试 + 熔断 + 断点续传。
-// force=true 忽略已有数据全量重抓;否则只抓 status≠'ok' 的 meet。
+// force=true 忽略已有数据全量重抓;否则只抓 status≠"ok" 的 meet。
 // 返回 { fetched, failed, errors, bestTimes, meets }
 async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
   const { force = false, onLog = () => {}, onBestTimes = () => {} } = opts;
@@ -970,29 +1024,47 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
     if (force) return true;
     const ex = existingMeets[meetId];
     if (!ex) return true;                        // 从未抓过
-    if (ex.status === 'ok') return false;        // 已成功
-    if (ex.status === 'failed' || ex.status === 'empty') return true; // 上次失败/空结果 → 重试
+    if (ex.status === "ok") return false;        // 已成功
+    if (ex.status === "failed" || ex.status === "empty") return true; // 上次失败/空结果 → 重试
     return (ex.swims?.length || 0) === 0;        // 旧数据(无 status)按 swims 判断
   };
 
   // 1. Best times
-  const bestTimes = await fetchBestTimes(creds, memberId);
+  let bestTimes;
+  try {
+    bestTimes = await fetchBestTimes(creds, memberId);
+  } catch (err) {
+    await recordFetchError(memberId, err, `${USAS_BASE}/GetBestTimesForMember/${memberId}`);
+    throw err;
+  }
   onBestTimes(bestTimes);
   if (MOCK_MODE) {
     // mock:bestTimes 写入内存 store,View Athlete Results 与生产同构
     mockSeed(memberId);
     const entry = mockStore.get(memberId);
-    if (entry) { entry.bestTimes = bestTimes; entry.lastUpdated = new Date().toISOString(); }
+    if (entry) {
+      entry.bestTimes = bestTimes;
+      entry.lastUpdated = new Date().toISOString();
+      entry.lastFetchSuccessAt = new Date().toISOString();
+      entry.lastFetchError = null;
+    }
   } else {
-    await setDoc(doc(db, 'swimResults', memberId), {
+    await setDoc(doc(db, "swimResults", memberId), {
       memberId, swimmerName, bestTimes, lastUpdated: new Date().toISOString(),
+      lastFetchSuccessAt: new Date().toISOString(), lastFetchError: null,
     }, { merge: true });
   }
 
   // 2. Meets 列表
-  const meets = await fetchMeets(creds, memberId);
+  let meets;
+  try {
+    meets = await fetchMeets(creds, memberId);
+  } catch (err) {
+    await recordFetchError(memberId, err, `${USAS_BASE}/GetSwimmerMeets/${memberId}`);
+    throw err;
+  }
   const pending = meets.filter((m) => needsFetch(m.meetId));
-  onLog(`📅 ${meets.length} meets total, ${pending.length} to fetch${pending.length ? '' : ' — all up to date'}`);
+  onLog(`📅 ${meets.length} meets total, ${pending.length} to fetch${pending.length ? "" : " — all up to date"}`);
 
   let fetched = 0;
   let failed = 0;
@@ -1007,7 +1079,7 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
       const swims = Array.isArray(raw) ? raw : []; // 防御:非数组响应按空处理
       // 空数组可能是"真的没成绩",也可能是 API 软降级(200+空)。
       // 标记 empty 而非 ok,下次增量会重试;连续空则触发软降级暂停。
-      const status = swims.length === 0 ? 'empty' : 'ok';
+      const status = swims.length === 0 ? "empty" : "ok";
       await saveMeetResult(memberId, meet, swims, status);
       fetched++;
       consecutiveFailures = 0;
@@ -1022,7 +1094,8 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
         consecutiveEmpty = 0;
       }
     } catch (err) {
-      await saveMeetResult(memberId, meet, [], 'failed');
+      const errorInfo = describeFetchError(err, `${USAS_BASE}/GetSwimmerMeetTimes/${memberId}/${meet.meetId}`);
+      await saveMeetResult(memberId, meet, [], "failed", errorInfo);
       failed++;
       errors.push(`${meet.meetName || meet.meetId}: ${err.message}`);
       if (err.retryable) {
@@ -1049,35 +1122,118 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
   return { fetched, failed, errors, bestTimes, meets };
 }
 
-async function fetchAllSwimmerResults(creds, onProgress) {
-  const swimmers = MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId().filter((s) => s.hasId);
+// 2026-09-19 之前已经有 meet 数据的文档,视为完成过首次全量抓取,
+// 避免上线 New Only 后把旧队员全部重抓一遍。
+const LEGACY_FULL_FETCH_CUTOFF = new Date("2026-09-19T00:00:00Z");
+
+function hasLegacyCompleteFetch(data) {
+  const meets = data?.meets || {};
+  if (Object.keys(meets).length === 0) return false;
+  const raw = data?.lastUpdated;
+  const updated = raw?.toDate ? raw.toDate() : new Date(raw);
+  return updated instanceof Date && !Number.isNaN(updated.getTime()) && updated < LEGACY_FULL_FETCH_CUTOFF;
+}
+
+async function getSwimmersForMode(newOnly) {
+  const base = MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId().filter((s) => s.hasId);
+  if (!newOnly) return base;
+
+  const fresh = new Set();
+  await Promise.all(base.map(async (s) => {
+    try {
+      let initialized = false;
+      if (MOCK_MODE) {
+        mockSeed(s.usaSwimmingId);
+        initialized = !!mockStore.get(s.usaSwimmingId)?.initialFullFetchAt;
+      } else {
+        const snap = await getDoc(doc(db, "swimResults", s.usaSwimmingId));
+        if (snap.exists()) {
+          const data = snap.data();
+          const legacyComplete = hasLegacyCompleteFetch(data);
+          initialized = !!(data.initialFullFetchAt || data.fullFetchComplete || legacyComplete);
+          if (legacyComplete && !data.initialFullFetchAt && !data.fullFetchComplete) {
+            setDoc(doc(db, "swimResults", s.usaSwimmingId), {
+              initialFullFetchAt: new Date().toISOString(),
+              initialMeetCount: Object.keys(data.meets || {}).length,
+              migratedLegacyInitializedAt: new Date().toISOString(),
+            }, { merge: true }).catch((writeErr) => {
+              console.warn(`[fetchNew] failed to backfill legacy marker for ${s.usaSwimmingId}:`, writeErr);
+            });
+          }
+        }
+      }
+      if (!initialized) fresh.add(s.usaSwimmingId);
+    } catch (e) {
+      console.warn(`[fetchNew] state read failed for ${s.usaSwimmingId}; treating as new:`, e);
+      fresh.add(s.usaSwimmingId);
+    }
+  }));
+  return base.filter((s) => fresh.has(s.usaSwimmingId));
+}
+
+async function markInitialFetchComplete(memberId, summary) {
+  const marker = {
+    initialFullFetchAt: new Date().toISOString(),
+    initialMeetCount: summary.meets.length,
+    initialFetchedCount: summary.fetched,
+    initialFailedCount: summary.failed,
+    lastFetchSuccessAt: new Date().toISOString(),
+    lastFetchError: null,
+  };
+  if (MOCK_MODE) {
+    mockSeed(memberId);
+    const entry = mockStore.get(memberId);
+    if (entry) Object.assign(entry, marker);
+    return marker;
+  }
+  try {
+    await setDoc(doc(db, "swimResults", memberId), marker, { merge: true });
+  } catch (e) {
+    console.warn(`[fetchNew] failed to mark ${memberId} as initialized:`, e);
+  }
+  return marker;
+}
+
+async function fetchAllSwimmerResults(creds, onProgress, opts = {}) {
+  const { newOnly = false } = opts;
+  const swimmers = await getSwimmersForMode(newOnly);
   if (swimmers.length === 0) {
-    onProgress({ type: 'error', message: 'No swimmers with USA Swimming ID found.' });
+    if (newOnly) onProgress({ type: "no-new", message: "No new athletes to fetch." });
+    else onProgress({ type: "error", message: "No swimmers with USA Swimming ID found." });
     return;
   }
 
-  onProgress({ type: 'start', total: swimmers.length });
+  onProgress({ type: "start", total: swimmers.length, newOnly });
 
   let success = 0;
   let failed = 0;
+  let attempted = 0;
   const errors = [];
+  let authFailure = null;
 
   for (let i = 0; i < swimmers.length; i++) {
     const sw = swimmers[i];
-    onProgress({ type: 'swimmer-start', index: i, total: swimmers.length, name: sw.name, memberId: sw.usaSwimmingId });
+    attempted = i + 1;
+    onProgress({ type: "swimmer-start", index: i, total: swimmers.length, name: sw.name, memberId: sw.usaSwimmingId });
 
     let summary = null;
     try {
       summary = await fetchSwimmerData(creds, sw.usaSwimmingId, sw.name, {
         force: false,
-        onLog: (message, isError) => onProgress({ type: 'log', message, isError }),
-        onBestTimes: (bt) => onProgress({ type: 'step', name: sw.name, step: 'bestTimes', count: bt.length }),
+        onLog: (message, isError) => onProgress({ type: "log", message, isError }),
+        onBestTimes: (bt) => onProgress({ type: "step", name: sw.name, step: "bestTimes", count: bt.length }),
       });
+      let initialComplete = false;
+      if (newOnly && summary.failed === 0) {
+        await markInitialFetchComplete(sw.usaSwimmingId, summary);
+        initialComplete = true;
+      }
       const hadWork = summary.fetched > 0 || summary.failed > 0;
       onProgress({
-        type: 'swimmer-done', name: sw.name, memberId: sw.usaSwimmingId,
+        type: "swimmer-done", name: sw.name, memberId: sw.usaSwimmingId,
         bestTimes: summary.bestTimes.length, meets: summary.meets.length,
         newMeets: summary.fetched, failedMeets: summary.failed, written: hadWork,
+        initialComplete,
       });
       if (summary.failed > 0) {
         errors.push(...summary.errors.map((e) => `${sw.name}: ${e}`));
@@ -1086,19 +1242,23 @@ async function fetchAllSwimmerResults(creds, onProgress) {
     } catch (err) {
       failed++;
       errors.push(`${sw.name}: ${err.message}`);
-      onProgress({ type: 'swimmer-error', name: sw.name, memberId: sw.usaSwimmingId, error: err.message });
+      onProgress({ type: "swimmer-error", name: sw.name, memberId: sw.usaSwimmingId, error: err.message });
+      if (err.authError) {
+        authFailure = { name: sw.name, memberId: sw.usaSwimmingId, message: err.message, endpoint: err.endpoint || null };
+        onProgress({ type: "auth-error", name: sw.name, memberId: sw.usaSwimmingId, message: err.message, endpoint: err.endpoint || null });
+        break;
+      }
     }
 
-    onProgress({ type: 'progress', index: i + 1, total: swimmers.length, success, failed });
+    onProgress({ type: "progress", index: i + 1, total: swimmers.length, success, failed });
 
-    // 运动员之间冷却:只有实际发过请求才休息,全部跳过则立即继续
     if (summary && i < swimmers.length - 1 && (summary.fetched > 0 || summary.failed > 0)) {
-      onProgress({ type: 'log', message: `⏸ 运动员间冷却 ${FETCH_POLICY.swimmerGapMs / 60000} 分钟...` });
+      onProgress({ type: "log", message: `⏸ 运动员间冷却 ${FETCH_POLICY.swimmerGapMs / 60000} 分钟...` });
       await sleep(FETCH_POLICY.swimmerGapMs);
     }
   }
 
-  onProgress({ type: 'done', total: swimmers.length, success, failed, errors });
+  onProgress({ type: "done", total: swimmers.length, attempted, success, failed, errors, authError: authFailure, newOnly });
 }
 
 function renderCoachResults() {
@@ -1180,12 +1340,15 @@ function renderCoachResults() {
         <span id="fetch-status" style="font-size: 0.85rem;">Ready</span>
       </div>
       <p style="color: var(--text-muted); margin: var(--space-md) 0; font-size: 0.9rem;">
-        Fetch results from USA Swimming for <strong>${withId.length}</strong> athlete(s).
-        Previously fetched meets are skipped automatically (incremental update).
+        Incremental fetch checks <strong>${withId.length}</strong> athlete(s) with USA Swimming IDs.
+        New athletes get their full meet history; previously fetched meets are skipped.
       </p>
-      <div style="display: flex; gap: 0.75rem; margin-bottom: var(--space-md);">
-        <button class="btn btn-primary btn-sm" id="fetch-all-btn" ${!hasCreds || swimResultsFetching ? 'disabled' : ''}>
-          ${swimResultsFetching ? '⏳ Fetching...' : '🔄 Fetch All Swimmer Results'}
+      <div style="display: flex; gap: 0.75rem; margin-bottom: var(--space-md); flex-wrap: wrap;">
+        <button class="btn btn-primary btn-sm" id="fetch-new-btn" data-default-label="🆕 Fetch New Athletes Only" ${!hasCreds || swimResultsFetching ? "disabled" : ""}>
+          ${swimResultsFetching ? "⏳ Fetching..." : "🆕 Fetch New Athletes Only"}
+        </button>
+        <button class="btn btn-outline btn-sm" id="fetch-all-btn" data-default-label="🔄 Fetch All Swimmer Results" ${!hasCreds || swimResultsFetching ? "disabled" : ""}>
+          ${swimResultsFetching ? "⏳ Fetching..." : "🔄 Fetch All Swimmer Results"}
         </button>
       </div>
       <div id="fetch-log" style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; max-height: 350px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; line-height: 1.6; display: none;">
@@ -4841,92 +5004,134 @@ function bindEvents() {
       }
     });
 
-    // Fetch all swimmer results
-    document.getElementById('fetch-all-btn')?.addEventListener('click', async () => {
+    // ── Shared fetch runner for Fetch All / Fetch New Athletes Only ──
+    const runSwimFetch = async ({ buttonId, newOnly }) => {
       if (swimResultsFetching) return;
 
-      // Ensure credentials are loaded
       if (!swimApiCredentials || !swimApiCredentials.deviceId || !swimApiCredentials.sessionId) {
-        alert('Please configure and save API credentials first.');
+        alert("Please configure and save API credentials first.");
         return;
       }
 
       swimResultsFetching = true;
-      const log = document.getElementById('fetch-log');
-      const statusEl = document.getElementById('fetch-status');
-      const btn = document.getElementById('fetch-all-btn');
+      const log = document.getElementById("fetch-log");
+      const statusEl = document.getElementById("fetch-status");
+      const allBtn = document.getElementById("fetch-all-btn");
+      const newBtn = document.getElementById("fetch-new-btn");
+      const activeBtn = document.getElementById(buttonId);
 
-      log.style.display = 'block';
-      log.innerHTML = '';
-      btn.disabled = true;
-      btn.textContent = '⏳ Fetching...';
+      log.style.display = "block";
+      log.innerHTML = "";
+      [allBtn, newBtn].forEach((btn) => {
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = btn === activeBtn ? "⏳ Fetching..." : btn.dataset.defaultLabel || btn.textContent;
+      });
 
       const appendLog = (msg, isError) => {
-        const line = document.createElement('div');
+        const line = document.createElement("div");
         line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        line.style.color = isError ? 'var(--color-accent)' : 'var(--text-primary)';
+        line.style.color = isError ? "var(--color-accent)" : "var(--text-primary)";
         log.appendChild(line);
         log.scrollTop = log.scrollHeight;
       };
 
+      const restoreButtons = () => {
+        swimResultsFetching = false;
+        [allBtn, newBtn].forEach((btn) => {
+          if (!btn) return;
+          btn.disabled = false;
+          btn.textContent = btn.dataset.defaultLabel || btn.textContent;
+        });
+      };
+
+      try {
       await fetchAllSwimmerResults(swimApiCredentials, (evt) => {
         switch (evt.type) {
-          case 'start':
-            appendLog(`🚀 Starting fetch for ${evt.total} athlete(s)...`);
+          case "start":
+            appendLog(`🚀 Starting ${newOnly ? "new-athlete" : "full"} fetch for ${evt.total} athlete(s)...`);
             statusEl.textContent = `⏳ 0 / ${evt.total}`;
+            statusEl.style.color = "var(--text-primary)";
             break;
-          case 'swimmer-start':
+          case "no-new":
+            appendLog(`🆕 ${evt.message}`, false);
+            statusEl.textContent = "✅ No new athletes";
+            statusEl.style.color = "#16A34A";
+            restoreButtons();
+            break;
+          case "swimmer-start":
             appendLog(`🔄 ${evt.name} (${evt.memberId})...`);
             break;
-          case 'step':
+          case "step":
             appendLog(`   📊 ${evt.step}: ${evt.count} entries`);
             break;
-          case 'log':
+          case "log":
             appendLog(`   ${evt.message}`, evt.isError);
             break;
-          case 'swimmer-done':
+          case "swimmer-done":
+            if (evt.initialComplete) appendLog("   🆕 Marked as fully initialized");
             if (evt.written) {
-              appendLog(`   ✅ Written: ${evt.bestTimes} best times, ${evt.meets} meets (${evt.newMeets} new${evt.failedMeets > 0 ? `, ${evt.failedMeets} failed` : ''})`);
+              appendLog(`   ✅ Written: ${evt.bestTimes} best times, ${evt.meets} meets (${evt.newMeets} new${evt.failedMeets > 0 ? `, ${evt.failedMeets} failed` : ""})`);
             } else {
-              appendLog(`   ⏭ Skipped: no new meets`);
+              appendLog("   ⏭ Skipped: no new meets");
             }
             const statusCell = document.getElementById(`status-${evt.memberId}`);
             if (statusCell) statusCell.innerHTML =
               `<span style="color:#16A34A;">✅ ${evt.bestTimes} best times, ${evt.meets} meets</span>`;
             break;
-          case 'swimmer-error':
+          case "swimmer-error": {
             appendLog(`   ❌ Failed: ${evt.error}`, true);
             const statusErrCell = document.getElementById(`status-${evt.memberId}`);
             if (statusErrCell) statusErrCell.innerHTML =
               `<span style="color:var(--color-accent);">❌ ${escapeHtml(evt.error)}</span>`;
             break;
-          case 'progress':
+          }
+          case "auth-error":
+            appendLog(`   🔐 Authentication failed — stopping run. Update API credentials. (${evt.message})`, true);
+            statusEl.textContent = "❌ Auth error — update credentials";
+            statusEl.style.color = "var(--color-accent)";
+            break;
+          case "progress":
             statusEl.textContent = `⏳ ${evt.index} / ${evt.total} (✅ ${evt.success} ❌ ${evt.failed})`;
             break;
-          case 'done':
-            statusEl.textContent = `✅ Done: ${evt.success} succeeded, ${evt.failed} failed`;
-            statusEl.style.color = evt.failed > 0 ? 'var(--color-accent)' : '#16A34A';
-            appendLog('');
-            appendLog(`✅ Fetch complete — ${evt.success} succeeded, ${evt.failed} failed`);
-            if (evt.errors.length > 0) {
-              appendLog('Error details:', true);
-              evt.errors.forEach(e => appendLog(`  • ${e}`, true));
+          case "done":
+            if (evt.authError) {
+              appendLog(`⛔ Stopped after ${evt.attempted}/${evt.total} athlete(s): credentials need refresh.`, true);
+            } else {
+              statusEl.textContent = `✅ Done: ${evt.success} succeeded, ${evt.failed} failed`;
+              statusEl.style.color = evt.failed > 0 ? "var(--color-accent)" : "#16A34A";
+              appendLog("");
+              appendLog(`✅ Fetch complete — ${evt.success} succeeded, ${evt.failed} failed`);
             }
-            swimResultsFetching = false;
-            btn.disabled = false;
-            btn.textContent = '🔄 Fetch All Swimmer Results';
+            if (evt.errors.length > 0) {
+              appendLog("Error details:", true);
+              evt.errors.forEach((e) => appendLog(`  • ${e}`, true));
+            }
+            restoreButtons();
             break;
-          case 'error':
+          case "error":
             appendLog(`❌ ${evt.message}`, true);
-            statusEl.textContent = '❌ Failed';
-            statusEl.style.color = 'var(--color-accent)';
-            swimResultsFetching = false;
-            btn.disabled = false;
-            btn.textContent = '🔄 Fetch All Swimmer Results';
+            statusEl.textContent = "❌ Failed";
+            statusEl.style.color = "var(--color-accent)";
+            restoreButtons();
             break;
         }
       });
-    });
+      } catch (err) {
+        appendLog(`❌ Fetch runner error: ${err.message}`, true);
+        statusEl.textContent = "❌ Failed";
+        statusEl.style.color = "var(--color-accent)";
+      } finally {
+        restoreButtons();
+      }
+    };
+
+    const fetchAllBtn = document.getElementById("fetch-all-btn");
+    const fetchNewBtn = document.getElementById("fetch-new-btn");
+    if (fetchAllBtn) fetchAllBtn.dataset.defaultLabel = "🔄 Fetch All Swimmer Results";
+    if (fetchNewBtn) fetchNewBtn.dataset.defaultLabel = "🆕 Fetch New Athletes Only";
+    fetchAllBtn?.addEventListener("click", () => runSwimFetch({ buttonId: "fetch-all-btn", newOnly: false }));
+    fetchNewBtn?.addEventListener("click", () => runSwimFetch({ buttonId: "fetch-new-btn", newOnly: true }));
   }
 }
 
