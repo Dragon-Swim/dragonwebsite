@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dashboard Page — Dragon Swim Team
  * TaskFlow-inspired dashboard with sidebar + cards for swim plans, meets, schedules
  */
@@ -5046,7 +5046,7 @@ function bindEvents() {
       };
 
       try {
-      await fetchAllSwimmerResults(swimApiCredentials, (evt) => {
+        await fetchAllSwimmerResults(swimApiCredentials, (evt) => {
         switch (evt.type) {
           case "start":
             appendLog(`🚀 Starting ${newOnly ? "new-athlete" : "full"} fetch for ${evt.total} athlete(s)...`);
@@ -5116,7 +5116,7 @@ function bindEvents() {
             restoreButtons();
             break;
         }
-      });
+        }, { newOnly });
       } catch (err) {
         appendLog(`❌ Fetch runner error: ${err.message}`, true);
         statusEl.textContent = "❌ Failed";
