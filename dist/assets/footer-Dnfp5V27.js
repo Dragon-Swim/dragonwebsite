@@ -1,4 +1,4 @@
-import{t as e,u as i,a as l}from"./i18n-4RpCr6Gl.js";function c(){const a=document.createElement("nav");a.className="navbar",a.id="navbar",a.innerHTML=`
+import{t as e,u as i,a as l}from"./i18n-Cco8IODB.js";function c(){const a=document.createElement("nav");a.className="navbar",a.id="navbar",a.innerHTML=`
     <div class="nav-container container">
       <a href="/" class="nav-logo">
         <img src="/logo-light.jpg" alt="Dragon Swim Team" class="nav-logo-img light-logo" />
