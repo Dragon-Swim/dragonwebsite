@@ -8,6 +8,12 @@
  * `parent.email` is treated as account/whitelist-derived metadata rather than a
  * normal user-entered required field. It is still checked for consistency under
  * `conflicts`, but never reported as `required`.
+ *
+ * Two distinct failure modes are covered:
+ *   1. Missing — a required field has no value.
+ *   2. Wrong   — a field has a value of the wrong kind (an email typed into the
+ *      address field, or the account holder registered as their own swimmer).
+ *      These live in `conflicts` because only a human can confirm them.
  */
 
 export const PARENT_REQUIRED = ['firstName', 'lastName', 'gender', 'phone', 'address'];
@@ -44,6 +50,37 @@ export function normalizePhone(value) {
   return digits;
 }
 
+// ── Value-sanity helpers ────────────────────────────────────────────────────
+
+/** Matches an email anywhere inside a string (deliberately not anchored). */
+export const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+
+/**
+ * Age at or above which a registered swimmer cannot plausibly be a team
+ * member. The club has no adult/masters programme, so a swimmer this old is
+ * almost always the account holder entered by mistake. Set far above junior
+ * and senior age so a graduating swimmer is never misread as an adult.
+ */
+export const ADULT_SWIMMER_AGE = 30;
+
+export function looksLikeEmail(value) {
+  return typeof value === 'string' && EMAIL_RE.test(value);
+}
+
+/**
+ * Whole years between `dob` and `now`; null when dob is absent or unparseable
+ * (a missing dob is already reported as a required field).
+ */
+export function ageInYears(dob, now = new Date()) {
+  if (!dob) return null;
+  const d = dob instanceof Date ? dob : new Date(typeof dob === 'string' ? dob : String(dob));
+  if (Number.isNaN(d.getTime())) return null;
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDelta = now.getMonth() - d.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
 export function activeSwimmers(registration) {
   return (registration?.swimmers || []).filter((s) => s && s.deleted !== true);
 }
@@ -59,7 +96,12 @@ export function swimmerName(swimmer) {
  * @param {object} [options]
  * @param {string|null} [options.authEmail] Auth account email, when available
  *   (Node audit script only; the browser cannot read another user's Auth email).
+ * @param {Date} [options.now] Reference date for age checks; injectable so the
+ *   rules can be tested without depending on the wall clock.
  * @returns {{ required: object[], conflicts: object[], optionalGaps: object[] }}
+ *   `conflicts` covers both cross-field inconsistencies and values that are
+ *   present but wrong in kind (an email in the address field, a swimmer entry
+ *   that is the account holder) — everything a human should verify.
  */
 export function auditRegistration(registration = {}, options = {}) {
   const { authEmail = null } = options;
@@ -161,6 +203,38 @@ export function auditRegistration(registration = {}, options = {}) {
       authEmail: authEmailNormalized,
     });
   }
+
+  // ── Value sanity: the field is filled in, but with the wrong kind of value ──
+  //
+  // `hasValue` above treats any non-empty string as good, so a street address
+  // holding an email, or a swimmer entry that is really the account holder,
+  // passes every "missing field" rule. Both were found in live data.
+  if (looksLikeEmail(parent?.address)) {
+    conflicts.push({ type: 'address_looks_like_email', address: parent.address });
+  }
+
+  const spouseFullName = spouse ? fullName(spouse) : '';
+  const now = options.now instanceof Date ? options.now : new Date();
+
+  swimmers.forEach((swimmer, index) => {
+    const who = swimmerName(swimmer);
+    const normalized = normalizeName(who);
+    if (!normalized) return;
+    const age = ageInYears(swimmer.dob, now);
+
+    // Exact normalized full-name match only. A surname-only or fuzzy rule would
+    // flag every child sharing a surname with their parent — 10 of 18 live
+    // registrations — so the bar is deliberately strict.
+    if (parentName && normalized === parentName) {
+      conflicts.push({ type: 'swimmer_is_account_holder', swimmerIndex: index, swimmerName: who, age });
+    } else if (spouseFullName && normalized === spouseFullName) {
+      conflicts.push({ type: 'swimmer_is_spouse', swimmerIndex: index, swimmerName: who, age });
+    } else if (age !== null && age >= ADULT_SWIMMER_AGE) {
+      // Independent of the name rules: catches an adult entered under a
+      // nickname or variant spelling that the exact match above would miss.
+      conflicts.push({ type: 'swimmer_is_adult', swimmerIndex: index, swimmerName: who, age });
+    }
+  });
 
   return { required, conflicts, optionalGaps };
 }

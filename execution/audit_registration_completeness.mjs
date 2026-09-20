@@ -93,6 +93,16 @@ function formatConflict(item) {
       return `家长邮箱不在 parentEmails 中(${item.parentEmail})`;
     case 'parent_email_mismatch_auth':
       return `家长邮箱与登录账号不一致(${item.parentEmail} vs ${item.authEmail})`;
+    case 'address_looks_like_email':
+      return `住址字段填的是邮箱(${item.address})`;
+    case 'swimmer_is_account_holder':
+      return `队员#${item.swimmerIndex + 1}(${item.swimmerName}) 就是账号持有人本人`
+        + (item.age != null ? `(${item.age} 岁)` : '');
+    case 'swimmer_is_spouse':
+      return `队员#${item.swimmerIndex + 1}(${item.swimmerName}) 是配偶`
+        + (item.age != null ? `(${item.age} 岁)` : '');
+    case 'swimmer_is_adult':
+      return `队员#${item.swimmerIndex + 1}(${item.swimmerName}) 是成年人(${item.age} 岁)`;
     default:
       return item.type;
   }

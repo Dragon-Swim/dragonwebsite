@@ -243,4 +243,70 @@ test.describe("Full registration flow", () => {
 
     await expect(page).toHaveURL(/dashboard\.html/, { timeout: 15000 });
   });
+
+  test("address field rejects an email address", async ({ page }) => {
+    await signUp(page, uniqueEmail("address-email"));
+    await fillRequiredFields(page);
+
+    // A street address has no @ — an email here is a copy/paste mistake that
+    // native validation cannot catch, because #parent-address is type=text.
+    await page.fill("#parent-address", "michael.johnson@example.com");
+    await page.click("#reg-submit");
+
+    await expect(page).toHaveURL(/registration\.html/);
+    await expect(page.locator("#parent-address")).toHaveClass(/is-invalid/);
+
+    await page.fill("#parent-address", "123 Main St, Portland, OR 97201");
+    await page.click("#reg-submit");
+
+    await expect(page).toHaveURL(/dashboard\.html/, { timeout: 15000 });
+  });
+
+  test("swimmer cannot be the account holder once the dob is an adult", async ({ page }) => {
+    await signUp(page, uniqueEmail("swimmer-is-holder"));
+    await fillRequiredFields(page);
+
+    // Same name as the account holder, with an adult date of birth.
+    await page.fill("#swimmer-1-first", "Michael");
+    await page.fill("#swimmer-1-last", "Johnson");
+    await page.fill("#swimmer-1-dob", "1985-04-02");
+    await page.click("#reg-submit");
+
+    await expect(page).toHaveURL(/registration\.html/);
+    await expect(page.locator("#swimmer-1-first")).toHaveClass(/is-invalid/);
+    await expect(page.locator("#reg-form-error")).toBeVisible();
+
+    // Corrected to the child's details — the form goes through.
+    await page.fill("#swimmer-1-first", "Emma");
+    await page.fill("#swimmer-1-dob", "2014-06-15");
+    await page.click("#reg-submit");
+
+    await expect(page).toHaveURL(/dashboard\.html/, { timeout: 15000 });
+  });
+
+  test("a minor sharing the account holder's name is allowed through", async ({ page }) => {
+    await signUp(page, uniqueEmail("same-name-minor"));
+    await fillRequiredFields(page);
+
+    // Same name but a child's dob: legitimate (named after the parent), so the
+    // form must NOT block it — the dashboard flags it for a human instead.
+    await page.fill("#swimmer-1-first", "Michael");
+    await page.fill("#swimmer-1-last", "Johnson");
+    await page.fill("#swimmer-1-dob", "2014-06-15");
+    await page.click("#reg-submit");
+
+    await expect(page).toHaveURL(/dashboard\.html/, { timeout: 15000 });
+  });
+
+  test("a child sharing only the surname is never blocked", async ({ page }) => {
+    await signUp(page, uniqueEmail("same-surname-child"));
+    await fillRequiredFields(page);
+
+    // The overwhelmingly common case — 10 of 18 live registrations look like
+    // this, so a surname-only rule would break nearly every signup.
+    await page.fill("#swimmer-1-last", "Johnson");
+    await page.click("#reg-submit");
+
+    await expect(page).toHaveURL(/dashboard\.html/, { timeout: 15000 });
+  });
 });

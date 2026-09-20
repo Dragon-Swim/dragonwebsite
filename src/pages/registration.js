@@ -15,6 +15,9 @@ import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import { auth, db, doc, setDoc, getDoc, getDocs, query, where, updateDoc, collection, onAuthStateChanged } from '../utils/firebase.js';
 import { t } from '../utils/i18n.js';
+import {
+  normalizeName, normalizePhone, looksLikeEmail, ageInYears, ADULT_SWIMMER_AGE,
+} from '../utils/registrationCompleteness.js';
 
 initTheme();
 renderNavbar();
@@ -38,30 +41,13 @@ function reqLabel(text, isRequired = true) {
 }
 
 /**
- * Normalizes a name for comparison: case, surrounding/duplicate whitespace and
- * punctuation people sprinkle into names ("John A. Smith" vs "john a smith").
+ * Joins a first/last pair into one comparable name. `normalizeName`,
+ * `normalizePhone` and the value-sanity helpers come from the shared module so
+ * the form, the coach dashboard and the audit script can never drift apart on
+ * what counts as "the same name" or "an email".
  */
-function normalizeName(value) {
-  return (value || '')
-    .toLowerCase()
-    .replace(/[.,'’`\-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Joins a first/last pair into one comparable name. */
 function fullName(first, last) {
   return normalizeName(`${first || ''} ${last || ''}`);
-}
-
-/**
- * Digits only, with a leading US country code dropped, so the same number
- * written as "555-111-2222", "5551112222" or "+1 (555) 111 2222" compares equal.
- */
-function normalizePhone(value) {
-  let digits = (value || '').replace(/\D/g, '');
-  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
-  return digits;
 }
 
 function genderOptions() {
@@ -371,6 +357,36 @@ function bindEvents() {
       holderPhone && emergencyPhone && emergencyPhone === holderPhone
         ? t('reg_err_emergency_phone_same')
         : '');
+
+    // ── Value sanity: filled in, but the wrong kind of value ──
+    // Native validation only enforces "non-empty" (#parent-address is a plain
+    // text input), so an email typed into the address field used to save fine.
+    setError('parent-address',
+      looksLikeEmail(value('parent-address')) ? t('reg_err_address_email') : '');
+
+    // A swimmer who is the account holder (or the spouse) is only treated as a
+    // hard error once the date of birth shows an adult: the club has no
+    // adult/masters programme, but a child named after their parent is rare yet
+    // legitimate, so that case is left to the dashboard's "needs verification".
+    const spouseNameNorm = spouseEnabled ? spouseName : '';
+    document.querySelectorAll('.swimmer-card').forEach((card) => {
+      const idx = card.dataset.swimmer;
+      const firstEl = document.getElementById(`swimmer-${idx}-first`);
+      const lastEl = document.getElementById(`swimmer-${idx}-last`);
+      if (!firstEl) return;
+      const swimmerName = normalizeName(
+        `${firstEl.value.trim()} ${lastEl ? lastEl.value.trim() : ''}`);
+      const age = ageInYears(value(`swimmer-${idx}-dob`));
+      const isAdult = age !== null && age >= ADULT_SWIMMER_AGE;
+
+      let message = '';
+      if (isAdult && holderName && swimmerName === holderName) {
+        message = t('reg_err_swimmer_is_holder');
+      } else if (isAdult && spouseNameNorm && swimmerName === spouseNameNorm) {
+        message = t('reg_err_swimmer_is_spouse');
+      }
+      setError(`swimmer-${idx}-first`, message);
+    });
   }
 
   /**

@@ -20,6 +20,9 @@ import {
   auth, db, doc, getDoc, setDoc, updateDoc, collection, onSnapshot,
   query, orderBy, where, getDocs, onAuthStateChanged, signOut, addDoc, deleteDoc,
 } from '../utils/firebase.js';
+import {
+  normalizeName, looksLikeEmail, ageInYears, ADULT_SWIMMER_AGE,
+} from '../utils/registrationCompleteness.js';
 
 initTheme();
 
@@ -527,6 +530,34 @@ function showEditRegModal(reg) {
 }
 
 // ── Save Registration Edits ─────────────────────────────────────
+/**
+ * Value-sanity checks mirroring the family registration form. Returns the first
+ * error message, or null when the data is clean.
+ *
+ * A swimmer matching the account holder (or spouse) is only refused once the
+ * date of birth shows an adult — the club has no adult/masters programme, but a
+ * child named after their parent is legitimate and is left to the dashboard's
+ * "needs verification" list instead.
+ */
+function valueSanityError(parent, spouse, swimmers) {
+  if (looksLikeEmail(parent?.address)) return t('reg_err_address_email');
+
+  const holderName = normalizeName(`${parent?.firstName || ''} ${parent?.lastName || ''}`);
+  const spouseName = spouse
+    ? normalizeName(`${spouse.firstName || ''} ${spouse.lastName || ''}`)
+    : '';
+
+  for (const s of swimmers) {
+    const who = normalizeName(`${s.firstName || ''} ${s.lastName || ''}`);
+    if (!who) continue;
+    const age = ageInYears(s.dob);
+    if (age === null || age < ADULT_SWIMMER_AGE) continue;
+    if (holderName && who === holderName) return t('reg_err_swimmer_is_holder');
+    if (spouseName && who === spouseName) return t('reg_err_swimmer_is_spouse');
+  }
+  return null;
+}
+
 async function saveEditRegistration(regId, overlay) {
   const getVal = (id) => overlay.querySelector('#' + id)?.value || '';
 
@@ -596,6 +627,18 @@ async function saveEditRegistration(regId, overlay) {
     lastEditedBy: currentUser?.email || 'unknown',
     lastEditedAt: new Date(),
   };
+
+  // Value sanity — the same rules the family form enforces, so an admin edit
+  // cannot write back the kind of data the form would have refused.
+  const sanityError = valueSanityError(parent, spouse, swimmers);
+  if (sanityError) {
+    const msgEl = document.getElementById('family-upload-message');
+    if (msgEl) {
+      msgEl.textContent = sanityError;
+      msgEl.className = 'admin-form-message error';
+    }
+    return;
+  }
 
   try {
     await updateDoc(doc(db, 'registrations', regId), updateData);

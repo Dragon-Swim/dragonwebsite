@@ -603,6 +603,10 @@ const ATTENTION_CONFLICT_LABEL_KEYS = {
   parent_emails_missing: 'dash_attn_conflict_parent_emails_missing',
   parent_email_not_in_parent_emails: 'dash_attn_conflict_parent_email_not_in_parent_emails',
   parent_email_mismatch_auth: 'dash_attn_conflict_parent_email_mismatch_auth',
+  address_looks_like_email: 'dash_attn_conflict_address_email',
+  swimmer_is_account_holder: 'dash_attn_conflict_swimmer_is_holder',
+  swimmer_is_spouse: 'dash_attn_conflict_swimmer_is_spouse',
+  swimmer_is_adult: 'dash_attn_conflict_swimmer_is_adult',
 };
 
 function attentionFieldText(scope, field) {
@@ -641,6 +645,8 @@ function attentionConflictText(conflict) {
   return escapeHtml(t(key, {
     parentEmail: conflict.parentEmail || '',
     authEmail: conflict.authEmail || '',
+    swimmerName: conflict.swimmerName || '',
+    age: conflict.age ?? '',
   }));
 }
 
