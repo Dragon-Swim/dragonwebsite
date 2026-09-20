@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dashboard Page — Dragon Swim Team
  * TaskFlow-inspired dashboard with sidebar + cards for swim plans, meets, schedules
  */
@@ -11,7 +11,7 @@ import './dashboard.css';
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js';
 import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
-import { auditRegistration } from '../utils/registrationCompleteness.js';
+import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
@@ -543,6 +543,8 @@ function getCoachRecentRegistrations() {
 
 // 「Needs Attention」= 需要教练关注的家庭(只读展示,不改数据)。
 // 规则来自 src/utils/registrationCompleteness.js,与审计脚本共用同一份口径。
+// 排序:必填缺失 > 需核实 > 仅选填缺口;同级内保持 createdAt desc。
+// 不能按 createdAt 平铺 —— 那样最旧的「需核实」家庭会被挤到折叠行后面(线上实际发生过)。
 function getCoachAttentionItems() {
   const items = [];
   for (const reg of allRegistrations) {
@@ -551,7 +553,7 @@ function getCoachAttentionItems() {
       items.push({ regId: reg.id, name: getParentNameFromReg(reg), audit });
     }
   }
-  return items;
+  return sortByAttentionSeverity(items);
 }
 
 // ── Attention rendering helpers ──
@@ -2228,6 +2230,8 @@ function renderCoachOverview() {
   const activeSwimmers = getCoachActiveSwimmers();
   const newRegistrations = getCoachRecentRegistrations();
   const attention = getCoachAttentionItems();
+  const attnCounts = attentionCounts(attention);
+  const attentionView = partitionAttention(attention);
   const attentionByReg = new Map(attention.map((a) => [a.regId, a.audit]));
 
   // 「Upcoming Meets」与 Meets tab 保持同一口径:当前赛季 + 按日期分桶。
@@ -2284,11 +2288,11 @@ function renderCoachOverview() {
         <div class="dash-panel-body">
           ${attention.length === 0 ? `<p class="dash-empty">${t('dash_coach_needs_attention_empty')}</p>` : `
           <p class="dash-attn-summary">${t('dash_attn_summary', {
-            required: attention.filter((a) => a.audit.required.length).length,
-            conflicts: attention.filter((a) => a.audit.conflicts.length).length,
-            optional: attention.filter((a) => a.audit.optionalGaps.length).length,
+            required: attnCounts.required,
+            conflicts: attnCounts.conflicts,
+            optional: attnCounts.optional,
           })}</p>
-          ${attention.slice(0, 5).map(a => `
+          ${attentionView.visible.map(a => `
             <div class="dash-mini-card">
               <div class="dash-mini-top">
                 <span class="dash-mini-name">${escapeHtml(a.name)}</span>
@@ -2297,7 +2301,7 @@ function renderCoachOverview() {
               ${renderAttentionGroup('dash_attn_conflicts', 'conflicts', a.audit.conflicts, attentionConflictText)}
               ${renderAttentionGroup('dash_attn_optional', 'optional', a.audit.optionalGaps, attentionOptionalText)}
             </div>
-          `).join('') + (attention.length > 5 ? `<p class="dash-empty">+${attention.length - 5} …</p>` : '')}
+          `).join('') + (attentionView.hiddenOptionalCount > 0 ? `<p class="dash-empty">${t('dash_attn_more_optional', { n: attentionView.hiddenOptionalCount })}</p>` : '')}
           `}
         </div>
       </div>

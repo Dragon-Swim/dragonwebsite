@@ -164,3 +164,78 @@ export function auditRegistration(registration = {}, options = {}) {
 
   return { required, conflicts, optionalGaps };
 }
+
+// ── Severity / display policy ───────────────────────────────────────────────
+//
+// A family can be incomplete, conflicted, or merely missing optional fields.
+// Those are NOT equally urgent, so the dashboard must never let a cheap
+// "optional gap" row crowd out a row a coach actually has to act on.
+//
+// Severity is derived, never stored: the highest-priority bucket a family
+// falls into wins.
+
+export const ATTENTION_SEVERITY = {
+  REQUIRED: 0,
+  CONFLICTS: 1,
+  OPTIONAL: 2,
+};
+
+/** Severity of one audit result; lower = more urgent. */
+export function attentionSeverity(audit) {
+  if (audit?.required?.length) return ATTENTION_SEVERITY.REQUIRED;
+  if (audit?.conflicts?.length) return ATTENTION_SEVERITY.CONFLICTS;
+  return ATTENTION_SEVERITY.OPTIONAL;
+}
+
+/**
+ * Stable sort by descending urgency, preserving the incoming order (newest
+ * first) inside each bucket. Explicit index tiebreak so the result does not
+ * depend on the engine's sort stability.
+ *
+ * @param {Array<{audit: object}>} items
+ */
+export function sortByAttentionSeverity(items) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) =>
+      attentionSeverity(a.item.audit) - attentionSeverity(b.item.audit) || a.index - b.index)
+    .map(({ item }) => item);
+}
+
+/**
+ * Split sorted attention items into what to render and what may be elided.
+ *
+ * Only the OPTIONAL bucket is ever truncated. Required/conflict rows are
+ * always returned in full — hiding them behind a "+N …" line is what made a
+ * lone "needs verification" family invisible in production.
+ *
+ * @param {Array<{audit: object}>} items
+ * @param {number} [optionalLimit] Max optional-only rows to show.
+ */
+export function partitionAttention(items, optionalLimit = 5) {
+  const limit = Math.max(0, optionalLimit);
+  const actionable = [];
+  const optionalOnly = [];
+  for (const item of items) {
+    if (attentionSeverity(item.audit) === ATTENTION_SEVERITY.OPTIONAL) optionalOnly.push(item);
+    else actionable.push(item);
+  }
+  return {
+    visible: [...actionable, ...optionalOnly.slice(0, limit)],
+    actionableCount: actionable.length,
+    optionalOnlyCount: optionalOnly.length,
+    hiddenOptionalCount: Math.max(0, optionalOnly.length - limit),
+  };
+}
+
+/** Counts for the summary line — one bucket per family, no double counting. */
+export function attentionCounts(items) {
+  const counts = { required: 0, conflicts: 0, optional: 0 };
+  for (const item of items) {
+    const s = attentionSeverity(item.audit);
+    if (s === ATTENTION_SEVERITY.REQUIRED) counts.required++;
+    else if (s === ATTENTION_SEVERITY.CONFLICTS) counts.conflicts++;
+    else counts.optional++;
+  }
+  return counts;
+}
