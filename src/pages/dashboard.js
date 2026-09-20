@@ -10,7 +10,8 @@ import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js';
-import { LOCATION_ORDER, DAY_ORDER, periodLabel, getCurrentPeriodId } from '../data/seasonSchedule.data.js';
+import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
+import { auditRegistration } from '../utils/registrationCompleteness.js';
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
@@ -540,30 +541,116 @@ function getCoachRecentRegistrations() {
   });
 }
 
-// 「Needs Attention」= 资料缺失的家庭(只读展示,不改数据)。
-// 口径对齐 execution/audit_registration_completeness.mjs 必填项里「教练可行动」的部分:
-//   家长 phone/address/email、紧急联系人 phone、队员 dob/gender;
-//   另加 USA Swimming ID —— 没有它就无法抓成绩,趋势图也画不了标准线。
-// 完整审计(含姓名、spouse 等)仍以该脚本为准。
+// 「Needs Attention」= 需要教练关注的家庭(只读展示,不改数据)。
+// 规则来自 src/utils/registrationCompleteness.js,与审计脚本共用同一份口径。
 function getCoachAttentionItems() {
-  const blank = (v) => v == null || String(v).trim() === '';
   const items = [];
   for (const reg of allRegistrations) {
-    const missing = [];
-    if (blank(reg.parent?.phone)) missing.push(t('dash_attn_parent_phone'));
-    if (blank(reg.parent?.address)) missing.push(t('dash_attn_parent_address'));
-    if (blank(reg.parent?.email)) missing.push(t('dash_attn_parent_email'));
-    if (blank(reg.emergencyContact?.phone)) missing.push(t('dash_attn_emergency_phone'));
-    for (const sw of (reg.swimmers || [])) {
-      if (sw.deleted) continue;
-      const who = [sw.firstName, sw.lastName].filter(Boolean).join(' ') || t('dash_coach_unnamed');
-      if (blank(sw.usaSwimmingId)) missing.push(`${who}: ${t('dash_attn_usa_id')}`);
-      if (blank(sw.dob)) missing.push(`${who}: ${t('dash_attn_dob')}`);
-      if (blank(sw.gender)) missing.push(`${who}: ${t('dash_attn_gender')}`);
+    const audit = auditRegistration(reg);
+    if (audit.required.length || audit.conflicts.length || audit.optionalGaps.length) {
+      items.push({ regId: reg.id, name: getParentNameFromReg(reg), audit });
     }
-    if (missing.length) items.push({ regId: reg.id, name: getParentNameFromReg(reg), missing });
   }
   return items;
+}
+
+// ── Attention rendering helpers ──
+const ATTENTION_FIELD_LABEL_KEYS = {
+  parent: {
+    firstName: 'dash_attn_parent_first',
+    lastName: 'dash_attn_parent_last',
+    gender: 'dash_attn_parent_gender',
+    phone: 'dash_attn_parent_phone',
+    address: 'dash_attn_parent_address',
+  },
+  emergency: {
+    name: 'dash_attn_emergency_name',
+    phone: 'dash_attn_emergency_phone',
+  },
+  swimmer: {
+    firstName: 'dash_attn_swimmer_first',
+    lastName: 'dash_attn_swimmer_last',
+    gender: 'dash_attn_gender',
+    dob: 'dash_attn_dob',
+    usaSwimmingId: 'dash_attn_usa_id',
+  },
+  spouse: {
+    firstName: 'dash_attn_spouse_first',
+    lastName: 'dash_attn_spouse_last',
+    gender: 'dash_attn_spouse_gender',
+    phone: 'dash_attn_spouse_phone',
+    email: 'dash_attn_spouse_email',
+  },
+};
+
+const ATTENTION_SCOPE_LABEL_KEYS = {
+  parent: 'dash_attn_scope_parent',
+  swimmer: 'dash_attn_scope_swimmer',
+  emergency: 'dash_attn_scope_emergency',
+  spouse: 'dash_attn_scope_spouse',
+  family: 'dash_attn_scope_family',
+  other: 'dash_attn_scope_other',
+};
+
+const ATTENTION_CONFLICT_LABEL_KEYS = {
+  emergency_name_same_as_parent: 'dash_attn_conflict_emergency_name_same',
+  emergency_phone_same_as_parent: 'dash_attn_conflict_emergency_phone_same',
+  spouse_name_same_as_parent: 'dash_attn_conflict_spouse_name_same',
+  spouse_email_same_as_parent: 'dash_attn_conflict_spouse_email_same',
+  parent_email_missing: 'dash_attn_conflict_parent_email_missing',
+  parent_emails_missing: 'dash_attn_conflict_parent_emails_missing',
+  parent_email_not_in_parent_emails: 'dash_attn_conflict_parent_email_not_in_parent_emails',
+  parent_email_mismatch_auth: 'dash_attn_conflict_parent_email_mismatch_auth',
+};
+
+function attentionFieldText(scope, field) {
+  const key = ATTENTION_FIELD_LABEL_KEYS[scope]?.[field];
+  return key ? t(key) : String(field);
+}
+
+function attentionRequiredText(item) {
+  if (item.scope === 'family' && item.field === 'activeSwimmers') {
+    return t('dash_attn_no_active_swimmers');
+  }
+  if (item.field === '__missing__') {
+    return t(`dash_attn_${item.scope}_missing`);
+  }
+  const field = attentionFieldText(item.scope, item.field);
+  if (item.scope === 'swimmer') {
+    const who = item.swimmerName || t('dash_coach_unnamed');
+    return `${escapeHtml(who)}: ${escapeHtml(field)}`;
+  }
+  const scope = t(ATTENTION_SCOPE_LABEL_KEYS[item.scope] || ATTENTION_SCOPE_LABEL_KEYS.other);
+  return `${escapeHtml(scope)}: ${escapeHtml(field)}`;
+}
+
+function attentionOptionalText(item) {
+  const field = attentionFieldText(item.scope, item.field);
+  if (item.scope === 'swimmer') {
+    const who = item.swimmerName || t('dash_coach_unnamed');
+    return `${escapeHtml(who)}: ${escapeHtml(field)}`;
+  }
+  const scope = t(ATTENTION_SCOPE_LABEL_KEYS[item.scope] || ATTENTION_SCOPE_LABEL_KEYS.other);
+  return `${escapeHtml(scope)}: ${escapeHtml(field)}`;
+}
+
+function attentionConflictText(conflict) {
+  const key = ATTENTION_CONFLICT_LABEL_KEYS[conflict.type] || 'dash_attn_conflict_unknown';
+  return escapeHtml(t(key, {
+    parentEmail: conflict.parentEmail || '',
+    authEmail: conflict.authEmail || '',
+  }));
+}
+
+function renderAttentionGroup(labelKey, className, items, formatter) {
+  if (!items.length) return '';
+  return `
+    <div class="dash-attn-group">
+      <div class="dash-attn-group-label ${className}">${t(labelKey)}</div>
+      <div class="dash-attn-list">
+        ${items.map((item) => `<span class="dash-attn-chip dash-attn-chip--${className}">${formatter(item)}</span>`).join('')}
+      </div>
+    </div>`;
 }
 
 // 相对时间("today" / "3d ago");createdAt 可能是 Firestore Timestamp 或 ISO 字符串。
@@ -2141,7 +2228,7 @@ function renderCoachOverview() {
   const activeSwimmers = getCoachActiveSwimmers();
   const newRegistrations = getCoachRecentRegistrations();
   const attention = getCoachAttentionItems();
-  const attentionByReg = new Map(attention.map((a) => [a.regId, a.missing]));
+  const attentionByReg = new Map(attention.map((a) => [a.regId, a.audit]));
 
   // 「Upcoming Meets」与 Meets tab 保持同一口径:当前赛季 + 按日期分桶。
   // 不能用 meet.status —— 表单只会写 'Open',代码里没有任何地方写 'Completed',
@@ -2160,10 +2247,6 @@ function renderCoachOverview() {
     .filter((m) => !m.feeData || !Array.isArray(m.feeData.swimmers) || m.feeData.swimmers.length === 0)
     .sort((a, b) => String(a.startDate || a.date || '').localeCompare(String(b.startDate || b.date || '')));
 
-  // P2:当前 period 的每周训练(按周几 + 开始时间排序)
-  const periodSlots = sessionSlots
-    .filter((s) => (s.period || '') === currentPeriod)
-    .sort((a, b) => (DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)) || String(a.startTime || '').localeCompare(String(b.startTime || '')));
 
   const recentRows = newRegistrations.slice(0, 5).map((r) => ({
     r,
@@ -2196,18 +2279,26 @@ function renderCoachOverview() {
     </div>
 
     <div class="dash-overview-grid">
-      <div class="dash-panel">
+      <div class="dash-panel dash-panel--wide">
         <h3 class="dash-panel-title">${t('dash_coach_needs_attention')}${attention.length ? ` (${attention.length})` : ''}</h3>
         <div class="dash-panel-body">
-          ${attention.length === 0 ? `<p class="dash-empty">${t('dash_coach_needs_attention_empty')}</p>` :
-          attention.slice(0, 5).map(a => `
+          ${attention.length === 0 ? `<p class="dash-empty">${t('dash_coach_needs_attention_empty')}</p>` : `
+          <p class="dash-attn-summary">${t('dash_attn_summary', {
+            required: attention.filter((a) => a.audit.required.length).length,
+            conflicts: attention.filter((a) => a.audit.conflicts.length).length,
+            optional: attention.filter((a) => a.audit.optionalGaps.length).length,
+          })}</p>
+          ${attention.slice(0, 5).map(a => `
             <div class="dash-mini-card">
               <div class="dash-mini-top">
                 <span class="dash-mini-name">${escapeHtml(a.name)}</span>
               </div>
-              <div class="dash-mini-meta dash-mini-missing">${a.missing.map(escapeHtml).join(' · ')}</div>
+              ${renderAttentionGroup('dash_attn_required', 'required', a.audit.required, attentionRequiredText)}
+              ${renderAttentionGroup('dash_attn_conflicts', 'conflicts', a.audit.conflicts, attentionConflictText)}
+              ${renderAttentionGroup('dash_attn_optional', 'optional', a.audit.optionalGaps, attentionOptionalText)}
             </div>
           `).join('') + (attention.length > 5 ? `<p class="dash-empty">+${attention.length - 5} …</p>` : '')}
+          `}
         </div>
       </div>
       <div class="dash-panel">
@@ -2240,21 +2331,7 @@ function renderCoachOverview() {
           `).join('')}
         </div>
       </div>
-      <div class="dash-panel">
-        <h3 class="dash-panel-title">${t('dash_coach_practices')}${periodSlots.length ? ` (${periodSlots.length})` : ''}</h3>
-        <div class="dash-panel-body">
-          <div class="dash-mini-meta" style="margin-bottom:0.5rem;">${escapeHtml(periodLabel(currentPeriod))}</div>
-          ${periodSlots.length === 0 ? `<p class="dash-empty">${t('dash_coach_practices_empty')}</p>` :
-          periodSlots.slice(0, 4).map(s => `
-            <div class="dash-mini-card">
-              <div class="dash-mini-top">
-                <span class="dash-mini-name">${escapeHtml(s.day || '')} · ${escapeHtml(s.startTime || '')}</span>
-              </div>
-              <div class="dash-mini-meta">${escapeHtml(s.location || '')}${s.groupLabel ? ` · ${escapeHtml(s.groupLabel)}` : ''}</div>
-            </div>
-          `).join('') + (periodSlots.length > 4 ? `<p class="dash-empty">+${periodSlots.length - 4} …</p>` : '')}
-        </div>
-      </div>
+
     </div>
   `;
 }
