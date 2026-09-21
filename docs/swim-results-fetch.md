@@ -1,7 +1,8 @@
 # 游泳成绩抓取(USA Swimming Data Hub)工作流说明
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
-> 最后更新:2026-09-19(新增 Fetch New Athletes Only / 错误持久化 / 首阶段重试与鉴权处理)。
+> 最后更新:2026-09-21(新增第 10 节:两个 USAS 端点返回无 CORS 头的 406,会导致每个队员在
+> 第一个请求就失败;此前 2026-09-19 新增 Fetch New Athletes Only / 错误持久化 / 首阶段重试与鉴权处理)。
 
 ## 1. 三个按钮
 
@@ -104,7 +105,55 @@
 - 展示:教练端 Athlete Data Status 表、View Athlete Results、家庭端 Results tab。
 - Mock 模式(`?mock=1`,仅 dev):不发真实请求、不写 Firestore,压缩等待时间。
 
-## 10. 维护备注
+## 10. 已知的 USAS API 异常 — 两个端点返回「不带 CORS 头的 406」
+
+**2026-09-21 观测到**(此前约 14:55 UTC 仍正常,14:56 起失效)。
+
+现象:点 Fetch New Athletes Only / Fetch All 后,**每个队员都在第一个请求就失败**,日志只有
+`❌ Failed: Failed to fetch`,每个队员**恰好耗时约 86 秒**(= `retryDelaysMs` 的 5s+20s+60s
+退避跑满),然后跳到下一个队员继续同样失败。存入的 `lastFetchError` 形如:
+
+```json
+{"httpStatus":null,"message":"Failed to fetch","retryable":true,"authError":false,
+ "endpoint":".../GetBestTimesForMember/<id>"}
+```
+
+实测三个端点(真实凭证 / 伪造凭证 / 不带凭证):
+
+| 端点 | 真实凭证 | 伪造凭证 | `Access-Control-Allow-Origin` |
+|---|---|---|---|
+| `GetBestTimesForMember/{id}`(每个队员第 1 个调用) | 406 | 406 | **缺失** |
+| `GetSwimmerMeets/{id}`(第 2 个调用) | 406 | 406 | **缺失** |
+| `GetSwimmerMeetTimes/{id}/{meetId}` | **200(真实数据)** | 401 | `*` |
+
+结论:
+
+1. **凭证是有效的。** `GetSwimmerMeetTimes` 用现有凭证返回 200 和真实数据、用伪造凭证返回
+   401,说明该端点确实校验鉴权且**接受了我们的凭证**。**不要因为这个问题去重新复制
+   device-id / sub-id / session-id。**
+2. **406 发生在鉴权之前。** 伪造凭证收到的是 406 而不是 401,说明是边缘层(网关/WAF)直接拒绝
+   了这两个路径,根本没走到鉴权。所以既不是会话过期,也不是账号被限流。
+3. **浏览器读不到真实状态码,这是最坑的一点。** 这两个 406 响应**不带任何 CORS 头**(而 404、
+   成功响应、站点根都带 `*`),浏览器因此拒绝把响应交给 JS,`fetch()` 抛
+   `TypeError: Failed to fetch`,**`httpStatus` 记为 `null`**。于是应用把「API 边缘拒绝」误判成
+   「网络错误」,按可重试错误退避重试 3 次,`authError` 也失真为 `false`。
+4. 本文档此前记录、代码 `USAS_BASE` 上方注释引用的 2026-08-01 假设 ——
+   「`Access-Control-Allow-Origin: *` 且允许 appname/device-id/usas-session-id/usas-sub-id
+   自定义头,无需代理」—— **对这两个端点已不成立**。同处注释也已预见「若生产出现 CORS 问题,
+   需要一个 Cloud Function 之类的代理」。
+
+排查方式:
+
+- **抓取前先跑** `node .tmp/check-usas-endpoints.mjs`(约 6 个请求)。它按上表分类并给出结论:
+  凭证是否有效、抓取端点是否可用。看到 `fetch endpoints: HEALTHY` 再点抓取按钮。
+- **不要在这个状态下反复重跑**:每个队员会白烧约 85 秒重试,持续请求还可能延长限流。
+- **区分「本地网络问题」和「API 拒绝」**:同一台机器上 `GET https://times-api.usaswimming.org/`
+  返回 200(站点根是 Swagger UI 页面),而 `GET .../GetBestTimesForMember/{id}` 返回 406。
+  所以「根路径能打开」**不能**证明抓取端点可用。
+- **判断是否按 IP 限流**:换一个出口 IP(例如手机关 Wi-Fi 用蜂窝数据)试一次。若那边能通,
+  说明是 IP 维度的限制,换网络即可绕过;若同样 406,则是端点整体问题,只能等。
+
+## 11. 维护备注
 
 - 改增量逻辑时保持 `needsFetch` 单一职责,并同步更新本文。
 - 若 USAS API 行为变化(空结果语义、限流状态码等),先更新本文再改代码。
