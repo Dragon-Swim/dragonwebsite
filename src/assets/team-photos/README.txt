@@ -11,3 +11,14 @@ Dragon Swim — Meet The Team 照片文件夹
    03-third.jpg
 3. 照片加入后，需要重新 build 并部署才会出现在网站上。
 4. 这个文件夹里的照片会随网站代码一起提交（仓库是 public），如有隐私顾虑请提前告知。
+
+全分辨率原图
+============
+
+这个文件夹里放的是压缩版（为了网页加载速度），全分辨率原图不在仓库里，
+存放在仓库外的文档目录：
+
+  J:\MyDocuments\GitHub\Dragon-Swim\dragon_documents\team-photos-originals-backup\
+
+原图不进入 git，也不随网站部署。需要重新裁剪、导出其他尺寸或印刷时，请用原图
+重新导出后再放进本文件夹。原图是唯一一份，请勿删除。
