@@ -5,6 +5,15 @@ credentials.json
 token.json
 serviceAccountKey.json
 
+# Full-resolution team photo masters — NOT stored in this repo.
+# They live outside it (J:\MyDocuments\GitHub\Dragon-Swim\team-photos-originals-backup).
+# The site only ever needs the downscaled copies in src/assets/team-photos/,
+# which ARE tracked. These patterns are a safety net so that a stray copy of the
+# ~30 MB originals can never be committed by accident. They do NOT match
+# src/assets/team-photos/.
+team-photos-originals/
+team-photos-originals-backup/
+
 # Intermediate / temp files
 .tmp/
 node_modules/
