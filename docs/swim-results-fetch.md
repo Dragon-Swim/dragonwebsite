@@ -161,8 +161,9 @@
 
 排查方式:
 
-- **抓取前先跑** `node .tmp/check-usas-endpoints.mjs`(约 6 个请求)。它按上表分类并给出结论:
+- **抓取前先跑** `node local-tools/check-usas-endpoints.mjs`(约 6 个请求)。它按上表分类并给出结论:
   凭证是否有效、抓取端点是否可用。看到 `fetch endpoints: HEALTHY` 再点抓取按钮。
+  (该工具是**本机专用**、不进仓库,见 `local-tools/README.md`;若不在本机,按上面的表手工对照即可。)
 - **不要在这个状态下反复重跑**:每个队员会白烧约 85 秒重试,持续请求还可能延长限流。
 - **区分「本地网络问题」和「API 拒绝」**:同一台机器上 `GET https://times-api.usaswimming.org/`
   返回 200(站点根是 Swagger UI 页面),而 `GET .../GetBestTimesForMember/{id}` 返回 406。

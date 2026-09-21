@@ -19,6 +19,12 @@ team-photos-originals-backup/
 .tmp/
 node_modules/
 
+# Local-only operator tools — deliberately NOT synced to the repo.
+# Holds things like local-tools/check-usas-endpoints.mjs, a pre-flight check for
+# the swim-results fetch. Kept out of .tmp/ because .tmp/ is documented as
+# disposable; see local-tools/README.md.
+local-tools/
+
 # Python
 __pycache__/
 *.pyc
