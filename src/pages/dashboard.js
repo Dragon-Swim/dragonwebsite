@@ -13,6 +13,7 @@ import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js'
 import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
 import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
 import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
+import { sortSwimmersByLastName } from '../utils/swimmerSort.js';
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
@@ -975,6 +976,10 @@ function getSwimmersWithUsaId() {
       swimmers.push({
         usaSwimmingId: s.usaSwimmingId || null,
         name: [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unknown',
+        // 姓名分开留着供显示层按姓氏排序(本数组的顺序同时决定抓取顺序,
+        // 所以这里只加字段、不改顺序)。
+        firstName: s.firstName || '',
+        lastName: s.lastName || '',
         hasId: !!s.usaSwimmingId,
         dob: s.dob || null,        // 趋势图标准线需要(按比赛日年龄选年龄组)
         gender: s.gender || null,  // 标准表分男女(官方表 B 档有女快于男特例)
@@ -1388,7 +1393,8 @@ async function fetchAllSwimmerResults(creds, onProgress, opts = {}) {
 
 function renderCoachResults() {
   // mock 模式用 MOCK_SWIMMERS,与 fetch 流程/loadAthleteDataStatus 保持一致
-  const swimmers = MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId();
+  // 按姓氏排序仅作用于本表显示:getSwimmersWithUsaId() 的原始顺序仍是抓取顺序的来源。
+  const swimmers = sortSwimmersByLastName(MOCK_MODE ? MOCK_SWIMMERS : getSwimmersWithUsaId());
   const withId = swimmers.filter(s => s.hasId);
   const withoutId = swimmers.filter(s => !s.hasId);
 
@@ -2378,7 +2384,9 @@ function renderCoachOverview() {
 
 
 function renderCoachRoster() {
-  const activeSwimmers = getCoachActiveSwimmers();
+  // 按姓氏显示排序(名作为同姓时的第二关键字)。只影响显示:getCoachActiveSwimmers()
+  // 的原始顺序仍供其他调用方使用。
+  const activeSwimmers = sortSwimmersByLastName(getCoachActiveSwimmers());
   const isAdmin = dbRole === 'admin';
 
   // Column headers vary by role

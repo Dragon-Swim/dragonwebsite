@@ -8,6 +8,7 @@
  */
 
 import { t } from '../utils/i18n.js';
+import { sortSwimmersByLastName } from '../utils/swimmerSort.js';
 import { LOCATION_ORDER, DAY_ORDER, PERIODS, periodLabel } from '../data/seasonSchedule.data.js';
 import {
   db, doc, setDoc, updateDoc, deleteDoc, addDoc,
@@ -462,7 +463,9 @@ function renderAthleteSchedule(st) {
 
 function managerRowsHtml(st, live, slot, queryText) {
   const q = (queryText || '').trim().toLowerCase();
-  const all = st.activeSwimmers || [];
+  // 与 Roster / Swim Times 两个名单保持同一顺序(按姓氏,名作第二关键字),
+  // 这样教练在三个地方找同一个孩子的相对位置是一致的。
+  const all = sortSwimmersByLastName(st.activeSwimmers || []);
   const rows = all.filter(sw => {
     if (!q) return true;
     const name = [sw.firstName, sw.lastName, sw.parentName].filter(Boolean).join(' ').toLowerCase();
