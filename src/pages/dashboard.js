@@ -12,6 +12,7 @@ import { initTheme, toggleTheme } from '../components/theme-toggle.js';
 import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js';
 import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
 import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
+import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
@@ -712,6 +713,9 @@ const FETCH_POLICY = {
   cooldownMs: 300000,                  // 疑似限流时全局暂停
   emptyCooldownAfter: 5,               // 连续 N 场返回空数组 → 判定疑似软降级(200+空数据)
   emptyCooldownMs: 600000,             // 软降级时全局暂停 10 分钟
+  // 连续 N 个队员都在第一个请求上「读不到任何响应」→ 整轮注定失败,提前中止,
+  // 免得每个队员白烧一遍退避重试。判据见 src/utils/fetchHealth.js。
+  abortAfterConsecutiveBlocked: BLOCKED_RUN_ABORT_AFTER,
 };
 const RETRYABLE_HTTP = new Set([406, 429, 500, 502, 503, 504]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -832,6 +836,13 @@ function describeFetchError(err, fallbackEndpoint = null) {
     message: err?.message || String(err),
     retryable: !!err?.retryable,
     authError: !!err?.authError,
+    // 没有任何可读的状态码。浏览器下这意味着两种情况之一,且无法区分:
+    //   (a) 连不上/连接中断/超时;或
+    //   (b) 响应回来了但没有 Access-Control-Allow-Origin,浏览器不允许 JS 读取。
+    // 2026-09-21 就是 (b):两个 USAS 端点对所有调用者都返回 406 且不带 CORS 头,
+    // 在这里表现为 message:"Failed to fetch" + httpStatus:null,而不是 406。
+    // 所以这个字段只声明「读不到响应」,不声称知道真实状态码。见 docs/swim-results-fetch.md §10。
+    responseUnreadable: isUnreadableResponse(err),
     at: new Date().toISOString(),
   };
 }
@@ -1305,6 +1316,8 @@ async function fetchAllSwimmerResults(creds, onProgress, opts = {}) {
   let attempted = 0;
   const errors = [];
   let authFailure = null;
+  let blockedAbort = null;
+  let consecutiveBlocked = 0;   // 连续「第一个请求就读不到响应」的队员数
 
   for (let i = 0; i < swimmers.length; i++) {
     const sw = swimmers[i];
@@ -1334,6 +1347,7 @@ async function fetchAllSwimmerResults(creds, onProgress, opts = {}) {
         errors.push(...summary.errors.map((e) => `${sw.name}: ${e}`));
       }
       success++;
+      consecutiveBlocked = 0;   // 这个队员跑通了 → 计数归零
     } catch (err) {
       failed++;
       errors.push(`${sw.name}: ${err.message}`);
@@ -1341,6 +1355,22 @@ async function fetchAllSwimmerResults(creds, onProgress, opts = {}) {
       if (err.authError) {
         authFailure = { name: sw.name, memberId: sw.usaSwimmingId, message: err.message, endpoint: err.endpoint || null };
         onProgress({ type: "auth-error", name: sw.name, memberId: sw.usaSwimmingId, message: err.message, endpoint: err.endpoint || null });
+        break;
+      }
+
+      // 失败快速通道:如果连续多个队员都倒在「第一个请求」且读不到任何响应,那么剩下的
+      // 队员也必然如此 —— 继续跑只是每个队员白烧一整轮退避重试(约 85 秒)。整轮中止。
+      // 中止是安全的:每个抓完的 meet 都已单独落库,重跑会从断点继续。
+      const blocked = nextBlockedRunState(consecutiveBlocked, err);
+      consecutiveBlocked = blocked.count;
+      if (blocked.abort) {
+        blockedAbort = {
+          count: consecutiveBlocked,
+          threshold: FETCH_POLICY.abortAfterConsecutiveBlocked,
+          attempted,
+          total: swimmers.length,
+        };
+        onProgress({ type: "blocked-abort", ...blockedAbort });
         break;
       }
     }
@@ -1353,7 +1383,7 @@ async function fetchAllSwimmerResults(creds, onProgress, opts = {}) {
     }
   }
 
-  onProgress({ type: "done", total: swimmers.length, attempted, success, failed, errors, authError: authFailure, newOnly });
+  onProgress({ type: "done", total: swimmers.length, attempted, success, failed, errors, authError: authFailure, blockedAbort, newOnly });
 }
 
 function renderCoachResults() {
@@ -5178,12 +5208,22 @@ function bindEvents() {
             statusEl.textContent = "❌ Auth error — update credentials";
             statusEl.style.color = "var(--color-accent)";
             break;
+          case "blocked-abort":
+            appendLog("", false);
+            appendLog(`⛔ Stopping early: ${evt.count} athletes in a row failed on their very first request with no response.`, true);
+            appendLog("   The API is either unreachable right now, or it is rejecting the request before it gets read.", true);
+            appendLog("   Nothing was lost — every meet already fetched is saved, and a later run resumes from there.", true);
+            statusEl.textContent = `⛔ Stopped early at ${evt.attempted} / ${evt.total}`;
+            statusEl.style.color = "var(--color-accent)";
+            break;
           case "progress":
             statusEl.textContent = `⏳ ${evt.index} / ${evt.total} (✅ ${evt.success} ❌ ${evt.failed})`;
             break;
           case "done":
             if (evt.authError) {
               appendLog(`⛔ Stopped after ${evt.attempted}/${evt.total} athlete(s): credentials need refresh.`, true);
+            } else if (evt.blockedAbort) {
+              appendLog(`⛔ Run stopped early — ${evt.success} succeeded, ${evt.failed} failed. Retry when the API is reachable again.`, true);
             } else {
               statusEl.textContent = `✅ Done: ${evt.success} succeeded, ${evt.failed} failed`;
               statusEl.style.color = evt.failed > 0 ? "var(--color-accent)" : "#16A34A";

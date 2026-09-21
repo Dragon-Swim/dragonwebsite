@@ -2,7 +2,9 @@
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
 > 最后更新:2026-09-21(新增第 10 节:两个 USAS 端点返回无 CORS 头的 406,会导致每个队员在
-> 第一个请求就失败;此前 2026-09-19 新增 Fetch New Athletes Only / 错误持久化 / 首阶段重试与鉴权处理)。
+> 第一个请求就失败;第 5 节新增 `responseUnreadable` 字段与「连续 3 个队员首个请求失败即中止
+> 整轮」的 fail-fast 行为;此前 2026-09-19 新增 Fetch New Athletes Only / 错误持久化 /
+> 首阶段重试与鉴权处理)。
 
 ## 1. 三个按钮
 
@@ -53,12 +55,26 @@
 
 **每个队员最近一次错误**:
 - `swimResults/{memberId}.lastFetchError` 记录最近一次 `GetBestTimesForMember` / `GetSwimmerMeets` / `GetSwimmerMeetTimes` 的错误。
+- 字段:`endpoint`、`httpStatus`、`message`、`retryable`、`authError`、**`responseUnreadable`**、`at`。
+- **`responseUnreadable`**(2026-09-21 新增)为 `true` 表示**拿不到任何状态码**,即 `httpStatus: null`
+  且不是鉴权错误。浏览器下这只说明「读不到响应」,无法区分是网络断了还是响应缺 CORS 头被浏览器
+  拦下 —— 详见第 10 节。它**不**声称知道真实状态码。
 - 下次 bestTimes 成功或首次全量完成时会清空该字段。
 
 **重试策略**:
 - `GetBestTimesForMember`、`GetSwimmerMeets`、`GetSwimmerMeetTimes` 统一支持 406/429/5xx/网络/超时的退避重试。
 - 401/403 视为鉴权错误:停止整轮并提示更新 API Credentials,不会给每个队员各报一次错。
 - 逐 meet 仍保留连续失败熔断和连续 empty 软降级暂停。
+
+**整轮提前中止(fail fast,2026-09-21 新增)**:
+- 若**连续 3 个队员**(`abortAfterConsecutiveBlocked`,判据在 `src/utils/fetchHealth.js`)
+  都倒在**各自的第一个请求** `GetBestTimesForMember` 上且 `responseUnreadable`,则判定整轮
+  注定失败,**立即中止**并提示「API 不可达或请求被拒绝」。
+- 为什么需要:此前每个队员都会白烧一整轮退避重试(5s+20s+60s ≈ 85 秒)。5 个队员就是
+  7 分钟全废;现在跑到第 3 个就停,省下后面每个 ~85 秒。
+- 中止是**安全**的:每个抓完的 meet 都已单独落库,下次运行从断点继续,不丢数据。
+- 已成功的队员会**重置**计数器;不是"第一个请求"的失败(例如某个 meet 抓失败)也**不会**计数,
+  所以偶发抖动不会误杀整轮。
 
 ## 6. 日常操作流程
 
@@ -94,6 +110,7 @@
 | best times / meets 列表 | `fetchBestTimes` / `fetchMeets` |
 | 逐 meet 抓取 | `fetchMeetTimes` |
 | 错误持久化 | `describeFetchError` / `recordFetchError` |
+| 失败分类与整轮中止判据 | `src/utils/fetchHealth.js`(`isUnreadableResponse` / `isBlockedFirstCall` / `nextBlockedRunState`) |
 | 单队员抓取 | `fetchSwimmerData` |
 | 新队员筛选与标记 | `getSwimmersForMode` / `markInitialFetchComplete` |
 | 全队/新队员入口 | `fetchAllSwimmerResults` |
