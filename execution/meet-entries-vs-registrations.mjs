@@ -258,7 +258,18 @@ const overlap = aEmails.filter((e) => caseB.some((b) => b.email === e));
 checks.push([`A 类与 B 类不重叠`, overlap.length === 0]);
 
 // ── 产出 md ─────────────────────────────────────────────────────────────────
-const bcc = (list) => list.join(', ');
+/**
+ * BCC 串。**分号，不是逗号。**
+ *
+ * 2026-09-22 教练实测：逗号版粘进 Gmail 的 BCC 会被整串拒绝（地址栏不收），换分号就过。
+ * 数据侧不是原因 —— 名单全是 ASCII、无隐藏字符、每条都通过严格正则（.tmp/check-bcc-separators.py
+ * 逐字符验过）。分号还有一个好处：它强制客户端逐条切分，真有一条非法时只有那一条留成
+ * 文本，而不是整串失败 —— 这样坏地址才找得到。列表里每条都合法时，逗号其实也能用。
+ *
+ * 因此每个名单都给两种格式：分号串（发信就用它）+ 一行一个（排查非法收件人时最直观）。
+ */
+const bcc = (list) => list.join('; ');
+const bccLines = (list) => list.join('\n');
 const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
 const md = `# ${meet.name || 'Meet'} — 报名表 vs 注册状态（自动生成，勿手改）
@@ -285,14 +296,24 @@ ${meet.startDate ? `比赛日期：${meet.startDate} → ${meet.endDate}\n` : ''
 这些家庭的**孩子已经报名参加比赛**，但网站上还没完成注册。没有账号就没有队费核算、
 没有志愿者报名、也收不到成绩通知 —— 属于阻塞项，优先发。
 
-### Addresses — 整行复制进 BCC
+### Addresses — 整行复制进 BCC（**分号**分隔）
 
 \`\`\`
 ${bcc(aEmails)}
 \`\`\`
 
+> **用分号，不要用逗号。** 2026-09-22 教练实测：逗号版粘进 Gmail 地址栏会被整串拒绝
+> （报 invalid recipient），分号版正常。名单数据本身是干净的（全 ASCII、无隐藏字符、
+> 每条都合法），所以差别只在客户端怎么切分。
+>
 > **用 BCC，别用 To/Cc。** 这些是别人家的邮箱地址，放在 To/Cc 会把所有家长的地址
 > 暴露给彼此（以及任何转发的人）。To 填自己的队邮箱，名单粘贴到 BCC。
+
+备选格式 —— 一行一个地址（某个客户端仍报 invalid recipient 时，用这个最容易看出是哪一条）：
+
+\`\`\`
+${bccLines(aEmails)}
+\`\`\`
 
 ### 明细（仅备查，不用于发送）
 
@@ -367,6 +388,12 @@ ${needReview.map((n) => `| ${n.name} | ${n.age} | ${n.reason} | ${n.candidates.j
 ${bcc(bMeet.map((r) => r.email))}
 \`\`\`
 
+备选（一行一个）：
+
+\`\`\`
+${bccLines(bMeet.map((r) => r.email))}
+\`\`\`
+
 | # | Email | 家长 | 本场参赛且缺 ID | 家里其他缺 ID 的 | 名册人数 |
 |---|---|---|---|---|---|
 ${bMeet.map((r, i) => {
@@ -378,6 +405,12 @@ ${bMeet.map((r, i) => {
 
 \`\`\`
 ${bcc(bRest.map((r) => r.email))}
+\`\`\`
+
+备选（一行一个）：
+
+\`\`\`
+${bccLines(bRest.map((r) => r.email))}
 \`\`\`
 
 | # | Email | 家长 | 缺 ID 的孩子 | 名册人数 |
