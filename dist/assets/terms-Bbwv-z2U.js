@@ -1,4 +1,4 @@
-import{i as e}from"./i18n-Dhlwridd.js";import{a as t,r as i}from"./footer-aIqS8IaP.js";e();t();const r=document.getElementById("app");r.innerHTML=`
+import{i as e}from"./i18n-xMjO5e8v.js";import{a as t,r as i}from"./footer-CwjWw8Ec.js";e();t();const r=document.getElementById("app");r.innerHTML=`
   <section class="section" style="min-height: calc(100vh - var(--nav-height)); align-content: center;">
     <div class="container" style="max-width: 800px;">
       <h1 class="section-title">Terms & Conditions</h1>

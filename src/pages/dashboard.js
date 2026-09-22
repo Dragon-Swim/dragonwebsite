@@ -14,6 +14,18 @@ import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
 import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
 import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
 import { sortSwimmersByLastName } from '../utils/swimmerSort.js';
+import {
+  VOLUNTEER_COLLECTION,
+  volunteerDocId,
+  normalizeHours,
+  roundHours,
+  buildVolunteerSummary,
+  buildMeetEntryRows,
+  meetTotalHours,
+  volunteerStats,
+  volunteerSummaryCSV,
+  volunteerDetailCSV,
+} from '../utils/volunteerHours.js';
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
@@ -34,6 +46,8 @@ let familyData = null;
 let familyDataId = null;
 let allRegistrations = [];
 let deposits = [];
+let volunteerHours = [];
+let volunteerMeetId = null; // meet selected in the Volunteer Hours entry table
 let currentSeason = getDefaultSeason();
 let currentPeriod = getCurrentPeriodId();
 let scheduleViewMode = 'slot';
@@ -175,6 +189,16 @@ function initDataListeners() {
     }, (error) => {
       console.error("Error listening to deposits:", error);
     });
+
+    // Volunteer hours — no orderBy on purpose: a single equality query needs no
+    // composite index, and the season filter runs client-side (mirrors meets).
+    const qVolunteerHours = query(collection(db, VOLUNTEER_COLLECTION));
+    onSnapshot(qVolunteerHours, (snapshot) => {
+      volunteerHours = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      refreshUI();
+    }, (error) => {
+      console.error("Error listening to volunteerHours:", error);
+    });
   }
 }
 
@@ -239,10 +263,40 @@ function refreshUI() {
 }
 
 function renderCurrentView() {
+  // The live Firestore listeners rebuild innerHTML on every write. Without this,
+  // saving a volunteer-hours cell (which fires a snapshot ~immediately) would drop
+  // focus a few hundred ms later, while the admin is already typing in the next
+  // row. Capture the caret before the rebuild and put it back after.
+  const focus = captureVolunteerFocus();
   if (userRole === 'coach') {
     renderCoachDashboard(currentUser);
   } else {
     renderDashboard(currentUser);
+  }
+  restoreVolunteerFocus(focus);
+}
+
+/** Remember which volunteer field (and caret offset) is focused, if any. */
+function captureVolunteerFocus() {
+  const el = document.activeElement;
+  if (!el || !el.classList || !el.classList.contains('vol-input')) return null;
+  return {
+    familyId: el.dataset.familyId || '',
+    field: el.classList.contains('vol-note-input') ? 'note' : 'hours',
+    selStart: typeof el.selectionStart === 'number' ? el.selectionStart : null,
+    selEnd: typeof el.selectionEnd === 'number' ? el.selectionEnd : null,
+  };
+}
+
+/** Re-focus the same logical field after a re-render. */
+function restoreVolunteerFocus(focus) {
+  if (!focus || !focus.familyId) return;
+  const cls = focus.field === 'note' ? 'vol-note-input' : 'vol-hours-input';
+  const el = document.querySelector(`.${cls}[data-family-id="${focus.familyId}"]`);
+  if (!el) return;
+  el.focus();
+  if (focus.selStart != null && typeof el.setSelectionRange === 'function') {
+    try { el.setSelectionRange(focus.selStart, focus.selEnd); } catch { /* number inputs reject it */ }
   }
 }
 
@@ -372,6 +426,9 @@ function renderCoachDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'meets' ? 'active' : ''}" data-tab="meets">
               <span class="dash-nav-icon">🏁</span> ${t('dash_coach_meets_label')}
             </button>
+            <button class="dash-nav-item ${currentTab === 'volunteer' ? 'active' : ''}" data-tab="volunteer">
+              <span class="dash-nav-icon">🙋</span> ${t('dash_coach_volunteer_label')}
+            </button>
             ${dbRole === 'admin' ? `
             <button class="dash-nav-item ${currentTab === 'feesummary' ? 'active' : ''}" data-tab="feesummary">
               <span class="dash-nav-icon">💰</span> ${t('dash_coach_fee_summary_label')}
@@ -460,6 +517,7 @@ function getTabTitle(tab, role = 'swimmer') {
       'results': 'Swim Times',
       'feesummary': t('dash_coach_tab_fee_summary'),
       'deposits': t('dash_coach_tab_deposits'),
+      'volunteer': t('dash_coach_tab_volunteer'),
     };
     return titles[tab] || t('dash_coach_tab_overview');
   }
@@ -494,6 +552,7 @@ function renderTabContent(tab, role = 'swimmer') {
       case 'results': return renderCoachResults();
       case 'feesummary': return renderFeeSummary();
       case 'deposits': return renderDeposits();
+      case 'volunteer': return renderVolunteerHours();
       default: return renderCoachOverview();
     }
   }
@@ -3253,6 +3312,422 @@ function exportFeeSummaryCSV() {
   URL.revokeObjectURL(url);
 }
 
+// ── Volunteer Hours Tab (2026-09) ──
+//
+// Hours are per FAMILY per MEET, so the tab has two halves: the season summary
+// (all families, expandable to the per-meet breakdown) and the entry table for
+// one selected meet. The model + aggregation live in src/utils/volunteerHours.js
+// so the emulator tests and the read-only audit script share one definition;
+// this file owns only rendering and the Firestore writes.
+
+/** Season meets, newest first. Also repairs `volunteerMeetId` when it no longer
+ *  belongs to the selected season (e.g. right after a season switch). */
+function getVolunteerSeasonMeets() {
+  const meets = swimMeets
+    .filter((m) => getMeetSeason(m) === currentSeason)
+    .sort((a, b) => String(b.startDate || b.date || '').localeCompare(String(a.startDate || a.date || '')));
+
+  if (!volunteerMeetId || !meets.some((m) => m.id === volunteerMeetId)) {
+    // Default to the most recent COMPLETED meet: hours are recorded after the
+    // meet, so that is nearly always the one the admin wants.
+    const past = meets.filter((m) => getMeetDisplay(m).bucket === 'past');
+    volunteerMeetId = (past[0] || meets[0] || {}).id || null;
+  }
+  return meets;
+}
+
+function renderVolunteerSeasonSelector() {
+  const options = getSeasonOptions();
+  const sel = currentSeason || getDefaultSeason();
+  return `
+    <div class="season-selector">
+      <label class="season-selector-label">${t('dash_season_label')}:</label>
+      <select id="volunteer-season-select" class="season-select">
+        ${options.map(s => `<option value="${s}" ${s === sel ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function formatHours(h) {
+  return (Number(h) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function renderVolunteerHours() {
+  const isAdmin = dbRole === 'admin';
+  const seasonMeets = getVolunteerSeasonMeets();
+  const hasFamilies = allRegistrations.length > 0;
+
+  const rows = buildVolunteerSummary({
+    meets: swimMeets,
+    registrations: allRegistrations,
+    hours: volunteerHours,
+    season: currentSeason,
+    meetSeasonOf: getMeetSeason,
+  });
+  const stats = volunteerStats(rows);
+  const rowsWithHours = rows.filter((r) => r.totalHours > 0);
+
+  // ── Summary table ──
+  const summaryRow = (r) => {
+    const kidsCell = r.kidCount === 0
+      ? '<span class="vol-muted">0</span>'
+      : String(r.kidCount);
+    const kidNames = r.kids.length ? escapeHtml(r.kids.join(', ')) : '<span class="vol-muted">—</span>';
+    const hasDetail = r.meets.length > 0;
+    const hide = r.totalHours > 0 ? '' : ' style="display: none;"';
+    return `
+      <tr class="fee-summary-main-row vol-summary-row${r.totalHours > 0 ? '' : ' vol-zero-row'}"
+          data-vol-family="${r.familyId}" ${hasDetail ? 'title="Click to see the per-meet breakdown"' : ''}${hide}>
+        <td><span class="fee-summary-expand-icon">${hasDetail ? '▶' : ''}</span></td>
+        <td class="fee-summary-name">${escapeHtml(r.label || '—')}</td>
+        <td>${kidsCell}</td>
+        <td class="vol-kid-names">${kidNames}</td>
+        <td>${r.meetCount}</td>
+        <td style="font-weight: 700;">${formatHours(r.totalHours)}</td>
+      </tr>
+      ${hasDetail ? `
+      <tr class="fee-summary-detail-row vol-detail-row" data-vol-detail="${r.familyId}"${hide}>
+        <td colspan="6" class="fee-summary-detail-cell">
+          <table class="fee-summary-mini-table">
+            ${r.meets.map((m) => `
+              <tr>
+                <td class="mini-meet-name">${escapeHtml(m.meetName)}${m.startDate ? ` <span class="vol-muted">${escapeHtml(String(m.startDate))}</span>` : ''}${m.note ? ` <span class="vol-muted">— ${escapeHtml(m.note)}</span>` : ''}</td>
+                <td class="mini-meet-fee">${formatHours(m.hours)}</td>
+              </tr>
+            `).join('')}
+            <tr class="mini-meet-total">
+              <td>${t('dash_volunteer_th_total_hours')}</td>
+              <td class="mini-meet-fee">${formatHours(r.totalHours)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ''}
+    `;
+  };
+
+  // ── Entry table for the selected meet ──
+  const entryRows = volunteerMeetId
+    ? buildMeetEntryRows({ registrations: allRegistrations, hours: volunteerHours, meetId: volunteerMeetId })
+    : [];
+  const meetTotal = volunteerMeetId ? meetTotalHours(volunteerHours, volunteerMeetId) : 0;
+
+  const entryRow = (r) => {
+    const kids = r.kids.length ? escapeHtml(r.kids.join(', ')) : '<span class="vol-muted">—</span>';
+    const hoursCell = isAdmin
+      ? `<input type="number" min="0" step="0.5" inputmode="decimal"
+                class="vol-input vol-hours-input" data-family-id="${r.familyId}"
+                value="${r.hours == null ? '' : r.hours}" placeholder="0"
+                aria-label="${t('dash_volunteer_th_hours')}" />`
+      : (r.hours == null ? '<span class="vol-muted">—</span>' : formatHours(r.hours));
+    const noteCell = isAdmin
+      ? `<input type="text" class="vol-input vol-note-input" data-family-id="${r.familyId}"
+                value="${escapeHtml(r.note)}" placeholder="${t('dash_volunteer_note_placeholder')}"
+                aria-label="${t('dash_volunteer_th_note')}" />`
+      : escapeHtml(r.note || '—');
+    return `
+      <tr class="vol-entry-row" data-family-id="${r.familyId}"
+          data-vol-search="${escapeHtml(r.search)}" data-vol-entered="${r.hasRecord ? '1' : '0'}">
+        <td class="vol-entry-family">${escapeHtml(r.label || '—')}</td>
+        <td class="vol-entry-kids">${kids}</td>
+        <td class="vol-entry-hours">${hoursCell}</td>
+        <td class="vol-entry-note">${noteCell}</td>
+        <td class="vol-status" data-family-id="${r.familyId}">${r.updatedBy ? escapeHtml(r.updatedBy) : '—'}</td>
+      </tr>`;
+  };
+
+  return `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+      ${renderVolunteerSeasonSelector()}
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button class="btn btn-outline btn-sm" id="volunteer-export-btn">${t('dash_volunteer_export_summary')}</button>
+        <button class="btn btn-outline btn-sm" id="volunteer-export-detail-btn">${t('dash_volunteer_export_detail')}</button>
+      </div>
+    </div>
+
+    <p class="vol-intro">
+      ${t('dash_volunteer_intro')}
+      ${isAdmin ? '' : `<br><strong>${t('dash_volunteer_admin_only')}</strong>`}
+    </p>
+
+    <div class="dash-stats-row">
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${stats.familiesWithHours}</div>
+        <div class="dash-stat-label">${t('dash_volunteer_stat_families')}</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${formatHours(stats.totalHours)}</div>
+        <div class="dash-stat-label">${t('dash_volunteer_stat_total')}</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${stats.meetCount}</div>
+        <div class="dash-stat-label">${t('dash_volunteer_stat_meets')}</div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-number">${stats.familiesWithoutHours}</div>
+        <div class="dash-stat-label">${t('dash_volunteer_stat_zero')}</div>
+      </div>
+    </div>
+
+    <div class="dash-panel">
+      <h3 class="dash-panel-title">${t('dash_volunteer_summary_title')} — ${escapeHtml(currentSeason)}</h3>
+      ${!hasFamilies ? `<p class="dash-empty">${t('dash_volunteer_no_families')}</p>` : `
+        ${rowsWithHours.length === 0 ? `<p class="dash-empty">${t('dash_volunteer_empty', { season: currentSeason })}</p>` : ''}
+        <div class="vol-summary-table-wrapper">
+          <table class="fee-summary-table vol-summary-table">
+            <thead>
+              <tr>
+                <th style="width: 28px;"></th>
+                <th>${t('dash_volunteer_th_family')}</th>
+                <th>${t('dash_volunteer_th_kids')}</th>
+                <th>${t('dash_volunteer_th_kid_names')}</th>
+                <th>${t('dash_volunteer_th_meets')}</th>
+                <th>${t('dash_volunteer_th_total_hours')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(summaryRow).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${stats.familiesWithoutHours > 0 ? `
+        <label class="vol-toggle">
+          <input type="checkbox" id="volunteer-show-zero" />
+          ${t('dash_volunteer_show_zero')} (${stats.familiesWithoutHours})
+        </label>` : ''}`}
+    </div>
+
+    <div class="dash-panel" style="margin-top: 1.5rem;">
+      <h3 class="dash-panel-title">${t('dash_volunteer_entry_title')}</h3>
+      ${seasonMeets.length === 0 ? `
+        <p class="dash-empty">${t('dash_volunteer_no_meets', { season: currentSeason })}</p>
+      ` : `
+        <div class="vol-entry-toolbar">
+          <div class="season-selector">
+            <label class="season-selector-label">${t('dash_volunteer_meet_label')}:</label>
+            <select id="volunteer-meet-select" class="season-select">
+              ${seasonMeets.map((m) => `
+                <option value="${m.id}" ${m.id === volunteerMeetId ? 'selected' : ''}>
+                  ${escapeHtml(m.name || 'Unnamed Meet')}${m.startDate ? ` — ${escapeHtml(m.startDate)}` : ''}
+                </option>`).join('')}
+            </select>
+          </div>
+          <input type="search" id="volunteer-search" class="form-input vol-search"
+                 placeholder="${t('dash_volunteer_search_placeholder')}" />
+          <label class="vol-toggle">
+            <input type="checkbox" id="volunteer-only-entered" />
+            ${t('dash_volunteer_only_entered')}
+          </label>
+        </div>
+
+        ${entryRows.length === 0 ? `<p class="dash-empty">${t('dash_volunteer_no_families')}</p>` : `
+        <div class="vol-entry-table-wrapper">
+          <table class="vol-entry-table">
+            <thead>
+              <tr>
+                <th>${t('dash_volunteer_th_family')}</th>
+                <th>${t('dash_volunteer_th_kid_names')}</th>
+                <th style="width: 110px;">${t('dash_volunteer_th_hours')}</th>
+                <th style="width: 220px;">${t('dash_volunteer_th_note')}</th>
+                <th style="width: 150px;">${t('dash_volunteer_th_updated')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${entryRows.map(entryRow).join('')}
+            </tbody>
+          </table>
+        </div>
+        <p class="vol-entry-footer">
+          ${t('dash_volunteer_meet_total')}: <strong>${formatHours(meetTotal)}</strong>
+          <span id="volunteer-no-match" style="display: none; color: var(--text-muted); margin-left: 1rem;">${t('dash_volunteer_no_match')}</span>
+        </p>`}
+      `}
+    </div>
+  `;
+}
+
+/** Persist one family's hours for one meet. Returns true when the write settled. */
+async function saveVolunteerHours({ familyId, meetId, hours, note, statusEl }) {
+  if (dbRole !== 'admin') {
+    // Never trust the DOM: the inputs are not rendered for coaches, but a stale
+    // tab could still submit. The rules would reject it anyway.
+    console.warn('Non-admin attempted to save volunteer hours — blocked');
+    if (statusEl) statusEl.textContent = t('dash_volunteer_admin_only');
+    return false;
+  }
+  if (!familyId || !meetId) return false;
+
+  // A non-empty but unusable value must NOT silently wipe an existing record.
+  const raw = String(hours ?? '').trim();
+  if (raw !== '' && normalizeHours(raw) == null) {
+    if (statusEl) statusEl.textContent = t('dash_volunteer_invalid_hours');
+    return false;
+  }
+  const parsed = normalizeHours(raw);
+  const trimmedNote = String(note ?? '').trim();
+  const docId = volunteerDocId(meetId, familyId);
+  const existing = volunteerHours.find((v) => v.id === docId);
+
+  if (statusEl) statusEl.textContent = t('dash_volunteer_saving');
+  try {
+    // Nothing recorded any more → remove the doc so "has hours" stays truthful
+    // and the summary does not carry empty rows forever.
+    if (parsed == null && !trimmedNote) {
+      if (existing) await deleteDoc(doc(db, VOLUNTEER_COLLECTION, docId));
+      return true;
+    }
+
+    const meet = swimMeets.find((m) => m.id === meetId);
+    const reg = allRegistrations.find((r) => r.id === familyId);
+    await setDoc(doc(db, VOLUNTEER_COLLECTION, docId), {
+      meetId,
+      meetName: (meet && meet.name) || '',
+      season: meet ? (getMeetSeason(meet) || currentSeason) : currentSeason,
+      familyId,
+      familyLabel: reg ? familyLabelOf(reg) : '',
+      parentEmails: reg ? familyEmailsOf(reg) : [],
+      hours: parsed,
+      note: trimmedNote || null,
+      updatedAt: new Date(),
+      updatedBy: currentUser?.displayName || currentUser?.email || 'unknown',
+      updatedByEmail: currentUser?.email || '',
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving volunteer hours:', err);
+    if (statusEl) statusEl.textContent = t('dash_volunteer_save_failed');
+    alert('Failed to save volunteer hours. Please try again.');
+    return false;
+  }
+}
+
+/** Family-level summary label + emails, mirroring src/utils/volunteerHours.js. */
+function familyLabelOf(reg) {
+  const name = (p) => [p?.firstName, p?.lastName].filter(Boolean).join(' ').trim();
+  return [...new Set([name(reg?.parent), name(reg?.spouse)].filter(Boolean))].join(' & ');
+}
+
+function familyEmailsOf(reg) {
+  return [...new Set([reg?.parent?.email, reg?.spouse?.email, ...(reg?.parentEmails || [])]
+    .map((e) => String(e || '').toLowerCase().trim())
+    .filter(Boolean))];
+}
+
+/** One save per row, driven by the row's two inputs. */
+async function onVolunteerInputChange(el) {
+  const row = el.closest('tr');
+  if (!row) return;
+  const meetId = volunteerMeetId;
+  const familyId = row.dataset.familyId;
+  const hours = row.querySelector('.vol-hours-input')?.value ?? '';
+  const note = row.querySelector('.vol-note-input')?.value ?? '';
+  const statusEl = row.querySelector('.vol-status');
+
+  const ok = await saveVolunteerHours({ familyId, meetId, hours, note, statusEl });
+  if (ok) {
+    row.dataset.volEntered = (normalizeHours(hours) != null || note.trim()) ? '1' : '0';
+    if (statusEl) statusEl.textContent = t('dash_volunteer_saved');
+  }
+}
+
+/** Client-side search / "only entered" filter — no re-render, so focus survives. */
+function applyVolunteerEntryFilter() {
+  const term = (document.getElementById('volunteer-search')?.value || '').trim().toLowerCase();
+  const onlyEntered = !!document.getElementById('volunteer-only-entered')?.checked;
+  let visible = 0;
+
+  document.querySelectorAll('.vol-entry-row').forEach((row) => {
+    const matchesText = !term || (row.dataset.volSearch || '').includes(term);
+    const matchesEntered = !onlyEntered || row.dataset.volEntered === '1';
+    const show = matchesText && matchesEntered;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  const empty = document.getElementById('volunteer-no-match');
+  if (empty) empty.style.display = visible === 0 ? '' : 'none';
+}
+
+function downloadCSVText(text, filename) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function getVolunteerSummaryRows() {
+  return buildVolunteerSummary({
+    meets: swimMeets,
+    registrations: allRegistrations,
+    hours: volunteerHours,
+    season: currentSeason,
+    meetSeasonOf: getMeetSeason,
+  });
+}
+
+function exportVolunteerSummaryCSV() {
+  downloadCSVText(volunteerSummaryCSV(getVolunteerSummaryRows()), `dragon-volunteer-hours-${currentSeason}.csv`);
+}
+
+function exportVolunteerDetailCSV() {
+  downloadCSVText(volunteerDetailCSV(getVolunteerSummaryRows()), `dragon-volunteer-hours-detail-${currentSeason}.csv`);
+}
+
+function bindVolunteerHoursEvents() {
+  document.getElementById('volunteer-season-select')?.addEventListener('change', (e) => {
+    currentSeason = e.target.value;
+    volunteerMeetId = null; // re-default to this season's newest past meet
+    refreshUI();
+  });
+
+  document.getElementById('volunteer-meet-select')?.addEventListener('change', (e) => {
+    volunteerMeetId = e.target.value;
+    refreshUI();
+  });
+
+  document.getElementById('volunteer-search')?.addEventListener('input', applyVolunteerEntryFilter);
+  document.getElementById('volunteer-only-entered')?.addEventListener('change', applyVolunteerEntryFilter);
+
+  document.getElementById('volunteer-export-btn')?.addEventListener('click', exportVolunteerSummaryCSV);
+  document.getElementById('volunteer-export-detail-btn')?.addEventListener('click', exportVolunteerDetailCSV);
+
+  // Reveal the 0-hour families in the summary (they are hidden by default).
+  document.getElementById('volunteer-show-zero')?.addEventListener('change', (e) => {
+    document.querySelectorAll('.vol-zero-row').forEach((el) => {
+      el.style.display = e.target.checked ? '' : 'none';
+    });
+  });
+
+  document.querySelectorAll('.vol-input').forEach((el) => {
+    el.addEventListener('change', () => onVolunteerInputChange(el));
+    // Enter commits immediately instead of submitting/blurring to nowhere.
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+    });
+  });
+
+  // Summary rows expand to the per-meet breakdown (same mechanic as Fee Summary).
+  document.querySelector('.vol-summary-table tbody')?.addEventListener('click', (e) => {
+    const row = e.target.closest('.vol-summary-row');
+    if (!row) return;
+    const detail = document.querySelector(`.vol-detail-row[data-vol-detail="${row.dataset.volFamily}"]`);
+    if (!detail) return;
+
+    const icon = row.querySelector('.fee-summary-expand-icon');
+    const expanded = detail.classList.toggle('expanded');
+    row.classList.toggle('expanded-row', expanded);
+    if (icon) {
+      icon.classList.toggle('expanded', expanded);
+      icon.textContent = expanded ? '▼' : '▶';
+    }
+  });
+}
+
 // ── Helper: HTML escape ──
 function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
@@ -4876,11 +5351,21 @@ function bindEvents() {
       btn.addEventListener('click', async () => {
         if (confirm(t('dash_meets_confirm_delete'))) {
           try {
-            await deleteDoc(doc(db, "meets", btn.dataset.id));
-            if (editingMeetId === btn.dataset.id) {
+            const meetId = btn.dataset.id;
+            await deleteDoc(doc(db, "meets", meetId));
+            // Volunteer hours hang off the meet — leaving them behind would
+            // resurrect the meet in the season summary as a phantom row.
+            try {
+              const orphanSnap = await getDocs(query(collection(db, VOLUNTEER_COLLECTION), where('meetId', '==', meetId)));
+              await Promise.all(orphanSnap.docs.map((d) => deleteDoc(d.ref)));
+            } catch (cleanupErr) {
+              console.warn('Volunteer hours cleanup failed for meet', meetId, cleanupErr);
+            }
+            if (editingMeetId === meetId) {
               meetForm.style.display = 'none';
               editingMeetId = null;
             }
+            if (volunteerMeetId === meetId) volunteerMeetId = null;
           } catch (err) {
             console.error("Error deleting meet:", err);
           }
@@ -5028,6 +5513,9 @@ function bindEvents() {
 
     // ── Deposits — Inline Edit / Delete ──
     bindDepositsInlineEvents();
+
+    // ── Volunteer Hours — season/meet pickers, entry table, CSV export ──
+    bindVolunteerHoursEvents();
 
     // ── Results Tab — Swim Times Management ──
 

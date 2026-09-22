@@ -153,6 +153,21 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ── volunteerHours — per-meet family volunteer hours ──────────
+
+    match /volunteerHours/{docId} {
+      // Coaches and admins read the whole season. Families are deliberately NOT
+      // granted access yet: the family-side "our volunteer hours" view is a later
+      // phase. When it lands, the doc already carries `familyId` + `parentEmails`,
+      // so the read rule becomes:
+      //   resource.data.familyId == request.auth.uid ||
+      //   request.auth.token.email in resource.data.parentEmails
+      allow read: if userRole() == 'coach' || userRole() == 'admin';
+      // Hours are entered and corrected by admins only (decided 2026-09-21).
+      // To let any coach record hours later, add `|| userRole() == 'coach'` here.
+      allow create, update, delete: if isAdmin();
+    }
+
     // ── swimResults — USA Swimming times data ──────────────────────
 
     match /swimResults/{docId} {

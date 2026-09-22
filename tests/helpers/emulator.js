@@ -76,3 +76,135 @@ export async function seedFamily(email, parentName = "Playwright Test Parent") {
     throw new Error(`seedFamily(${email}) failed: HTTP ${res.status} ${await res.text()}`);
   }
 }
+
+// ── Generic document helpers ────────────────────────────────────────────────
+//
+// The app's writes must go through the UI (that is what the tests are for), but
+// FIXTURES (meets, registrations, a pre-existing volunteer record) are cheapest to
+// plant directly through the emulator's REST API with the owner credential.
+
+/** Encode one JS value as a Firestore REST `Value`. */
+function toFirestoreValue(value) {
+  if (value === null || value === undefined) return { nullValue: null };
+  if (typeof value === "string") return { stringValue: value };
+  if (typeof value === "boolean") return { booleanValue: value };
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+  }
+  if (value instanceof Date) return { timestampValue: value.toISOString() };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(toFirestoreValue) } };
+  if (typeof value === "object") {
+    const fields = {};
+    for (const [key, val] of Object.entries(value)) fields[key] = toFirestoreValue(val);
+    return { mapValue: { fields } };
+  }
+  throw new Error(`encodeFields: cannot encode a ${typeof value} for Firestore REST`);
+}
+
+/** Encode a plain object as Firestore REST `fields`. */
+export function encodeFields(data) {
+  const fields = {};
+  for (const [key, value] of Object.entries(data)) fields[key] = toFirestoreValue(value);
+  return fields;
+}
+
+/** Decode one Firestore REST `Value` back into a JS value. */
+function fromFirestoreValue(value) {
+  if (!value) return null;
+  if ("stringValue" in value) return value.stringValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return Number(value.doubleValue);
+  if ("booleanValue" in value) return value.booleanValue;
+  if ("nullValue" in value) return null;
+  if ("timestampValue" in value) return new Date(value.timestampValue);
+  if ("arrayValue" in value) return (value.arrayValue.values || []).map(fromFirestoreValue);
+  if ("mapValue" in value) return decodeFields(value.mapValue.fields);
+  return undefined;
+}
+
+/** Decode Firestore REST `fields` into a plain object. */
+export function decodeFields(fields) {
+  const out = {};
+  for (const [key, value] of Object.entries(fields || {})) out[key] = fromFirestoreValue(value);
+  return out;
+}
+
+/**
+ * Create or overwrite a document by id (PATCH = create-or-replace).
+ * @returns {Promise<string>} the document id
+ */
+export async function seedDocument(collection, id, data) {
+  const res = await fetch(`${documentsUrl(collection)}/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer owner", // emulator-only admin credential
+    },
+    body: JSON.stringify({ fields: encodeFields(data) }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`seedDocument(${collection}/${id}) failed: HTTP ${res.status} ${await res.text()}`);
+  }
+  return id;
+}
+
+/** Read a document, or null when it does not exist. */
+export async function readDocument(collection, id) {
+  const res = await fetch(`${documentsUrl(collection)}/${id}`, {
+    headers: { Authorization: "Bearer owner" },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`readDocument(${collection}/${id}) failed: HTTP ${res.status} ${await res.text()}`);
+  }
+  return decodeFields((await res.json()).fields);
+}
+
+/** Delete a document; a missing document is not an error. */
+export async function deleteDocument(collection, id) {
+  const res = await fetch(`${documentsUrl(collection)}/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: "Bearer owner" },
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`deleteDocument(${collection}/${id}) failed: HTTP ${res.status}`);
+  }
+}
+
+// ── Accounts ────────────────────────────────────────────────────────────────
+
+/**
+ * Create an email/password account in the Auth emulator.
+ * @returns {Promise<string>} the new uid
+ */
+export async function seedAuthUser(email, password) {
+  const res = await fetch(`${AUTH_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`seedAuthUser(${email}) failed: HTTP ${res.status} ${JSON.stringify(body)}`);
+  }
+  return body.localId;
+}
+
+/**
+ * Create a signed-in-able STAFF account: the Auth user plus the `users/{uid}`
+ * document that carries the role. dashboard.js reads that role (and the
+ * firestore rules authorize writes from it), so both halves are required.
+ *
+ * Note: this does NOT go through the coaches whitelist. Sign-in only consults
+ * `users/{uid}.role` (src/pages/signin.js), so a whitelist entry is unnecessary
+ * for these fixtures.
+ *
+ * @param {'coach'|'admin'} role
+ * @returns {Promise<string>} the new uid
+ */
+export async function seedStaffUser(email, password, role = "coach") {
+  const uid = await seedAuthUser(email, password);
+  await seedDocument("users", uid, { email, role, createdAt: new Date() });
+  return uid;
+}
