@@ -67,18 +67,24 @@ const emailsOf = (r) => [...new Set([r.parent?.email, r.spouse?.email, ...(r.par
   .map((e) => String(e || '').toLowerCase().trim()).filter(Boolean))];
 
 /**
- * 本场参赛、且恰好缺 USA-S ID 的孩子。
+ * 本场报名表里出现的该家庭孩子，按「有没有 USA-S ID」分开。
  *
- * 这是 B 类分档的依据: 只有「参赛的孩子本人没 ID」才是本场真正会出问题的
- * (成绩和队费匹配不上)。家里另一个没参赛的孩子缺 ID,不算本场急事 ——
- * 例如 George Tao 家: Charlene Tao 参赛且有 ID,Patrick Tao 没参赛也没 ID。
+ * 这个区分决定 B 类怎么分档，因为「缺 ID 的孩子没参赛」和「这家人没来比赛」是两回事:
+ *   - 参赛的孩子缺 ID      → 本场直接受影响(成绩/队费对不上)
+ *   - 参赛的孩子有 ID、另一个孩子缺 ID → 人在现场,顺手就能补(实例: George Tao 家,
+ *     Charlene Tao 参赛且有 ID,Patrick Tao 没参赛也没 ID)
+ *   - 本场一个孩子都没参赛  → 与本次比赛无关,下次比赛前补即可
  */
-function enteredMissingId(reg, enteredNames) {
+function enteredSplit(reg, enteredNames) {
   const set = new Set(enteredNames);
-  return (reg.swimmers || [])
-    .filter((s) => s && !s.deleted && !String(s.usaSwimmingId || '').trim())
-    .filter((s) => set.has(join2(s.firstName, s.lastName)) || set.has(squash(join2(s.firstName, s.lastName))))
-    .map((s) => `${s.firstName || ''} ${s.lastName || ''}`.trim());
+  const entered = (reg.swimmers || []).filter((s) => s && !s.deleted
+    && (set.has(join2(s.firstName, s.lastName)) || set.has(squash(join2(s.firstName, s.lastName)))));
+  const name = (s) => `${s.firstName || ''} ${s.lastName || ''}`.trim();
+  const hasId = (s) => Boolean(String(s.usaSwimmingId || '').trim());
+  return {
+    enteredMissing: entered.filter((s) => !hasId(s)).map(name),
+    enteredWithId: entered.filter(hasId).map(name),
+  };
 }
 
 // ── 读输入 ──────────────────────────────────────────────────────────────────
@@ -232,12 +238,14 @@ for (const r of regs) {
     label: familyLabel(r),
     missing: missing.map((s) => `${s.firstName || ''} ${s.lastName || ''}`.trim()),
     total: kids.length,
-    enteredMissing: enteredMissingId(r, enteredNames),
+    ...enteredSplit(r, enteredNames),
   });
 }
+// 三档,依据「本场报名表里有没有这个家的孩子」和「缺 ID 的是不是那个孩子」:
+const bMeet = caseB.filter((r) => r.enteredMissing.length > 0);                                        // 参赛的孩子缺 ID
+const bAtMeet = caseB.filter((r) => r.enteredMissing.length === 0 && r.enteredWithId.length > 0);      // 本场有人参赛,缺 ID 的是另一个孩子
+const bRest = caseB.filter((r) => r.enteredMissing.length === 0 && r.enteredWithId.length === 0);      // 整家本场都没参赛
 caseB.sort((a, b) => b.enteredMissing.length - a.enteredMissing.length || a.label.localeCompare(b.label));
-const bMeet = caseB.filter((r) => r.enteredMissing.length > 0);
-const bRest = caseB.filter((r) => r.enteredMissing.length === 0);
 
 // ── 与 Firestore 里的 meet 对上号(方便接着用志愿者小时功能) ────────────────
 const dbMeet = meets.find((m) => (m.startDate || m.date) === meet.startDate) || null;
@@ -256,6 +264,8 @@ checks.push([`A 类邮箱全部属于未覆盖的白名单条目(${aEmails.lengt
   aEmails.every((e) => !covered.has(e))]);
 const overlap = aEmails.filter((e) => caseB.some((b) => b.email === e));
 checks.push([`A 类与 B 类不重叠`, overlap.length === 0]);
+checks.push([`B-1(${bMeet.length}) + B-2(${bAtMeet.length}) + B-3(${bRest.length}) = B 类总数 ${caseB.length}`,
+  bMeet.length + bAtMeet.length + bRest.length === caseB.length]);
 
 // ── 产出 md ─────────────────────────────────────────────────────────────────
 /**
@@ -285,7 +295,7 @@ const md = `# ${meet.name || 'Meet'} — 报名表 vs 注册状态（自动生�
 | 已在现役注册名册里 | ${matched.length} |
 | **A 类：在比赛、家庭没注册** | **${aEmails.length} 个家庭 / ${[...caseA.values()].reduce((n, r) => n + r.kids.length, 0)} 个孩子** |
 | 需人工确认 | ${needReview.length} |
-| **B 类：已注册、缺 USA Swimming ID** | **${caseB.length} 个家庭 / ${caseB.reduce((n, r) => n + r.missing.length, 0)} 个孩子**（其中本场参赛的孩子本人缺 ID 的 ${bMeet.length} 家） |
+| **B 类：已注册、缺 USA Swimming ID** | **${caseB.length} 个家庭 / ${caseB.reduce((n, r) => n + r.missing.length, 0)} 个孩子**（本场相关 ${bMeet.length + bAtMeet.length} 家 / 本场未参赛 ${bRest.length} 家） |
 | 本场 meet 是否已在 Firestore | ${dbMeet ? `✅ ${dbMeet.name}（${dbMeet.season || 'no season'}）` : '❌ 未找到同日开始日期的 meet'} |
 
 ${meet.startDate ? `比赛日期：${meet.startDate} → ${meet.endDate}\n` : ''}
@@ -379,10 +389,19 @@ ${needReview.map((n) => `| ${n.name} | ${n.age} | ${n.reason} | ${n.candidates.j
 >
 > 每个家庭只列**一个**地址（家长的账号邮箱）。配偶邮箱故意不列 —— 同一个家庭发两封
 > 只会重复打扰，而且收件人自己会转给对方。
+>
+> **B 类按「本场报名表里有没有这个家的孩子」分三档**，因为「缺 ID 的孩子没参赛」和
+> 「这家人没来比赛」是两件事：
+>
+> | 档 | 含义 | 该不该现在发 |
+> |---|---|---|
+> | B-1 | 本场参赛的孩子本人缺 ID | 是，本场直接受影响 |
+> | B-2 | 本场有孩子参赛，缺 ID 的是没参赛的兄弟姐妹 | 是，人在现场 |
+> | B-3 | 本场整家都没人参赛 | 可稍后 |
 
 ### B-1. 本场参赛的孩子本人缺 ID（优先）
 
-这一档才是本场真正会出问题的：孩子已经报名，但没有 ID 就无法把官方成绩和队费对上。
+这一档才是本场直接受影响的：孩子已经报名，但没有 ID 就无法把官方成绩和队费对上。
 
 \`\`\`
 ${bcc(bMeet.map((r) => r.email))}
@@ -401,7 +420,28 @@ ${bMeet.map((r, i) => {
   return `| ${i + 1} | ${r.email} | ${r.label} | ${r.enteredMissing.join('、')} | ${other.join('、') || '—'} | ${r.total} |`;
 }).join('\n') || '| — | — | — | — | — | — |'}
 
-### B-2. 本场没有缺 ID 的孩子参赛（可稍后）
+### B-2. 本场有孩子参赛，但缺 ID 的是另一个孩子（${bAtMeet.length} 家）
+
+这些家庭**人在比赛现场**（参赛的孩子有 ID），缺 ID 的是本场没参赛的兄弟姐妹 ——
+顺手一起发最省事。**注意：这一档不是"没参加比赛"。**
+
+\`\`\`
+${bcc(bAtMeet.map((r) => r.email))}
+\`\`\`
+
+备选（一行一个）：
+
+\`\`\`
+${bccLines(bAtMeet.map((r) => r.email))}
+\`\`\`
+
+| # | Email | 家长 | 本场参赛（已有 ID） | 缺 ID 的孩子 | 名册人数 |
+|---|---|---|---|---|---|
+${bAtMeet.map((r, i) => `| ${i + 1} | ${r.email} | ${r.label} | ${r.enteredWithId.join('、')} | ${r.missing.join('、')} | ${r.total} |`).join('\n') || '| — | — | — | — | — |'}
+
+### B-3. 本场整家都没人参赛（${bRest.length} 家，可稍后）
+
+这些家庭在本次比赛的报名表里**一个孩子都没有**，所以 ID 这件事不着急，下次比赛前补上即可。
 
 \`\`\`
 ${bcc(bRest.map((r) => r.email))}
@@ -479,7 +519,8 @@ console.log(`${meet.name || 'meet'} — 报名 ${athletes.length} 人（报告 T
 console.log(`  已注册 ${matched.length} / 未匹配 ${unmatched.length}`);
 console.log(`  A 类(在比赛、没注册): ${aEmails.length} 个家庭 → ${aEmails.join(', ') || '(无)'}`);
 console.log(`  需人工确认: ${needReview.length}${needReview.length ? ' → ' + needReview.map((n) => n.name).join(', ') : ''}`);
-console.log(`  B 类(已注册缺 USA-S ID): ${caseB.length} 个家庭 / ${caseB.reduce((n, r) => n + r.missing.length, 0)} 个孩子（本场参赛的孩子本人缺 ID ${bMeet.length} 家）`);
+console.log(`  B 类(已注册缺 USA-S ID): ${caseB.length} 个家庭 / ${caseB.reduce((n, r) => n + r.missing.length, 0)} 个孩子`);
+console.log(`      B-1 参赛的孩子缺 ID ${bMeet.length} 家 ｜ B-2 本场有人参赛、缺 ID 的是别的孩子 ${bAtMeet.length} 家 ｜ B-3 本场整家未参赛 ${bRest.length} 家`);
 if (dbMeet) console.log(`  Firestore meet: ${dbMeet.name} (${dbMeet.season || 'no season'})`);
 console.log('');
 for (const [label, ok] of checks) console.log(`  ${ok ? '✓' : '✗'} ${label}`);
