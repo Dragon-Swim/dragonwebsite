@@ -4,7 +4,7 @@
 > 以及日常操作流程与已知边界。
 > 最后更新：2026-09-21（P1 落地：家庭 × meet 一个数字、admin 录入、单 tab 汇总）。
 > 相关代码：`src/utils/volunteerHours.js`（纯逻辑）、`src/pages/dashboard.js`（渲染与写入）、
-> `firestore.rules`、`tests/volunteer-hours.spec.js`、`.tmp/verify-volunteer-hours.mjs`。
+> `firestore.rules`、`tests/volunteer-hours.spec.js`（E2E）、`tests/unit/verify-volunteer-hours.mjs`（纯逻辑）。
 
 ## 1. 口径（先读这一节）
 
@@ -80,7 +80,7 @@
    ∪ 只存在于小时记录里的家庭（注册已被删，仍可改）；
 4. 按姓氏排序（`normalizeSortKey`，与 roster 的姓氏排序一致）。
 
-边界（都有 smoke 测试覆盖，见 `.tmp/verify-volunteer-hours.mjs`）：
+边界（都有 smoke 测试覆盖，见 `tests/unit/verify-volunteer-hours.mjs`）：
 
 - 孩子取 `swimmers.filter(s => !s.deleted)`——软删的孩子不计数；
 - 家庭没有活跃孩子 → Kids = 0，行**保留**（不能因为没孩子就从汇总里消失）；
@@ -113,10 +113,15 @@ match /volunteerHours/{docId} {
 
 | 目标 | 命令 |
 |---|---|
-| 纯逻辑（65 项断言，无需 emulator/网络） | `node .tmp/verify-volunteer-hours.mjs` |
+| 纯逻辑（65 项断言，无需 emulator/网络） | `npm run test:unit`（也可单跑 `node tests/unit/verify-volunteer-hours.mjs`） |
 | 端到端（admin 录入 → 落库 → 汇总 → CSV → 清空删除；教练只读） | `npm test`（含 `tests/volunteer-hours.spec.js`） |
 | 构建 | `npm run build`（需 `.env.local` 存在） |
 | 线上只读核对（可选） | `execution/audit_volunteer_hours.mjs`（serviceAccountKey + firebase-admin） |
+
+`npm run test:unit` 会跑 `tests/unit/` 下全部 `verify-*.mjs`（当前 4 个模块共 190 条断言：
+`registrationCompleteness` / `swimmerSort` / `fetchHealth` / `volunteerHours`）。这些文件
+**故意不叫** `*.spec.js` / `*.test.mjs`，否则会被 Playwright 的 `testMatch` 收进 `npm test`。
+约定与新增方式见 `tests/unit/README.md`。
 
 ## 8. 待办 / P2 备选
 
