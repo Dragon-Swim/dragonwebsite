@@ -99,9 +99,9 @@ import{i as f,t as e}from"./i18n-xMjO5e8v.js";import{a as u,r as b}from"./footer
         <div class="season-location-grid">
           <div class="season-location-card">
             <h4 class="season-location-name">Claude Moore Recreation Center</h4>
-            <p class="season-location-line"><strong>Fall &amp; Spring:</strong> Mon &amp; Wed 6:30–8:30 pm (Advanced — group determined by the Head Coach), 7:30–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
-            <p class="season-location-line"><strong>Winter:</strong> Mon &amp; Wed 6–7:30 pm (Advanced), 7:30–9 pm (All levels); Fri 7:30–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
-            <p class="season-location-line"><strong>Summer:</strong> Wed &amp; Fri 6:30–8:30 pm; Sun 12–2 pm &amp; 2–4 pm</p>
+            <p class="season-location-line"><strong>Fall &amp; Spring:</strong> Mon &amp; Wed 6:30–8:30 pm (Advanced — group determined by the Head Coach), 7:30–9 pm (All levels); Fri 7–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
+            <p class="season-location-line"><strong>Winter:</strong> Mon &amp; Wed 6–7:30 pm (Advanced), 7:30–9 pm (All levels); Fri 7–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
+            <p class="season-location-line"><strong>Summer:</strong> Wed 6:30–8:30 pm; Fri 7–9 pm; Sun 12–2 pm &amp; 2–4 pm</p>
           </div>
           <div class="season-location-card">
             <h4 class="season-location-name">Dulles South Recreation Center</h4>
@@ -207,7 +207,7 @@ Coach Kevin was a finalist for the 2024 ASCA Top 4 Impact Coach Award and is one
     </div>
   </section>
 
-`;b();const M={root:null,rootMargin:"0px",threshold:.15},T=new IntersectionObserver((s,a)=>{s.forEach(t=>{t.isIntersecting&&(t.target.classList.add("animate-visible"),a.unobserve(t.target))})},M);document.querySelectorAll(".animate-on-scroll").forEach(s=>{T.observe(s)});const o=document.getElementById("team-slideshow");if(o){const s=Array.from(o.querySelectorAll(".team-slide")),a=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;if(s.length>1&&!a){let t=0,i=null;const l=h=>{s.forEach((g,v)=>g.classList.toggle("active",v===h))},c=()=>{i&&(clearInterval(i),i=null)},d=()=>{c(),i=setInterval(()=>{t=(t+1)%s.length,l(t)},j)};l(0),d(),o.addEventListener("mouseenter",c),o.addEventListener("mouseleave",d)}}function F(){return m.length===0?`
+`;b();const M={root:null,rootMargin:"0px",threshold:.15},T=new IntersectionObserver((s,a)=>{s.forEach(t=>{t.isIntersecting&&(t.target.classList.add("animate-visible"),a.unobserve(t.target))})},M);document.querySelectorAll(".animate-on-scroll").forEach(s=>{T.observe(s)});const o=document.getElementById("team-slideshow");if(o){const s=Array.from(o.querySelectorAll(".team-slide")),a=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;if(s.length>1&&!a){let t=0,i=null;const l=h=>{s.forEach((v,g)=>v.classList.toggle("active",g===h))},c=()=>{i&&(clearInterval(i),i=null)},d=()=>{c(),i=setInterval(()=>{t=(t+1)%s.length,l(t)},j)};l(0),d(),o.addEventListener("mouseenter",c),o.addEventListener("mouseleave",d)}}function F(){return m.length===0?`
       <div style="width: 100%; max-width: 900px; height: 400px; background: var(--bg-secondary); border-radius: var(--radius-lg); display: inline-flex; align-items: center; justify-content: center; border: 2px dashed var(--border-color); margin: 0 auto;">
         <span style="color: var(--text-muted); font-weight: var(--fw-medium);">[ Team Photo ]</span>
       </div>
