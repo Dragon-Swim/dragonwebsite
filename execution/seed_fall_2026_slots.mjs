@@ -2,7 +2,7 @@
  * Seed Fall 2026 practice slots (sessionSlots collection).
  *
  * Uses Firebase Admin SDK (server-side, bypasses security rules) to write
- * the 14 weekly session slots derived from the public homepage template.
+ * the 15 weekly session slots derived from the public homepage template.
  * Idempotent: an existing slot matching (period, location, day, startTime,
  * endTime) is skipped.
  *

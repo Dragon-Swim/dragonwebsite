@@ -3,7 +3,7 @@
  *
  * The coach-side schedule (dashboard Schedule tab) is organized by "period"
  * (e.g. Fall 2026). Period structure mirrors the public homepage schedule;
- * the initial template is Fall 2026 (14 weekly slots). Future periods are
+ * the initial template is Fall 2026 (15 weekly slots). Future periods are
  * added at each season transition by re-seeding from the homepage copy.
  *
  * Time convention: store 12h clock strings like "6:30 PM" / "8:00 AM".
@@ -56,6 +56,7 @@ export const FALL_2026_SLOT_TEMPLATES = [
   { period: 'Fall 2026', location: 'Claude Moore Recreation Center', day: 'Wednesday', startTime: '6:30 PM', endTime: '8:30 PM', groupLabel: 'Advanced (group determined by the Head Coach)' },
   { period: 'Fall 2026', location: 'Claude Moore Recreation Center', day: 'Monday', startTime: '7:30 PM', endTime: '9:00 PM', groupLabel: 'All levels' },
   { period: 'Fall 2026', location: 'Claude Moore Recreation Center', day: 'Wednesday', startTime: '7:30 PM', endTime: '9:00 PM', groupLabel: 'All levels' },
+  { period: 'Fall 2026', location: 'Claude Moore Recreation Center', day: 'Friday', startTime: '7:00 PM', endTime: '9:00 PM', groupLabel: 'All levels' },
   { period: 'Fall 2026', location: 'Claude Moore Recreation Center', day: 'Saturday', startTime: '12:00 PM', endTime: '2:00 PM', groupLabel: '' },
   { period: 'Fall 2026', location: 'Claude Moore Recreation Center', day: 'Sunday', startTime: '12:00 PM', endTime: '2:00 PM', groupLabel: '' },
   // Dulles South Recreation Center

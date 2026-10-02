@@ -126,9 +126,9 @@ app.innerHTML = `
         <div class="season-location-grid">
           <div class="season-location-card">
             <h4 class="season-location-name">Claude Moore Recreation Center</h4>
-            <p class="season-location-line"><strong>Fall &amp; Spring:</strong> Mon &amp; Wed 6:30–8:30 pm (Advanced — group determined by the Head Coach), 7:30–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
-            <p class="season-location-line"><strong>Winter:</strong> Mon &amp; Wed 6–7:30 pm (Advanced), 7:30–9 pm (All levels); Fri 7:30–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
-            <p class="season-location-line"><strong>Summer:</strong> Wed &amp; Fri 6:30–8:30 pm; Sun 12–2 pm &amp; 2–4 pm</p>
+            <p class="season-location-line"><strong>Fall &amp; Spring:</strong> Mon &amp; Wed 6:30–8:30 pm (Advanced — group determined by the Head Coach), 7:30–9 pm (All levels); Fri 7–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
+            <p class="season-location-line"><strong>Winter:</strong> Mon &amp; Wed 6–7:30 pm (Advanced), 7:30–9 pm (All levels); Fri 7–9 pm (All levels); Sat &amp; Sun 12–2 pm</p>
+            <p class="season-location-line"><strong>Summer:</strong> Wed 6:30–8:30 pm; Fri 7–9 pm; Sun 12–2 pm &amp; 2–4 pm</p>
           </div>
           <div class="season-location-card">
             <h4 class="season-location-name">Dulles South Recreation Center</h4>
