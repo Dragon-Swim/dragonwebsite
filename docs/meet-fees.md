@@ -73,7 +73,7 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
 
 **清理**：`node execution/clear_deposits_collection.mjs --delete` 清空整个 `deposits`
 集合（72 条 = 2026-06-26 建站期 28 条占位 `600` + 当天 31 条余额 + 13 条空壳）。
-工具默认 dry-run，删除前自动备份到 `.tmp/deposits-backup-<时间戳>.json`（`.tmp` 已 gitignore）。
+工具默认 dry-run，删除前自动备份到 `.tmp/backups/deposits-backup-<时间戳>.json`（`.tmp` 已 gitignore）。
 真实费用数据在 `meets.feeData`，未受影响：PVS LC Open 1、2026 FXFX Summer Solstice LC Champs
 （均 2025-2026）、PVS October Open (Audrey Moore)（2026-2027）。
 
@@ -83,16 +83,16 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
 2. Deposits tab 选对**赛季**（顶部 season selector）——导入写的就是这个赛季。
 3. 按上表选对按钮上传 → 在预览里核对列映射、new/update 数量、符号、目标槽位 → Import。
 4. 线上核验：`node tests/unit/verify-fee-import.mjs`（纯逻辑）或
-   `node execution/preview_fee_import.mjs --balance "x.xlsx" --season 2025-2026`
+   `node execution/preview_fee_import.mjs --balance ".tmp/coach-in/x.xlsx" --season 2025-2026`
    （拿真实 xlsx + 线上 deposits 现状干跑，逐行打印会写什么，不碰 Firestore）。
 
 ## 6. 已知边界
 
-- 姓名匹配是「小写 + 合并空格」的精确匹配。`eric chen` 与 `eric chen / kayden chen`
-  （兄弟姐妹合并成一行）**不会**匹配到同一个 fee 记录，Fee Summary 会把合并行当成
+- 姓名比对见第 7 节（忽略大小写/空格/标点）。仍未覆盖的是**兄弟姐妹合并成一行**：
+  `eric chen / kayden chen` 这种写法匹配不到任何 fee 记录，Fee Summary 会把它当成
   「有押金、无费用」的泳手单独列出来。要合并请拆成每人一行。
 - 单列表导入不写日期，除非表里带日期列；三个槽位语义固定为「第 1/2/3 笔押金」。
-- 没有撤销功能：导入写错了就用 Inline 编辑改，或从 `.tmp` 的备份文件回灌。
+- 没有撤销功能：导入写错了就用 Inline 编辑改，或从 `.tmp/backups/` 的备份文件回灌。
 
 ## 7. 姓名比对规则（2026-10-03 收紧）
 

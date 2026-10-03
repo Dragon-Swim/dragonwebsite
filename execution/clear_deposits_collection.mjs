@@ -15,7 +15,7 @@
 //
 // 安全设计:
 //   - 默认 dry-run,必须显式 --delete
-//   - 删除前先把整份集合写成本地 JSON 备份(.tmp/deposits-backup-<时间戳>.json,.tmp 已 gitignore)
+//   - 删除前先把整份集合写成本地 JSON 备份(.tmp/backups/deposits-backup-<时间戳>.json,.tmp 已 gitignore)
 //   - 删除后复查集合文档数,并打印结果
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -77,9 +77,9 @@ if (!DELETE) {
 }
 
 // ── 备份 ─────────────────────────────────────────────────────────
-mkdirSync('.tmp', { recursive: true });
+mkdirSync('.tmp/backups', { recursive: true });
 const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
-const backupPath = resolve('.tmp', `deposits-backup-${stamp}.json`);
+const backupPath = resolve('.tmp/backups', `deposits-backup-${stamp}.json`);
 writeFileSync(
   backupPath,
   JSON.stringify(rows.map((r) => ({ ...r, updatedAt: iso(r.updatedAt) })), null, 2)

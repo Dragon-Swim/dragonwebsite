@@ -47,7 +47,7 @@
    汇总表里父母双方姓名仍然都会显示（从 registration 的 `parent` / `spouse` 读）。
 5. **不做「fee report 姓名匹配」**：本可把 meet 的 Hy-Tek 报名表匹配到家庭并排在前面，
    但线上有 10+ 个同姓家庭，本仓库已经吃过模糊匹配误报的亏
-   （见 `.tmp/handoff-2026-09-20-needs-attention.md`），因此改为**搜索框**
+   （见 `.tmp/handoff/handoff-2026-09-20-needs-attention.md`），因此改为**搜索框**
    （匹配父母姓名、孩子姓名、邮箱）。
 
 ## 3. 界面（教练端侧栏 → 🙋 Volunteer Hours）

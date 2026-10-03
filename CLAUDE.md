@@ -46,13 +46,30 @@ Deliverables: Google Sheets, Google Slides, or other cloud-based outputs that th
 Intermediates: Temporary files needed during processing
 Directory structure:
 
-.tmp/ - All intermediate files (dossiers, scraped data, temp exports). Never commit, always regenerated.
-execution/ - Python scripts (the deterministic tools)
+.tmp/ - All intermediate files. **Use subdirectories, never the root** (see below). Never commit, always regenerated.
+execution/ - Python/Node scripts (the deterministic tools)
 directives/ - SOPs in Markdown (the instruction set)
 docs/ - Site documentation (app behaviors & workflows; see docs/swim-results-fetch.md for the swim-results fetch pipeline)
 .env - Environment variables and API keys
 credentials.json, token.json - Google OAuth credentials (required files, in .gitignore)
 Key principle: Local files are only for processing. Deliverables live in cloud services (Google Sheets, Slides, etc.) where the user can access them. Everything in .tmp/ can be deleted and regenerated.
+
+### `.tmp/` layout — one bucket per purpose, nothing loose in the root
+
+| Dir | Holds |
+|---|---|
+| `.tmp/handoff/` | Session handoff notes (`handoff-<date>*.md`) — protected, never delete |
+| `.tmp/coach-in/` | Raw spreadsheets/PDFs the coach just sent, before any processing |
+| `.tmp/deliverables/` | Finished outputs meant to leave this machine (files for the coach/user) |
+| `.tmp/fee-import/` | Working set of the fee-import tools (match report, plan.json, overrides) |
+| `.tmp/backups/` | Firestore collection backups (JSON, written before destructive operations) |
+| `.tmp/meet-entry/` | Meet entry report / outreach working set (inputs + generated lists) |
+| `.tmp/cf526/` | Cloudflare custom-domain + GitHub Support ticket material |
+| `.tmp/pw-tmp/` | Playwright profile temp dir — created and wiped by scripts/run-playwright.mjs |
+
+Rules: put new work in the matching bucket (create a clearly-named one if none fits);
+tool defaults in `execution/` point at these paths, so update a tool's defaults when you
+move its inputs/outputs. `.tmp/README.md` mirrors this table for quick reference.
 
 ## ⛔ Preserved Files — NEVER DELETE
 
@@ -66,14 +83,14 @@ These files must survive across sessions. Check this list before ANY `rm`, `rm -
 - `serviceAccountKey.json` — Firebase Admin SDK private key
 
 **Session Continuity (gitignored, but carry context between sessions):**
-- `.tmp/handoff-*.md` — handoff notes from previous sessions
+- `.tmp/handoff/` — handoff notes from previous sessions (one file each, `.md`)
 
 **Project Infrastructure (tracked, must not be corrupted):**
 - `CLAUDE.md` — this file, loaded every session
 - `.gitignore` — protects secrets from being committed
 
 **Rules:**
-1. NEVER use `rm -rf .tmp/` — it deletes handoff files. Target specific files instead.
+1. NEVER use `rm -rf .tmp/` — it deletes the `handoff/` notes. Target specific files instead.
 2. NEVER use `rm -rf` on the project root or any top-level directory.
 3. Before `rm` or `git checkout -f`, scan this list.
 4. When deploying to `gh-pages`: gh-pages has its own `.gitignore` (not the same as main). Ensure `.env.local` and `.env` are in it before `git add -A`.

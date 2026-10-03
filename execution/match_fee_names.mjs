@@ -26,8 +26,8 @@
  * *hypothesis* for the coach to confirm.
  *
  * Usage:
- *   node execution/match_fee_names.mjs --balance ".tmp/meet balance.xlsx" --deposits ".tmp/meet deposit.xlsx"
- *   … [--season 2026-2027] [--out .tmp/name-match-report]
+ *   node execution/match_fee_names.mjs --balance ".tmp/coach-in/meet balance.xlsx" --deposits ".tmp/coach-in/meet deposit.xlsx"
+ *   … [--season 2026-2027] [--out .tmp/fee-import/name-match-report]
  *
  * Output: prints the table and writes <out>.md / <out>.csv / <out>.xlsx.
  * Reads Firestore only — it never writes.
@@ -50,7 +50,7 @@ const flag = (name, fallback = null) => {
 };
 const BALANCE_FILE = flag('--balance');
 const DEPOSIT_FILE = flag('--deposits');
-const OUT = flag('--out', '.tmp/name-match-report');
+const OUT = flag('--out', '.tmp/fee-import/name-match-report');
 const SEASON = flag('--season', (() => {
   const d = new Date();
   const y = d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
@@ -58,7 +58,7 @@ const SEASON = flag('--season', (() => {
 })());
 
 if (!BALANCE_FILE && !DEPOSIT_FILE) {
-  console.error('用法: node execution/match_fee_names.mjs --balance <xlsx> --deposits <xlsx> [--season 2026-2027] [--out .tmp/name-match-report]');
+  console.error('用法: node execution/match_fee_names.mjs --balance <xlsx> --deposits <xlsx> [--season 2026-2027] [--out .tmp/fee-import/name-match-report]');
   process.exit(1);
 }
 

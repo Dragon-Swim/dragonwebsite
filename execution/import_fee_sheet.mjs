@@ -10,9 +10,9 @@
  * shows up here writes exactly what the coach-side importer would write.
  *
  * Usage:
- *   node execution/import_fee_sheet.mjs --plan .tmp/name-match-report.plan.json \
- *        --overrides .tmp/fee-name-overrides.json            # dry run
- *   … --commit --by dragonswim@outlook.com                   # write
+ *   node execution/import_fee_sheet.mjs --plan .tmp/fee-import/name-match-report.plan.json \
+ *        --overrides .tmp/fee-import/fee-name-overrides.json    # dry run
+ *   … --commit --by dragonswim@outlook.com                     # write
  *
  * Inputs:
  *   plan.balance[]   { raw, name, value }  → deposits.{balance}     (carry-over)
@@ -36,8 +36,8 @@ const flag = (name, fallback = null) => {
 };
 const COMMIT = args.includes('--commit');
 const SKIP_MISSING = args.includes('--skip-missing');
-const PLAN_PATH = resolve(flag('--plan', '.tmp/name-match-report.plan.json'));
-const OVERRIDES_PATH = flag('--overrides', null);
+const PLAN_PATH = resolve(flag('--plan', '.tmp/fee-import/name-match-report.plan.json'));
+const OVERRIDES_PATH = flag('--overrides', '.tmp/fee-import/fee-name-overrides.json');
 const BY = flag('--by', 'import_fee_sheet');
 const KEY_PATH = resolve(flag('--key', 'serviceAccountKey.json'));
 

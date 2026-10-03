@@ -3,8 +3,8 @@
 /**
  * 报名表 × 线上注册数据 → 可直接发信的名单 + 英文草稿。
  *
- *   node execution/meet-entries-vs-registrations.mjs .tmp/pv-oct-entries.json \
- *        -o .tmp/meet-entry-unregistered.md
+ *   node execution/meet-entries-vs-registrations.mjs .tmp/meet-entry/pv-oct-entries.json \
+ *        -o .tmp/meet-entry/meet-entry-unregistered.md
  *
  * 输入是 execution/extract_hytek_entries.py 抽出来的 JSON(那个脚本负责 PDF 和自校验),
  * 本脚本只做业务匹配,所以两边可以各自重跑、各自调试。
@@ -53,7 +53,7 @@ if (!entriesPath) {
   console.error('用法: node execution/meet-entries-vs-registrations.mjs <entries.json> [-o out.md] [--key path]');
   process.exit(2);
 }
-const OUT_PATH = flag('-o', '.tmp/meet-entry-unregistered.md');
+const OUT_PATH = flag('-o', '.tmp/meet-entry/meet-entry-unregistered.md');
 const KEY_PATH = resolve(flag('--key', 'serviceAccountKey.json'));
 
 // ── 名字工具(与 src/utils/swimmerSort.js 同一套归一化,避免两处口径漂移) ──
@@ -272,7 +272,7 @@ checks.push([`B-1(${bMeet.length}) + B-2(${bAtMeet.length}) + B-3(${bRest.length
  * BCC 串。**分号，不是逗号。**
  *
  * 2026-09-22 教练实测：逗号版粘进 Gmail 的 BCC 会被整串拒绝（地址栏不收），换分号就过。
- * 数据侧不是原因 —— 名单全是 ASCII、无隐藏字符、每条都通过严格正则（.tmp/check-bcc-separators.py
+ * 数据侧不是原因 —— 名单全是 ASCII、无隐藏字符、每条都通过严格正则（.tmp/meet-entry/check-bcc-separators.py
  * 逐字符验过）。分号还有一个好处：它强制客户端逐条切分，真有一条非法时只有那一条留成
  * 文本，而不是整串失败 —— 这样坏地址才找得到。列表里每条都合法时，逗号其实也能用。
  *
@@ -502,10 +502,10 @@ ${checks.map(([label, ok]) => `- ${ok ? '✅' : '❌'} ${label}`).join('\n')}
 
 \`\`\`bash
 # 1) PDF → JSON（自带 Total Athletes 自校验，人数不符会报错退出）
-python execution/extract_hytek_entries.py ".tmp/dragon name entry.pdf" -o .tmp/pv-oct-entries.json
+python execution/extract_hytek_entries.py ".tmp/meet-entry/dragon name entry.pdf" -o .tmp/meet-entry/pv-oct-entries.json
 
 # 2) JSON + 线上数据 → 本文件
-node execution/meet-entries-vs-registrations.mjs .tmp/pv-oct-entries.json -o ${OUT_PATH}
+node execution/meet-entries-vs-registrations.mjs .tmp/meet-entry/pv-oct-entries.json -o ${OUT_PATH}
 \`\`\`
 
 名单类文件放一天就过期（2026-09-21 那份 outreach 里 List 1 是 42 家、List 2 是 5 家，

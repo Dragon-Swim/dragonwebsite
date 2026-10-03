@@ -32,7 +32,7 @@
  * NOT done here on purpose: matching a family to a meet's Hy-Tek fee report by
  * swimmer name. Live data has 10+ families sharing a surname, and this repo
  * already learned that fuzzy/surname matching produces false positives (see
- * .tmp/handoff-2026-09-20-needs-attention.md). The entry table is searchable
+ * .tmp/handoff/handoff-2026-09-20-needs-attention.md). The entry table is searchable
  * instead.
  */
 

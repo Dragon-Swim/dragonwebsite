@@ -6,8 +6,8 @@
 // 真实文件上,读一次线上 deposits 现状,逐行打印计划 —— 上线前、排查投诉时用。
 //
 // 用法:
-//   node execution/preview_fee_import.mjs --balance ".tmp/meet balance.xlsx" --season 2025-2026
-//   node execution/preview_fee_import.mjs --deposits ".tmp/meet deposit.xlsx" --season 2026-2027
+//   node execution/preview_fee_import.mjs --balance ".tmp/coach-in/meet balance.xlsx" --season 2025-2026
+//   node execution/preview_fee_import.mjs --deposits ".tmp/coach-in/meet deposit.xlsx" --season 2026-2027
 //   node execution/preview_fee_import.mjs --balance a.xlsx --deposits b.xlsx --season 2026-2027
 //   可选:--key <service account 路径>,--no-db(不连 Firestore,一律按“新建”预览)
 //

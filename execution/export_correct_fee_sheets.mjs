@@ -15,9 +15,9 @@
  * Input: the plan written by execution/match_fee_names.mjs plus the confirmed
  * overrides file. Usage:
  *   node execution/export_correct_fee_sheets.mjs \
- *        --plan .tmp/name-match-report.plan.json \
- *        --overrides .tmp/fee-name-overrides.json \
- *        [--out-dir .tmp] [--season 2026-2027]
+ *        --plan .tmp/fee-import/name-match-report.plan.json \
+ *        --overrides .tmp/fee-import/fee-name-overrides.json \
+ *        [--out-dir .tmp/deliverables] [--season 2026-2027]
  */
 
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -32,9 +32,9 @@ const flag = (name, fallback = null) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
 };
-const PLAN_PATH = resolve(flag('--plan', '.tmp/name-match-report.plan.json'));
-const OVERRIDES_PATH = flag('--overrides', '.tmp/fee-name-overrides.json');
-const OUT_DIR = resolve(flag('--out-dir', '.tmp'));
+const PLAN_PATH = resolve(flag('--plan', '.tmp/fee-import/name-match-report.plan.json'));
+const OVERRIDES_PATH = flag('--overrides', '.tmp/fee-import/fee-name-overrides.json');
+const OUT_DIR = resolve(flag('--out-dir', '.tmp/deliverables'));
 
 const plan = JSON.parse(readFileSync(PLAN_PATH, 'utf8'));
 const overrides = JSON.parse(readFileSync(resolve(OVERRIDES_PATH), 'utf8'));
