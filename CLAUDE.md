@@ -69,7 +69,8 @@ Key principle: Local files are only for processing. Deliverables live in cloud s
 
 Rules: put new work in the matching bucket (create a clearly-named one if none fits);
 tool defaults in `execution/` point at these paths, so update a tool's defaults when you
-move its inputs/outputs. `.tmp/README.md` mirrors this table for quick reference.
+move its inputs/outputs. `.tmp/README.md` mirrors this table and is the **one** file allowed
+in the root (it is the map for the directory).
 
 ## ⛔ Preserved Files — NEVER DELETE
 
