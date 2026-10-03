@@ -46,6 +46,12 @@ initTheme();
 // ── State Storage ──
 let swimMeets = [];
 let editingMeetId = null;
+// Field values of the open Add/Edit meet form. Every live Firestore snapshot
+// rebuilds this whole view (initDataListeners → refreshUI), so without a draft
+// the form would collapse back to "Add Meet" with empty fields and silently
+// throw away whatever the admin had typed but not yet saved — which reads as
+// "the meet title will not change" (2026-10-03).
+let meetFormDraft = null;
 let sessionSlots = [];
 let enrollments = [];
 let currentUser = null;
@@ -277,12 +283,74 @@ function renderCurrentView() {
   // focus a few hundred ms later, while the admin is already typing in the next
   // row. Capture the caret before the rebuild and put it back after.
   const focus = captureVolunteerFocus();
+  // Same reason, for the Add/Edit meet form: read the half-filled form out of the
+  // DOM before it is thrown away, so the rebuild can put it back exactly as it
+  // was (open, filled, caret in the same box).
+  const meetDraft = captureMeetFormDraft();
+  if (meetDraft) meetFormDraft = meetDraft;
+  const meetFocus = captureMeetFormFocus();
   if (userRole === 'coach') {
     renderCoachDashboard(currentUser);
   } else {
     renderDashboard(currentUser);
   }
   restoreVolunteerFocus(focus);
+  restoreMeetFormFocus(meetFocus);
+}
+
+// ── Meet form draft (survives live re-renders) ──
+
+const MEET_FIELD_IDS = {
+  name: 'meet-name',
+  startDate: 'meet-start-date',
+  endDate: 'meet-end-date',
+  location: 'meet-location',
+  source: 'meet-source',
+  season: 'meet-season',
+};
+
+/** Read the open Add/Edit form out of the DOM; null when it is closed/absent. */
+function captureMeetFormDraft() {
+  const form = document.getElementById('add-meet-form');
+  if (!form || form.style.display === 'none') return null;
+  const draft = {};
+  for (const [key, id] of Object.entries(MEET_FIELD_IDS)) {
+    draft[key] = document.getElementById(id)?.value ?? '';
+  }
+  if (!draft.season) draft.season = currentSeason;
+  return draft;
+}
+
+/** Close the form for good: clear the draft first so the next render drops it. */
+function closeMeetForm() {
+  meetFormDraft = null;
+  editingMeetId = null;
+  const form = document.getElementById('add-meet-form');
+  if (form) form.style.display = 'none';
+}
+
+/** Remember which meet-form field (and caret offset) is focused, if any. */
+function captureMeetFormFocus() {
+  const el = document.activeElement;
+  if (!el || !el.id) return null;
+  const form = document.getElementById('add-meet-form');
+  if (!form || !form.contains(el)) return null;
+  return {
+    id: el.id,
+    selStart: typeof el.selectionStart === 'number' ? el.selectionStart : null,
+    selEnd: typeof el.selectionEnd === 'number' ? el.selectionEnd : null,
+  };
+}
+
+/** Put the caret back in the same meet-form field after a re-render. */
+function restoreMeetFormFocus(focus) {
+  if (!focus) return;
+  const el = document.getElementById(focus.id);
+  if (!el) return;
+  el.focus();
+  if (focus.selStart != null && typeof el.setSelectionRange === 'function') {
+    try { el.setSelectionRange(focus.selStart, focus.selEnd); } catch { /* date/select reject it */ }
+  }
 }
 
 /** Remember which volunteer field (and caret offset) is focused, if any. */
@@ -4166,22 +4234,41 @@ function renderSwimMeets() {
     </div>
 
     ${canEdit ? `
-      <div id="add-meet-form" class="dash-panel" style="display: none; margin-bottom: 2rem; padding: 1.5rem;">
-        <h3 style="margin-bottom: 1rem;" id="meet-form-title">${t('dash_meets_new_title')}</h3>
+      <div id="add-meet-form" class="dash-panel" style="${meetFormDraft ? '' : 'display: none;'} margin-bottom: 2rem; padding: 1.5rem;">
+        <h3 style="margin-bottom: 1rem;" id="meet-form-title">${editingMeetId ? t('dash_meets_edit_title') : t('dash_meets_new_title')}</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-          <input type="text" id="meet-name" placeholder="${t('dash_meets_name_placeholder')}" class="form-input">
-          <input type="date" id="meet-start-date" class="form-input" title="${t('dash_meets_start_date_placeholder')}">
-          <input type="date" id="meet-end-date" class="form-input" title="${t('dash_meets_end_date_placeholder')}">
-          <input type="text" id="meet-location" placeholder="${t('dash_meets_location_placeholder')}" class="form-input">
-          <input type="url" id="meet-source" placeholder="${t('dash_meets_source_placeholder')}" class="form-input">
-          <select id="meet-season" class="form-input">
-            ${getSeasonOptions().map((s) => `<option value="${s}" ${s === currentSeason ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
+          <div>
+            <label class="form-label" for="meet-name">${t('dash_meets_name_placeholder')}</label>
+            <input type="text" id="meet-name" placeholder="${t('dash_meets_name_placeholder')}" class="form-input" value="${escapeHtml(meetFormDraft?.name || '')}">
+          </div>
+          <div>
+            <label class="form-label" for="meet-start-date">${t('dash_meets_start_date_placeholder')}</label>
+            <input type="date" id="meet-start-date" class="form-input" title="${t('dash_meets_start_date_placeholder')}" value="${escapeHtml(meetFormDraft?.startDate || '')}">
+          </div>
+          <div>
+            <label class="form-label" for="meet-end-date">${t('dash_meets_end_date_placeholder')}</label>
+            <input type="date" id="meet-end-date" class="form-input" title="${t('dash_meets_end_date_placeholder')}" value="${escapeHtml(meetFormDraft?.endDate || '')}">
+          </div>
+          <div>
+            <label class="form-label" for="meet-location">${t('dash_meets_location_placeholder')}</label>
+            <input type="text" id="meet-location" placeholder="${t('dash_meets_location_placeholder')}" class="form-input" value="${escapeHtml(meetFormDraft?.location || '')}">
+          </div>
+          <div>
+            <label class="form-label" for="meet-source">${t('dash_meets_source_placeholder')}</label>
+            <input type="url" id="meet-source" placeholder="${t('dash_meets_source_placeholder')}" class="form-input" value="${escapeHtml(meetFormDraft?.source || '')}">
+          </div>
+          <div>
+            <label class="form-label" for="meet-season">${t('dash_season_label')}</label>
+            <select id="meet-season" class="form-input">
+              ${getSeasonOptions().map((s) => `<option value="${s}" ${s === (meetFormDraft?.season || currentSeason) ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
         </div>
-        <div style="margin-top: 1rem; display: flex; gap: 1rem;">
-          <button class="btn btn-primary btn-sm" id="save-meet-btn">${t('dash_meets_save')}</button>
+        <div style="margin-top: 1rem; display: flex; gap: 1rem; align-items: center;">
+          <button class="btn btn-primary btn-sm" id="save-meet-btn">${editingMeetId ? t('dash_meets_update') : t('dash_meets_save')}</button>
           <button class="btn btn-outline btn-sm" id="cancel-meet-btn">${t('dash_meets_cancel')}</button>
         </div>
+        <p id="meet-form-error" style="display: none; margin-top: 0.75rem; color: var(--color-accent); font-size: var(--fs-sm);"></p>
       </div>
     ` : ''}
 
@@ -5296,29 +5383,40 @@ function bindEvents() {
   // ── Coach Management Events ──
   if (userRole === 'coach') {
     // Meet Management
-    const meetForm = document.getElementById('add-meet-form');
-    const meetSaveBtn = document.getElementById('save-meet-btn');
-    const meetCancelBtn = document.getElementById('cancel-meet-btn');
-    const meetFormTitle = document.getElementById('meet-form-title');
-
-    const openMeetForm = () => {
-      editingMeetId = null;
-      meetFormTitle.textContent = t('dash_meets_new_title');
-      meetSaveBtn.textContent = t('dash_meets_save');
-      document.getElementById('meet-name').value = '';
-      document.getElementById('meet-start-date').value = '';
-      document.getElementById('meet-end-date').value = '';
-      document.getElementById('meet-location').value = '';
-      document.getElementById('meet-source').value = '';
-      meetForm.style.display = 'block';
+    // The form itself is rendered from `meetFormDraft` (see renderSwimMeets), so
+    // every action here changes that state and re-renders. A live Firestore
+    // snapshot in the middle of an edit then rebuilds the very same form instead
+    // of discarding it.
+    const meetError = (msg) => {
+      const el = document.getElementById('meet-form-error');
+      if (!el) { if (msg) alert(msg); return; }
+      el.textContent = msg || '';
+      el.style.display = msg ? 'block' : 'none';
     };
-    document.getElementById('add-meet-btn')?.addEventListener('click', openMeetForm);
-    document.getElementById('add-meet-btn-empty')?.addEventListener('click', openMeetForm);
-    meetCancelBtn?.addEventListener('click', () => {
-      meetForm.style.display = 'none';
-      editingMeetId = null;
+
+    const openMeetForm = (id, values, { focusName = false } = {}) => {
+      // Hide whatever form is on screen first: the re-render below reads the open
+      // form back out of the DOM, so a still-visible previous edit would overwrite
+      // the values we are opening with (and save them onto the wrong meet).
+      const stale = document.getElementById('add-meet-form');
+      if (stale) stale.style.display = 'none';
+      editingMeetId = id;
+      meetFormDraft = { ...values };
+      renderCurrentView();
+      const form = document.getElementById('add-meet-form');
+      if (form) form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (focusName) document.getElementById('meet-name')?.focus();
+    };
+
+    const blankMeetValues = () => ({ name: '', startDate: '', endDate: '', location: '', source: '', season: currentSeason });
+
+    document.getElementById('add-meet-btn')?.addEventListener('click', () => openMeetForm(null, blankMeetValues(), { focusName: true }));
+    document.getElementById('add-meet-btn-empty')?.addEventListener('click', () => openMeetForm(null, blankMeetValues(), { focusName: true }));
+    document.getElementById('cancel-meet-btn')?.addEventListener('click', () => {
+      closeMeetForm();
+      renderCurrentView();
     });
-    meetSaveBtn?.addEventListener('click', async () => {
+    document.getElementById('save-meet-btn')?.addEventListener('click', async () => {
       const name = document.getElementById('meet-name').value.trim();
       const startDate = document.getElementById('meet-start-date').value;
       const endDate = document.getElementById('meet-end-date').value;
@@ -5327,10 +5425,11 @@ function bindEvents() {
       const season = document.getElementById('meet-season')?.value || currentSeason;
 
       if (!name || !startDate || !endDate) {
-        alert(t('dash_meets_name_date_required'));
+        meetError(t('dash_meets_name_date_required'));
         return;
       }
 
+      meetError(null);
       try {
         if (editingMeetId) {
           // Update existing meet
@@ -5355,28 +5454,27 @@ function bindEvents() {
             createdAt: new Date()
           });
         }
-        meetForm.style.display = 'none';
-        editingMeetId = null;
+        closeMeetForm();
+        renderCurrentView();
       } catch (err) {
+        // Never swallow this: a rejected write used to look exactly like "the
+        // field will not change", with no hint about why.
         console.error("Error saving meet:", err);
+        meetError(`${t('dash_meets_save_failed')} ${err?.message || ''}`.trim());
       }
     });
 
     // Edit meet
     document.querySelectorAll('.edit-meet').forEach(btn => {
       btn.addEventListener('click', () => {
-        editingMeetId = btn.dataset.id;
-        meetFormTitle.textContent = t('dash_meets_edit_title');
-        meetSaveBtn.textContent = t('dash_meets_update');
-        document.getElementById('meet-name').value = btn.dataset.name;
-        document.getElementById('meet-start-date').value = btn.dataset.start;
-        document.getElementById('meet-end-date').value = btn.dataset.end;
-        document.getElementById('meet-location').value = btn.dataset.location;
-        document.getElementById('meet-source').value = btn.dataset.source || '';
-        const seasonEl = document.getElementById('meet-season');
-        if (seasonEl) seasonEl.value = btn.dataset.season || currentSeason;
-        meetForm.style.display = 'block';
-        meetForm.scrollIntoView({ behavior: 'smooth' });
+        openMeetForm(btn.dataset.id, {
+          name: btn.dataset.name || '',
+          startDate: btn.dataset.start || '',
+          endDate: btn.dataset.end || '',
+          location: btn.dataset.location || '',
+          source: btn.dataset.source || '',
+          season: btn.dataset.season || currentSeason,
+        }, { focusName: true });
       });
     });
 
@@ -5395,10 +5493,7 @@ function bindEvents() {
             } catch (cleanupErr) {
               console.warn('Volunteer hours cleanup failed for meet', meetId, cleanupErr);
             }
-            if (editingMeetId === meetId) {
-              meetForm.style.display = 'none';
-              editingMeetId = null;
-            }
+            if (editingMeetId === meetId) closeMeetForm();
             if (volunteerMeetId === meetId) volunteerMeetId = null;
           } catch (err) {
             console.error("Error deleting meet:", err);

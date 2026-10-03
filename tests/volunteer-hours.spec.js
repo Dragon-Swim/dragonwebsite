@@ -19,9 +19,12 @@ import { test, expect } from "@playwright/test";
 import { assertEmulatorReady, seedDocument, seedStaffUser, readDocument } from "./helpers/emulator.js";
 
 const PASSWORD = "Test1234!";
-let seq = 0;
-const unique = (tag) => `vol-${tag}-${Date.now()}-${seq++}@example.com`;
-const uniqueId = (tag) => `vol-${tag}-${Date.now()}-${seq++}`;
+// `seq` alone is not enough: Playwright runs the tests of one file in separate
+// worker processes, and each worker starts its own counter — two tests seeding in
+// the same millisecond then share a document id and delete each other's fixtures.
+const rand = () => Math.random().toString(36).slice(2, 8);
+const unique = (tag) => `vol-${tag}-${Date.now()}-${rand()}@example.com`;
+const uniqueId = (tag) => `vol-${tag}-${Date.now()}-${rand()}`;
 
 /**
  * The app's own season rule (dashboard.js getDefaultSeason): a season starts in
@@ -44,14 +47,19 @@ function todayISO() {
  * One meet (today) in the current season + two families.
  * `createdAt` is REQUIRED: the dashboard reads registrations and meets with
  * `orderBy(createdAt)`, and Firestore silently omits documents lacking that field.
+ *
+ * The meet NAME carries a unique tag: every page listens to the whole `meets`
+ * collection, so two tests using the same name (and the same date, so the same
+ * default meet selection) show each other's meet in the entry table.
  */
 async function seedVolunteerFixtures(season) {
   const meetId = uniqueId("meet");
   const familyA = uniqueId("fama");
   const familyB = uniqueId("famb");
+  const meetName = `Volunteer Test Meet #${rand()}`;
 
   await seedDocument("meets", meetId, {
-    name: "Volunteer Test Meet",
+    name: meetName,
     startDate: todayISO(),
     endDate: todayISO(),
     location: "Test Pool",
@@ -83,7 +91,7 @@ async function seedVolunteerFixtures(season) {
     createdAt: new Date(),
   });
 
-  return { meetId, familyA, familyB };
+  return { meetId, meetName, familyA, familyB };
 }
 
 async function signIn(page, email) {
@@ -95,10 +103,19 @@ async function signIn(page, email) {
   await expect(page.locator(".dash-nav")).toBeVisible({ timeout: 15000 });
 }
 
-async function openVolunteerTab(page) {
+/**
+ * Open the tab and point the entry table at THIS test's meet. The tab defaults to
+ * the newest past meet, and with other specs seeding meets into the same emulator
+ * that default is not necessarily ours.
+ */
+async function openVolunteerTab(page, meetId) {
   await page.click('.dash-nav-item[data-tab="volunteer"]');
   await expect(page.locator(".dash-page-title")).toHaveText("Volunteer Hours");
   await expect(page.locator(".vol-summary-table")).toBeVisible({ timeout: 15000 });
+  if (meetId) {
+    await page.selectOption("#volunteer-meet-select", meetId);
+    await expect(page.locator("#volunteer-meet-select")).toHaveValue(meetId);
+  }
 }
 
 test.beforeAll(async () => {
@@ -107,12 +124,12 @@ test.beforeAll(async () => {
 
 test("admin records a family's hours for a meet, summary and CSV follow", async ({ page }) => {
   const season = currentSeason();
-  const { meetId, familyA, familyB } = await seedVolunteerFixtures(season);
+  const { meetId, meetName, familyA, familyB } = await seedVolunteerFixtures(season);
   const email = unique("admin");
   await seedStaffUser(email, PASSWORD, "admin");
 
   await signIn(page, email);
-  await openVolunteerTab(page);
+  await openVolunteerTab(page, meetId);
 
   // ── The summary lists both families, with kids from the registration ──
   const summaryA = page.locator(`.vol-summary-row[data-vol-family="${familyA}"]`);
@@ -152,7 +169,7 @@ test("admin records a family's hours for a meet, summary and CSV follow", async 
 
   // ── The per-meet breakdown names the meet ──
   await summaryA.click();
-  await expect(page.locator(`.vol-detail-row[data-vol-detail="${familyA}"]`)).toContainText("Volunteer Test Meet");
+  await expect(page.locator(`.vol-detail-row[data-vol-detail="${familyA}"]`)).toContainText(meetName);
 
   // ── CSV export ──
   const [download] = await Promise.all([
@@ -171,12 +188,12 @@ test("admin records a family's hours for a meet, summary and CSV follow", async 
 
 test("a plain coach reads the same numbers without being able to edit them", async ({ page }) => {
   const season = currentSeason();
-  const { meetId, familyA } = await seedVolunteerFixtures(season);
+  const { meetId, meetName, familyA } = await seedVolunteerFixtures(season);
 
   // A record already exists (as if an admin had entered it).
   await seedDocument("volunteerHours", `${meetId}_${familyA}`, {
     meetId,
-    meetName: "Volunteer Test Meet",
+    meetName,
     season,
     familyId: familyA,
     familyLabel: "Keke Chen & Fan Luo",
@@ -192,7 +209,7 @@ test("a plain coach reads the same numbers without being able to edit them", asy
   await seedStaffUser(coachEmail, PASSWORD, "coach");
 
   await signIn(page, coachEmail);
-  await openVolunteerTab(page);
+  await openVolunteerTab(page, meetId);
 
   const summaryA = page.locator(`.vol-summary-row[data-vol-family="${familyA}"]`);
   await expect(summaryA).toContainText("Keke Chen & Fan Luo");

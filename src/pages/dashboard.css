@@ -326,6 +326,13 @@
     margin-bottom: var(--space-lg);
 }
 
+/* The Add/Edit meet form is scrolled into view when it opens. The topbar is
+   sticky (≈95px), so without this the form's first row — the meet NAME — lands
+   under the topbar and cannot be clicked. */
+#add-meet-form {
+    scroll-margin-top: 8rem;
+}
+
 .dash-panel--wide {
     grid-column: 1 / -1;
 }

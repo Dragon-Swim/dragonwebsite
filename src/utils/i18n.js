@@ -391,6 +391,7 @@ const translations = {
         dash_meets_source_placeholder: 'Meet link (optional)',
         dash_meets_confirm_delete: 'Are you sure you want to delete this meet?',
         dash_meets_name_date_required: 'Please provide a name, start date, and end date.',
+        dash_meets_save_failed: 'Could not save this meet. Your changes are still in the form — try again.',
 
         // ── Meet Entry Fees ──
         dash_meets_fee: 'Fee',
