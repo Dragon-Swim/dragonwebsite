@@ -25,7 +25,7 @@
  *
  * ── Why everything here is pure ─────────────────────────────────────────────
  * The dashboard, the emulator tests and the read-only audit script
- * (execution/audit_volunteer_hours.mjs) must agree on what "this family's season
+ * (execution/data-admin/audit_volunteer_hours.mjs) must agree on what "this family's season
  * total" means. Keeping the aggregation in one importable module is the same
  * reason src/utils/registrationCompleteness.js exists.
  *

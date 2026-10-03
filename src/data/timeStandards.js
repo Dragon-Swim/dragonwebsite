@@ -2,7 +2,7 @@
  * USA Swimming 时间标准(2024-2028 周期,官方 PDF 录入)。
  *
  * 数据来自 .tmp/2028-motivational-standards-age-group.pdf(USAS 官方表):
- * 先 execution/extract_standards_text.py 抽文本,再 execution/parse_usas_standards.py
+ * 先 execution/standards/extract_standards_text.py 抽文本,再 execution/standards/parse_usas_standards.py
  * 生成到 ./timeStandards.data.js(两步均可重跑;数据文件勿手改)。
  * 结构: ageGroup → course → '距离 泳姿' → { girls, boys: { B..AAAA: 秒阈值 } }。
  *

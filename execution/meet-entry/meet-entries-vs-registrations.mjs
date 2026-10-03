@@ -3,10 +3,10 @@
 /**
  * 报名表 × 线上注册数据 → 可直接发信的名单 + 英文草稿。
  *
- *   node execution/meet-entries-vs-registrations.mjs .tmp/meet-entry/pv-oct-entries.json \
+ *   node execution/meet-entry/meet-entries-vs-registrations.mjs .tmp/meet-entry/pv-oct-entries.json \
  *        -o .tmp/meet-entry/meet-entry-unregistered.md
  *
- * 输入是 execution/extract_hytek_entries.py 抽出来的 JSON(那个脚本负责 PDF 和自校验),
+ * 输入是 execution/meet-entry/extract_hytek_entries.py 抽出来的 JSON(那个脚本负责 PDF 和自校验),
  * 本脚本只做业务匹配,所以两边可以各自重跑、各自调试。
  *
  * ── 产出三类人 ──────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { normalizeSortKey } from '../src/utils/swimmerSort.js';
+import { normalizeSortKey } from '../../src/utils/swimmerSort.js';
 
 // ── 参数 ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -50,7 +50,7 @@ const flag = (name, def) => {
 };
 const entriesPath = args.find((a) => !a.startsWith('-') && a !== flag('-o') && a !== flag('--key'));
 if (!entriesPath) {
-  console.error('用法: node execution/meet-entries-vs-registrations.mjs <entries.json> [-o out.md] [--key path]');
+  console.error('用法: node execution/meet-entry/meet-entries-vs-registrations.mjs <entries.json> [-o out.md] [--key path]');
   process.exit(2);
 }
 const OUT_PATH = flag('-o', '.tmp/meet-entry/meet-entry-unregistered.md');
@@ -502,10 +502,10 @@ ${checks.map(([label, ok]) => `- ${ok ? '✅' : '❌'} ${label}`).join('\n')}
 
 \`\`\`bash
 # 1) PDF → JSON（自带 Total Athletes 自校验，人数不符会报错退出）
-python execution/extract_hytek_entries.py ".tmp/meet-entry/dragon name entry.pdf" -o .tmp/meet-entry/pv-oct-entries.json
+python execution/meet-entry/extract_hytek_entries.py ".tmp/meet-entry/dragon name entry.pdf" -o .tmp/meet-entry/pv-oct-entries.json
 
 # 2) JSON + 线上数据 → 本文件
-node execution/meet-entries-vs-registrations.mjs .tmp/meet-entry/pv-oct-entries.json -o ${OUT_PATH}
+node execution/meet-entry/meet-entries-vs-registrations.mjs .tmp/meet-entry/pv-oct-entries.json -o ${OUT_PATH}
 \`\`\`
 
 名单类文件放一天就过期（2026-09-21 那份 outreach 里 List 1 是 42 家、List 2 是 5 家，

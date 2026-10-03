@@ -6,9 +6,9 @@
 // 真实文件上,读一次线上 deposits 现状,逐行打印计划 —— 上线前、排查投诉时用。
 //
 // 用法:
-//   node execution/preview_fee_import.mjs --balance ".tmp/coach-in/meet balance.xlsx" --season 2025-2026
-//   node execution/preview_fee_import.mjs --deposits ".tmp/coach-in/meet deposit.xlsx" --season 2026-2027
-//   node execution/preview_fee_import.mjs --balance a.xlsx --deposits b.xlsx --season 2026-2027
+//   node execution/fees/preview_fee_import.mjs --balance ".tmp/coach-in/meet balance.xlsx" --season 2025-2026
+//   node execution/fees/preview_fee_import.mjs --deposits ".tmp/coach-in/meet deposit.xlsx" --season 2026-2027
+//   node execution/fees/preview_fee_import.mjs --balance a.xlsx --deposits b.xlsx --season 2026-2027
 //   可选:--key <service account 路径>,--no-db(不连 Firestore,一律按“新建”预览)
 //
 // 读表用 xlsx 包(与前端同一个),逻辑 import 自 src/utils/feeImport.js —— 不做二次实现。
@@ -21,7 +21,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   parseCarryOverRows, planCarryOverRows, buildCarryOverWrites,
   parseDepositDetailRows, planDepositRows, buildDepositWrites,
-} from '../src/utils/feeImport.js';
+} from '../../src/utils/feeImport.js';
 
 const require = createRequire(import.meta.url);
 const XLSX = require('xlsx');
@@ -39,7 +39,7 @@ const KEY_PATH = resolve(flag('--key') || 'serviceAccountKey.json');
 const NO_DB = args.includes('--no-db');
 
 if (!SEASON || (!BALANCE_FILE && !DEPOSIT_FILE)) {
-  console.error('用法: node execution/preview_fee_import.mjs (--balance <xlsx> | --deposits <xlsx>) --season <例如 2025-2026> [--key <路径>] [--no-db]');
+  console.error('用法: node execution/fees/preview_fee_import.mjs (--balance <xlsx> | --deposits <xlsx>) --season <例如 2025-2026> [--key <路径>] [--no-db]');
   process.exit(1);
 }
 

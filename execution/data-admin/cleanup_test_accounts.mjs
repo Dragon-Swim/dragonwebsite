@@ -5,9 +5,9 @@
 // (john.chen@example.com 等),这些账号在公开仓库里密码已知,应当清除。
 //
 // 用法:
-//   node execution/cleanup_test_accounts.mjs                 # dry-run:只列出
-//   node execution/cleanup_test_accounts.mjs --delete        # 确认后真正删除
-//   node execution/cleanup_test_accounts.mjs --key <路径>     # 指定 service account key
+//   node execution/data-admin/cleanup_test_accounts.mjs                 # dry-run:只列出
+//   node execution/data-admin/cleanup_test_accounts.mjs --delete        # 确认后真正删除
+//   node execution/data-admin/cleanup_test_accounts.mjs --key <路径>     # 指定 service account key
 //
 // 每个候选账号会一并清理:
 //   - Auth 账户

@@ -1,4 +1,4 @@
-// 自动生成 — 请勿手改。由 execution/parse_usas_standards.py 从
+// 自动生成 — 请勿手改。由 execution/standards/parse_usas_standards.py 从
 // .tmp/2028-motivational-standards-age-group.pdf 抽取(USAS 2024-2028 周期;
 // 2025-10 官方修订:15-16/17-18 增补 50 BK/BR/FL)。
 // 结构: ageGroup → course → '距离 泳姿' → { girls: {B..AAAA: 秒}, boys: {B..AAAA: 秒} }

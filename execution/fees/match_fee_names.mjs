@@ -26,7 +26,7 @@
  * *hypothesis* for the coach to confirm.
  *
  * Usage:
- *   node execution/match_fee_names.mjs --balance ".tmp/coach-in/meet balance.xlsx" --deposits ".tmp/coach-in/meet deposit.xlsx"
+ *   node execution/fees/match_fee_names.mjs --balance ".tmp/coach-in/meet balance.xlsx" --deposits ".tmp/coach-in/meet deposit.xlsx"
  *   … [--season 2026-2027] [--out .tmp/fee-import/name-match-report]
  *
  * Output: prints the table and writes <out>.md / <out>.csv / <out>.xlsx.
@@ -58,7 +58,7 @@ const SEASON = flag('--season', (() => {
 })());
 
 if (!BALANCE_FILE && !DEPOSIT_FILE) {
-  console.error('用法: node execution/match_fee_names.mjs --balance <xlsx> --deposits <xlsx> [--season 2026-2027] [--out .tmp/fee-import/name-match-report]');
+  console.error('用法: node execution/fees/match_fee_names.mjs --balance <xlsx> --deposits <xlsx> [--season 2026-2027] [--out .tmp/fee-import/name-match-report]');
   process.exit(1);
 }
 
@@ -502,7 +502,7 @@ const wb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(csv), 'name-match');
 XLSX.writeFile(wb, `${OUT}.xlsx`);
 
-// Machine-readable import plan: execution/import_fee_sheet.mjs consumes this
+// Machine-readable import plan: execution/fees/import_fee_sheet.mjs consumes this
 // (plus an overrides file for the rows that had to be confirmed by hand).
 const planRows = (kind) => (sheets.find((s) => s.kind === kind)?.rows ?? []).map((row) => ({
   row: row.rowNum,

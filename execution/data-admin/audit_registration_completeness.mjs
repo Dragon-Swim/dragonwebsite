@@ -3,9 +3,9 @@
 // 审计已注册家庭的信息完整度(只读,不写任何数据)。
 //
 // 用法:
-//   node execution/audit_registration_completeness.mjs              # 人类可读报告
-//   node execution/audit_registration_completeness.mjs --json       # 机器可读
-//   node execution/audit_registration_completeness.mjs --key <路径>  # 指定 service account key
+//   node execution/data-admin/audit_registration_completeness.mjs              # 人类可读报告
+//   node execution/data-admin/audit_registration_completeness.mjs --json       # 机器可读
+//   node execution/data-admin/audit_registration_completeness.mjs --key <路径>  # 指定 service account key
 //
 // 判定口径与 Coach Dashboard 的 Needs Attention 共用
 // src/utils/registrationCompleteness.js,避免两处规则漂移。
@@ -29,7 +29,7 @@ import { resolve } from 'node:path';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { auditRegistration, activeSwimmers } from '../src/utils/registrationCompleteness.js';
+import { auditRegistration, activeSwimmers } from '../../src/utils/registrationCompleteness.js';
 
 const args = process.argv.slice(2);
 const AS_JSON = args.includes('--json');

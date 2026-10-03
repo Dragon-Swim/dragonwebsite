@@ -6,10 +6,10 @@
 // 但历史遗留孤儿仍存在,Firebase Console 只能逐个手删,本脚本批量处理。
 //
 // 用法:
-//   node execution/cleanup_orphan_auth_users.mjs                 # dry-run:只列出,不删
-//   node execution/cleanup_orphan_auth_users.mjs --delete        # 确认清单后真正删除
-//   node execution/cleanup_orphan_auth_users.mjs --key <路径>    # 指定 service account key(默认项目根 serviceAccountKey.json)
-//   node execution/cleanup_orphan_auth_users.mjs --exclude <uid或email>  # 排除某账户(可重复),如 --exclude admin@dragonswim.com
+//   node execution/data-admin/cleanup_orphan_auth_users.mjs                 # dry-run:只列出,不删
+//   node execution/data-admin/cleanup_orphan_auth_users.mjs --delete        # 确认清单后真正删除
+//   node execution/data-admin/cleanup_orphan_auth_users.mjs --key <路径>    # 指定 service account key(默认项目根 serviceAccountKey.json)
+//   node execution/data-admin/cleanup_orphan_auth_users.mjs --exclude <uid或email>  # 排除某账户(可重复),如 --exclude admin@dragonswim.com
 //
 // 安全设计:
 //   - 默认 dry-run;只有显式 --delete 才执行删除(不可逆)

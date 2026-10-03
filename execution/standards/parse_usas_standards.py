@@ -3,7 +3,7 @@
 parse_usas_standards.py — 从 USA Swimming 2024-2028 Motivational Standards PDF
 的文本抽取结果生成 `src/data/timeStandards.data.js`(纯数据,可再生成)。
 
-输入: .tmp/standards-raw.txt(先跑 execution/extract_standards_text.py 从 PDF 抽取)
+输入: .tmp/standards/standards-raw.txt(先跑 execution/standards/extract_standards_text.py 从 PDF 抽取)
 输出: src/data/timeStandards.data.js — TIME_STANDARDS 数据对象
 
 数据布局(每"行"一条记录,12 个时间):
@@ -24,7 +24,7 @@ parse_usas_standards.py — 从 USA Swimming 2024-2028 Motivational Standards PD
   - 每行恰好 12 个时间
   - 女生 B>BB>A>AA>AAA>AAAA;男生 AAAA<AAA<AA<A<BB<B(秒数)
   - 同级别女生秒数 > 男生秒数
-用法: python execution/parse_usas_standards.py
+用法: python execution/standards/parse_usas_standards.py
 """
 import re
 import json
@@ -35,8 +35,8 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-RAW = Path(__file__).resolve().parent.parent / ".tmp" / "standards-raw.txt"
-OUT = Path(__file__).resolve().parent.parent / "src" / "data" / "timeStandards.data.js"
+RAW = Path(__file__).resolve().parent.parent.parent / ".tmp" / "standards" / "standards-raw.txt"
+OUT = Path(__file__).resolve().parent.parent.parent / "src" / "data" / "timeStandards.data.js"
 
 TIME_RE = re.compile(r"(?:\d+):(\d{2})\.(\d{2})|(\d{2})\.(\d{2})")
 # 页眉导出日期行(如 "10/10/2025 1:02:42 AM");月份/日期随导出时间变化,不能写死 "10/7/"
@@ -163,7 +163,7 @@ def main() -> None:
 
     # 4) 生成 JS 数据模块
     js = (
-        "// 自动生成 — 请勿手改。由 execution/parse_usas_standards.py 从\n"
+        "// 自动生成 — 请勿手改。由 execution/standards/parse_usas_standards.py 从\n"
         "// .tmp/2028-motivational-standards-age-group.pdf 抽取(USAS 2024-2028 周期;\n"
         "// 2025-10 官方修订:15-16/17-18 增补 50 BK/BR/FL)。\n"
         "// 结构: ageGroup → course → '距离 泳姿' → { girls: {B..AAAA: 秒}, boys: {B..AAAA: 秒} }\n"

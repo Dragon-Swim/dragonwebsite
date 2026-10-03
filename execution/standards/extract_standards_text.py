@@ -8,19 +8,19 @@ extract_standards_text.py — 把 USA Swimming 2024-2028 Motivational Standards 
 官方更新 PDF 后要能一键重跑,避免每次手工敲抽取命令(历史上这步是 ad-hoc 的)。
 PyMuPDF(fitz) 抽出的行结构不同(每个单元格一行),不能直接喂给 parser,只适合交叉核对。
 
-输入: .tmp/2028-motivational-standards-age-group.pdf
-输出: .tmp/standards-raw.txt
+输入: .tmp/standards/2028-motivational-standards-age-group.pdf
+输出: .tmp/standards/standards-raw.txt
 
-用法: python execution/extract_standards_text.py [--pdf <path>] [--out <path>]
+用法: python execution/standards/extract_standards_text.py [--pdf <path>] [--out <path>]
 """
 import argparse
 from pathlib import Path
 
 from pypdf import PdfReader
 
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_PDF = ROOT / ".tmp" / "2028-motivational-standards-age-group.pdf"
-DEFAULT_OUT = ROOT / ".tmp" / "standards-raw.txt"
+ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_PDF = ROOT / ".tmp" / "standards" / "2028-motivational-standards-age-group.pdf"
+DEFAULT_OUT = ROOT / ".tmp" / "standards" / "standards-raw.txt"
 
 
 def extract(pdf: Path) -> str:

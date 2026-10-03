@@ -12,9 +12,9 @@
  * totals (a TOTAL row must never sit inside the import sheet: it would be read as
  * a person called "TOTAL").
  *
- * Input: the plan written by execution/match_fee_names.mjs plus the confirmed
+ * Input: the plan written by execution/fees/match_fee_names.mjs plus the confirmed
  * overrides file. Usage:
- *   node execution/export_correct_fee_sheets.mjs \
+ *   node execution/fees/export_correct_fee_sheets.mjs \
  *        --plan .tmp/fee-import/name-match-report.plan.json \
  *        --overrides .tmp/fee-import/fee-name-overrides.json \
  *        [--out-dir .tmp/deliverables] [--season 2026-2027]
@@ -41,7 +41,7 @@ const overrides = JSON.parse(readFileSync(resolve(OVERRIDES_PATH), 'utf8'));
 const SEASON = flag('--season', plan.season);
 const UNLINKED = new Set((overrides.unlinked || []).map((n) => String(n).toLowerCase().trim()));
 
-/** Apply the human-confirmed overrides (same rule as execution/import_fee_sheet.mjs). */
+/** Apply the human-confirmed overrides (same rule as execution/fees/import_fee_sheet.mjs). */
 function resolveRows(rows, kind) {
   const ov = overrides[kind] || {};
   return (rows || []).map((row) => {

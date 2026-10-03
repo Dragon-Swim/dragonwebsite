@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Import the coaches' fee sheets into `deposits`, using the name mapping that
- * execution/match_fee_names.mjs produced (and a human confirmed).
+ * execution/fees/match_fee_names.mjs produced (and a human confirmed).
  *
  * Why a separate tool: applying the mapping is a data write with real money
  * behind it, so it must be reviewable — this prints every row it would write and
@@ -10,7 +10,7 @@
  * shows up here writes exactly what the coach-side importer would write.
  *
  * Usage:
- *   node execution/import_fee_sheet.mjs --plan .tmp/fee-import/name-match-report.plan.json \
+ *   node execution/fees/import_fee_sheet.mjs --plan .tmp/fee-import/name-match-report.plan.json \
  *        --overrides .tmp/fee-import/fee-name-overrides.json    # dry run
  *   … --commit --by dragonswim@outlook.com                     # write
  *
@@ -27,7 +27,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   planCarryOverRows, buildCarryOverWrites,
   planDepositRows, buildDepositWrites,
-} from '../src/utils/feeImport.js';
+} from '../../src/utils/feeImport.js';
 
 const args = process.argv.slice(2);
 const flag = (name, fallback = null) => {

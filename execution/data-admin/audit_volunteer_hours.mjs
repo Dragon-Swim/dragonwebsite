@@ -3,10 +3,10 @@
 // 只读审计线上志愿小时数据(不写任何数据)。
 //
 // 用法:
-//   node execution/audit_volunteer_hours.mjs                 # 当前赛季,人类可读
-//   node execution/audit_volunteer_hours.mjs --season 2025-2026
-//   node execution/audit_volunteer_hours.mjs --json           # 机器可读
-//   node execution/audit_volunteer_hours.mjs --key <路径>      # 指定 service account key
+//   node execution/data-admin/audit_volunteer_hours.mjs                 # 当前赛季,人类可读
+//   node execution/data-admin/audit_volunteer_hours.mjs --season 2025-2026
+//   node execution/data-admin/audit_volunteer_hours.mjs --json           # 机器可读
+//   node execution/data-admin/audit_volunteer_hours.mjs --key <路径>      # 指定 service account key
 //
 // 汇总口径与教练端 Volunteer Hours tab 共用 src/utils/volunteerHours.js,
 // 避免两处算法漂移(同 registrationCompleteness 的做法)。
@@ -25,7 +25,7 @@ import {
   VOLUNTEER_COLLECTION,
   buildVolunteerSummary,
   volunteerStats,
-} from '../src/utils/volunteerHours.js';
+} from '../../src/utils/volunteerHours.js';
 
 const args = process.argv.slice(2);
 const AS_JSON = args.includes('--json');

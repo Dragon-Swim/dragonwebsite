@@ -5,8 +5,8 @@
 > 最后更新：2026-10-02（押金集合清空 + 导入器修正：允许负余额、支持单列表、
 > 无金额列直接拒收、预览显示列映射）。
 > 相关代码：`src/utils/feeImport.js`（纯逻辑）、`src/pages/dashboard.js`（渲染与写入）、
-> `execution/clear_deposits_collection.mjs`（清理工具）、
-> `execution/preview_fee_import.mjs`（用真实 xlsx 干跑导入）、
+> `execution/fees/clear_deposits_collection.mjs`（清理工具）、
+> `execution/fees/preview_fee_import.mjs`（用真实 xlsx 干跑导入）、
 > `tests/unit/verify-fee-import.mjs`（纯逻辑测试）。
 
 ## 1. 口径（先读这一节）
@@ -71,7 +71,7 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
   原因是旧解析器把 `bal < 0` 判为非法，上传前只能手动取正。
 - deposit 上传匹配不到金额列，却按名字建了 **13 条空壳记录**（`balance: 0`，无任何金额）。
 
-**清理**：`node execution/clear_deposits_collection.mjs --delete` 清空整个 `deposits`
+**清理**：`node execution/fees/clear_deposits_collection.mjs --delete` 清空整个 `deposits`
 集合（72 条 = 2026-06-26 建站期 28 条占位 `600` + 当天 31 条余额 + 13 条空壳）。
 工具默认 dry-run，删除前自动备份到 `.tmp/backups/deposits-backup-<时间戳>.json`（`.tmp` 已 gitignore）。
 真实费用数据在 `meets.feeData`，未受影响：PVS LC Open 1、2026 FXFX Summer Solstice LC Champs
@@ -83,7 +83,7 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
 2. Deposits tab 选对**赛季**（顶部 season selector）——导入写的就是这个赛季。
 3. 按上表选对按钮上传 → 在预览里核对列映射、new/update 数量、符号、目标槽位 → Import。
 4. 线上核验：`node tests/unit/verify-fee-import.mjs`（纯逻辑）或
-   `node execution/preview_fee_import.mjs --balance ".tmp/coach-in/x.xlsx" --season 2025-2026`
+   `node execution/fees/preview_fee_import.mjs --balance ".tmp/coach-in/x.xlsx" --season 2025-2026`
    （拿真实 xlsx + 线上 deposits 现状干跑，逐行打印会写什么，不碰 Firestore）。
 
 ## 6. 已知边界
@@ -110,7 +110,7 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
 
 ## 8. 2026-10 结转余额 + 押金批量导入记录
 
-教练手写表格 → 系统名字的对照（`execution/match_fee_names.mjs` 产出、人工确认）：
+教练手写表格 → 系统名字的对照（`execution/fees/match_fee_names.mjs` 产出、人工确认）：
 
 | 表里写的 | 写进系统的名字 | 依据 |
 |---|---|---|
@@ -130,7 +130,7 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
 
 - 导入结果：`deposits` 集合 2026-2027 赛季 **41 条**（38 行结转余额 + 13 行押金，其中 10 人两张表都有 → 合并成 1 条）。
   余额合计 −$2176.00（与表格 D 列一致）、押金合计 $4600.00。核对命令：
-  `node execution/verify_fee_summary.mjs 2026-2027`。
+  `node execution/fees/verify_fee_summary.mjs 2026-2027`。
 - `Ethan Qiao` / `Anjka` 两条带 `needsLinking: true` + `sourceName`（原始写法），
   家庭注册后用 `where('needsLinking','==',true)` 捞出来改名/合并。
 - 仍**未注册**的家庭（有 fee 数据但 `registrations` 里没有，Fee Summary 会显示「只有押金/结转」）：
@@ -138,14 +138,16 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
   Gabriel Martin del Campo、Adi/Lasya Agili、Kaiwen Liu、Ethan Qiao、Anjka。
   白名单里另有 19 个家庭从未完成注册（见匹配报告）。
 
-### 工具链（都在 `execution/`，全部只读或 dry-run 优先）
+### 工具链（都在 `execution/fees/`，全部只读或 dry-run 优先）
 
 | 工具 | 用途 |
 |---|---|
 | `match_fee_names.mjs` | 把教练手写表格的每个名字对到系统里的人（含 middleName/白名单/fee 历史），输出 md/csv/xlsx + `.plan.json` |
 | `import_fee_sheet.mjs` | 按 `.plan.json` + `--overrides`（人工确认名）写入 deposits；默认 dry-run，`--commit` 才写 |
+| `export_correct_fee_sheets.mjs` | 生成给教练确认/回传的两个正确格式 xlsx（`Name\|Balance`、`Name\|Deposit` + README 表） |
+| `preview_fee_import.mjs` | 拿真实 xlsx + 线上 deposits 现状干跑，逐行打印会写什么 |
 | `verify_fee_summary.mjs` | 只读复算某赛季 Fee Summary（含同名重复、待链接检查） |
-| `clear_deposits_collection.mjs` | 清空 deposits（默认 dry-run + 自动 JSON 备份） |
+| `clear_deposits_collection.mjs` | 清空 deposits（默认 dry-run + 自动 JSON 备份到 `.tmp/backups/`） |
 
 **踩过的坑**：批量导入工具一开始按"读一次集合 → 建两次 batch"写，导致两张表都出现的人被建了
 两条记录（余额一条、押金一条，共 10 人）。已修成写入前按姓名合并（`import_fee_sheet.mjs`），

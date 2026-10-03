@@ -8,15 +8,15 @@
  * and a coach complaint ("his balance looks wrong") can be traced in one command.
  *
  * Usage:
- *   node execution/verify_fee_summary.mjs 2026-2027
- *   node execution/verify_fee_summary.mjs            # defaults to the current season
+ *   node execution/fees/verify_fee_summary.mjs 2026-2027
+ *   node execution/fees/verify_fee_summary.mjs            # defaults to the current season
  */
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { depositTotal, normalizeName as normalize } from '../src/utils/feeImport.js';
+import { depositTotal, normalizeName as normalize } from '../../src/utils/feeImport.js';
 
 const args = process.argv.slice(2);
 const seasonArg = args.find((a) => /^\d{4}-\d{4}$/.test(a));

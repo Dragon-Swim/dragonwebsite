@@ -47,7 +47,8 @@ Intermediates: Temporary files needed during processing
 Directory structure:
 
 .tmp/ - All intermediate files. **Use subdirectories, never the root** (see below). Never commit, always regenerated.
-execution/ - Python/Node scripts (the deterministic tools)
+execution/ - Deterministic Python/Node scripts, **one subfolder per job** (see execution/README.md):
+             fees/, meet-entry/, standards/, data-admin/
 directives/ - SOPs in Markdown (the instruction set)
 docs/ - Site documentation (app behaviors & workflows; see docs/swim-results-fetch.md for the swim-results fetch pipeline)
 .env - Environment variables and API keys
@@ -64,6 +65,7 @@ Key principle: Local files are only for processing. Deliverables live in cloud s
 | `.tmp/fee-import/` | Working set of the fee-import tools (match report, plan.json, overrides) |
 | `.tmp/backups/` | Firestore collection backups (JSON, written before destructive operations) |
 | `.tmp/meet-entry/` | Meet entry report / outreach working set (inputs + generated lists) |
+| `.tmp/standards/` | USA Swimming standards PDF + the text extracted from it |
 | `.tmp/cf526/` | Cloudflare custom-domain + GitHub Support ticket material |
 | `.tmp/pw-tmp/` | Playwright profile temp dir — created and wiped by scripts/run-playwright.mjs |
 

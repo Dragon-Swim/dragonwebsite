@@ -7,7 +7,7 @@
 // 避免手工录入出错,也保证重复运行是安全的(幂等)。
 //
 // 用法:
-//   node execution/add_meet.mjs --name "..." --start 2026-10-24 --end 2026-10-25 \
+//   node execution/data-admin/add_meet.mjs --name "..." --start 2026-10-24 --end 2026-10-25 \
 //        --location "..." --season 2026-2027 --source "https://..." [--status Open] \
 //        [--dry-run] [--key serviceAccountKey.json] [--allow-duplicate]
 //

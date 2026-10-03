@@ -43,7 +43,7 @@ const db = app.firestore();
 console.log(` Connected to project: ${serviceAccount.project_id}\n`);
 console.log(" ⚠️  This writes TEST families into PRODUCTION. Run only when you");
 console.log("     intentionally need demo data, and clean up afterwards with");
-console.log("     execution/cleanup_test_accounts.mjs\n");
+console.log("     execution/data-admin/cleanup_test_accounts.mjs\n");
 
 // ── Seed data ─────────────────────────────────────────────────
 // Never hardcode the password: this repo is public.

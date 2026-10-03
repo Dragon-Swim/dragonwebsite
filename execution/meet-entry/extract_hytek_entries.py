@@ -2,9 +2,9 @@
 """抽 HY-TEK / Crystal Reports 的「Individual Meet Entries Report」→ JSON。
 
 用法:
-    python execution/extract_hytek_entries.py ".tmp/meet-entry/dragon name entry.pdf"
-    python execution/extract_hytek_entries.py entry.pdf -o .tmp/meet-entry/pv-oct.json --txt .tmp/meet-entry/pv-oct.txt
-    python execution/extract_hytek_entries.py entry.pdf --json     # 只把 JSON 打到 stdout
+    python execution/meet-entry/extract_hytek_entries.py ".tmp/meet-entry/dragon name entry.pdf"
+    python execution/meet-entry/extract_hytek_entries.py entry.pdf -o .tmp/meet-entry/pv-oct.json --txt .tmp/meet-entry/pv-oct.txt
+    python execution/meet-entry/extract_hytek_entries.py entry.pdf --json     # 只把 JSON 打到 stdout
 
 产出 JSON 结构:
     {
@@ -18,7 +18,7 @@
 为什么要有这个脚本(而不是在 Node 里抽)
 --------------------------------------
 PyMuPDF 能同时读文本和坐标，而 Node 侧没有等价的 PDF 工具。抽出的 JSON 是纯数据，
-下游的 execution/meet-entries-vs-registrations.mjs 只吃 JSON，不碰 PDF —— 所以
+下游的 execution/meet-entry/meet-entries-vs-registrations.mjs 只吃 JSON，不碰 PDF —— 所以
 PDF 解析和业务匹配可以各自单独重跑、单独调试。
 
 自校验(关键)

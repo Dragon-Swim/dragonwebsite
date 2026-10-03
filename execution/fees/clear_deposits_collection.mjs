@@ -8,10 +8,10 @@
 // 数据。以上都不是真实账目,真实数据只在 meets 的 feeData 里。
 //
 // 用法:
-//   node execution/clear_deposits_collection.mjs                 # dry-run:只统计
-//   node execution/clear_deposits_collection.mjs --delete        # 备份后真正删除
-//   node execution/clear_deposits_collection.mjs --delete --season 2026-2027
-//   node execution/clear_deposits_collection.mjs --key <路径>     # 指定 service account key
+//   node execution/fees/clear_deposits_collection.mjs                 # dry-run:只统计
+//   node execution/fees/clear_deposits_collection.mjs --delete        # 备份后真正删除
+//   node execution/fees/clear_deposits_collection.mjs --delete --season 2026-2027
+//   node execution/fees/clear_deposits_collection.mjs --key <路径>     # 指定 service account key
 //
 // 安全设计:
 //   - 默认 dry-run,必须显式 --delete

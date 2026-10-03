@@ -116,7 +116,7 @@ match /volunteerHours/{docId} {
 | 纯逻辑（65 项断言，无需 emulator/网络） | `npm run test:unit`（也可单跑 `node tests/unit/verify-volunteer-hours.mjs`） |
 | 端到端（admin 录入 → 落库 → 汇总 → CSV → 清空删除；教练只读） | `npm test`（含 `tests/volunteer-hours.spec.js`） |
 | 构建 | `npm run build`（需 `.env.local` 存在） |
-| 线上只读核对（可选） | `execution/audit_volunteer_hours.mjs`（serviceAccountKey + firebase-admin） |
+| 线上只读核对（可选） | `execution/data-admin/audit_volunteer_hours.mjs`（serviceAccountKey + firebase-admin） |
 
 `npm run test:unit` 会跑 `tests/unit/` 下全部 `verify-*.mjs`（当前 4 个模块共 190 条断言：
 `registrationCompleteness` / `swimmerSort` / `fetchHealth` / `volunteerHours`）。这些文件

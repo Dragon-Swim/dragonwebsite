@@ -8,17 +8,17 @@
  *
  * Usage:
  *   1. Ensure serviceAccountKey.json exists in the project root
- *   2. node execution/seed_fall_2026_slots.mjs
+ *   2. node execution/data-admin/seed_fall_2026_slots.mjs
  */
 
 import admin from "firebase-admin";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { FALL_2026_SLOT_TEMPLATES } from "../src/data/seasonSchedule.data.js";
+import { FALL_2026_SLOT_TEMPLATES } from "../../src/data/seasonSchedule.data.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const keyPath = resolve(__dirname, "..", "serviceAccountKey.json");
+const keyPath = resolve(__dirname, "..", "..", "serviceAccountKey.json");
 
 let serviceAccount;
 try {
