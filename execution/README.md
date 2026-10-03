@@ -22,7 +22,8 @@ One folder per job. All commands are run **from the repo root**.
   table in `CLAUDE.md`. Tool defaults already point there.
 - **Tests**: pure logic lives in `src/utils/*` and is covered by `tests/unit/verify-*.mjs`
   (`npm run test:unit`); browser flows live in `tests/*.spec.js` (`npm test`, emulators required).
-- **Docs**: `docs/meet-fees.md` (费用/押金), `docs/volunteer-hours.md`, `docs/swim-results-fetch.md`.
+- **Docs**: `docs/meet-fees.md` (费用/押金), `docs/volunteer-hours.md`, `docs/meet-management.md`,
+  `docs/swim-results-fetch.md`.
 
 ## Adding a tool
 
