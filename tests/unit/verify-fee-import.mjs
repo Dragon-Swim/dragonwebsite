@@ -63,6 +63,13 @@ check('parseMoney reads accounting negatives: (182)', parseMoney('(182)') === -1
 check('parseMoney rejects blanks and text', Number.isNaN(parseMoney('')) && Number.isNaN(parseMoney(null)) && Number.isNaN(parseMoney('n/a')));
 check('colLetter maps 0->A, 25->Z, 26->AA', colLetter(0) === 'A' && colLetter(25) === 'Z' && colLetter(26) === 'AA', [colLetter(0), colLetter(25), colLetter(26)]);
 check('normalizeName collapses case and spacing', normalizeName('  Ada   GAI ') === 'ada gai');
+// The fee export writes "Luohan Chen", the registration "Luo-han Chen" — same kid,
+// so the key must ignore the hyphen or the Fee Summary splits him into two rows.
+check('normalizeName ignores a hyphen in a given name',
+  normalizeName('Luo-han Chen') === normalizeName('Luohan Chen'),
+  [normalizeName('Luo-han Chen'), normalizeName('Luohan Chen')]);
+check('normalizeName drops apostrophes and accents',
+  normalizeName("O'Brien") === normalizeName('OBrien') && normalizeName('José') === normalizeName('Jose'));
 
 console.log('2. carry-over balance sheet (the sign bug)');
 const balance = parseCarryOverRows(BALANCE_SHEET);

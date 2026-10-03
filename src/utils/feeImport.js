@@ -26,9 +26,23 @@
 
 // ── Generic helpers ──────────────────────────────────────────────
 
-/** Same key the Deposits tab uses to match a name across sheets/records. */
+/**
+ * Key used to match a deposits record with a meet's fee data.
+ *
+ * Case-insensitive, whitespace-collapsed and punctuation-blind on purpose: the
+ * same child is spelled differently by different sources — the registration says
+ * "Luo-han Chen", the Hy-Tek fee export says "Luohan Chen", the coach's sheet
+ * says "eric chen". Without dropping the hyphen they become two Fee Summary
+ * rows, one holding the fees and one holding the deposit.
+ */
 export function normalizeName(name) {
-  return String(name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return String(name ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // accents: José → Jose
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // hyphens, apostrophes, periods, commas
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** 0-based column index → spreadsheet letter (0 → A, 26 → AA). */

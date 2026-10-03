@@ -21,6 +21,7 @@ import {
   parseDepositDetailRows,
   planDepositRows,
   buildDepositWrites,
+  normalizeName,
 } from '../utils/feeImport.js';
 import {
   VOLUNTEER_COLLECTION,
@@ -2607,7 +2608,9 @@ function renderCoachRoster() {
  * Returns a sorted array of swimmer fee summary objects.
  */
 function buildFeeSummaryData(season) {
-  const normalize = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // Shared, punctuation-blind name key (src/utils/feeImport.js): the registration
+  // says "Luo-han Chen" while the Hy-Tek fee export says "Luohan Chen".
+  const normalize = normalizeName;
 
   // Compute deposit total from the new schema: balance + d1 + d2 + d3
   const depositTotal = (d) => (Number(d.balance) || 0) + (Number(d.deposit1Amount) || 0) + (Number(d.deposit2Amount) || 0) + (Number(d.deposit3Amount) || 0);

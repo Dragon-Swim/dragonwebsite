@@ -93,3 +93,61 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
   「有押金、无费用」的泳手单独列出来。要合并请拆成每人一行。
 - 单列表导入不写日期，除非表里带日期列；三个槽位语义固定为「第 1/2/3 笔押金」。
 - 没有撤销功能：导入写错了就用 Inline 编辑改，或从 `.tmp` 的备份文件回灌。
+
+## 7. 姓名比对规则（2026-10-03 收紧）
+
+`src/utils/feeImport.js` 的 `normalizeName` 是**唯一**的姓名比对口径，`buildFeeSummaryData`
+也直接用它（以前 dashboard 里另写了一份）：
+
+1. 大小写不敏感、连续空格折叠；
+2. **忽略标点**（连字符、撇号、句点、逗号）与重音符号。
+
+第 2 条是被真实数据逼出来的：注册表写 `Luo-han Chen`，Hy-Tek 导出的 fee 表写 `Luohan Chen`，
+旧口径只做小写+空格折叠 → 同一个孩子被拆成两行（一行有费用、一行有押金）。
+改动后 `Fee Summary` 行数从 52 降到 51，`Luo-han Chen` 合并为一行（fee $35 + 押金/结转 $675.50）。
+注意 `src/utils/registrationCompleteness.js` 里的 `normalizeName` 是另一套（用于注册表单校验），
+**不要**合并。
+
+## 8. 2026-10 结转余额 + 押金批量导入记录
+
+教练手写表格 → 系统名字的对照（`execution/match_fee_names.mjs` 产出、人工确认）：
+
+| 表里写的 | 写进系统的名字 | 依据 |
+|---|---|---|
+| `eric chen` | Haoran Chen | 注册表里的 **middleName = Eric** |
+| `kayden chen` | Luo-han Chen | middleName = Kayden |
+| `gabriel campo` | Gabriel Martin del Campo | fee 表 + 白名单家庭 |
+| `ridihi seelan` | Ridhi Seelam | 注册表 |
+| `fragoer zhou` | Fargoer Zhou | 注册表 |
+| `charleen tao` | Charlene Tao | 注册表 |
+| `suleiman` / `ibrahim` | Suleiman / Ibrahim Mourad | 上赛季 fee 表 |
+| `trisha` | Trisha Musni | 上赛季 fee 表 |
+| `liam` | Liam Norcross | 同表另有 `liam toner`，按排除法 |
+| `muhammad` | Muhammad Mourad | 教练确认是 Mourad 家；**拼写待该家庭注册后核对** |
+| `kevin liu` | Kaiwen Liu | 教练确认（白名单 `jonexie@hotmail.com`，未注册） |
+| `lasya` | Lasya Agili | 教练确认（白名单 `Adi Agili parent`） |
+| `ethan qiao` / `anjka` | Ethan Qiao / Anjka | 系统里完全没有；先建档，**家长注册后链接** |
+
+- 导入结果：`deposits` 集合 2026-2027 赛季 **41 条**（38 行结转余额 + 13 行押金，其中 10 人两张表都有 → 合并成 1 条）。
+  余额合计 −$2176.00（与表格 D 列一致）、押金合计 $4600.00。核对命令：
+  `node execution/verify_fee_summary.mjs 2026-2027`。
+- `Ethan Qiao` / `Anjka` 两条带 `needsLinking: true` + `sourceName`（原始写法），
+  家庭注册后用 `where('needsLinking','==',true)` 捞出来改名/合并。
+- 仍**未注册**的家庭（有 fee 数据但 `registrations` 里没有，Fee Summary 会显示「只有押金/结转」）：
+  Mourad（Ibrahim/Suleiman/Muhammad）、Musni（Adriana/Trisha）、Celina Feng、
+  Gabriel Martin del Campo、Adi/Lasya Agili、Kaiwen Liu、Ethan Qiao、Anjka。
+  白名单里另有 19 个家庭从未完成注册（见匹配报告）。
+
+### 工具链（都在 `execution/`，全部只读或 dry-run 优先）
+
+| 工具 | 用途 |
+|---|---|
+| `match_fee_names.mjs` | 把教练手写表格的每个名字对到系统里的人（含 middleName/白名单/fee 历史），输出 md/csv/xlsx + `.plan.json` |
+| `import_fee_sheet.mjs` | 按 `.plan.json` + `--overrides`（人工确认名）写入 deposits；默认 dry-run，`--commit` 才写 |
+| `verify_fee_summary.mjs` | 只读复算某赛季 Fee Summary（含同名重复、待链接检查） |
+| `clear_deposits_collection.mjs` | 清空 deposits（默认 dry-run + 自动 JSON 备份） |
+
+**踩过的坑**：批量导入工具一开始按"读一次集合 → 建两次 batch"写，导致两张表都出现的人被建了
+两条记录（余额一条、押金一条，共 10 人）。已修成写入前按姓名合并（`import_fee_sheet.mjs`），
+历史重复用一次性脚本合并（保留带余额的那条，把押金字段并进去）。仪表盘自带的两个导入器不受
+影响——它的 `deposits` 快照在两次上传之间会由 onSnapshot 刷新。
