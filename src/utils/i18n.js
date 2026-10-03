@@ -552,6 +552,27 @@ const translations = {
         dash_fee_summary_deposit_name_required: 'Swimmer name is required.',
         dash_fee_summary_deposit_amount_positive: 'Deposit amount must be a positive number.',
 
+        // ── Dashboard — Fee spreadsheet imports (carry-over balance / deposits) ──
+        dash_fee_import_balance_title: 'Import Carry-over Balance',
+        dash_fee_import_deposit_title: 'Import Deposit Details',
+        dash_fee_import_columns_detected: 'Columns detected',
+        dash_fee_import_plan_create_update: '{create} new record(s) · {update} existing record(s) will be updated',
+        dash_fee_import_season_note: 'Season: {season} — existing records are updated in place.',
+        dash_fee_import_col_will: 'Action',
+        dash_fee_import_col_before: 'Before',
+        dash_fee_import_col_after: 'After',
+        dash_fee_import_col_target: 'Written to',
+        dash_fee_import_col_date: 'Date',
+        dash_fee_import_will_create: 'new',
+        dash_fee_import_will_update: 'update',
+        dash_fee_import_skipped_title: 'Skipped rows',
+        dash_fee_import_confirm_balance: 'Import {count} Row(s)',
+        dash_fee_import_confirm_deposit: 'Import {count} Row(s)',
+        dash_fee_import_no_data_rows: 'The file has no data rows.',
+        dash_fee_import_need_name_balance: 'Could not find a Name column and a Balance column in the header row — nothing was imported. Expected a header like "name | amount | deposit | balance".',
+        dash_fee_import_need_name_amount: 'Could not find a deposit amount column — nothing was imported. Use numbered columns ("Deposit 1 Amount", "D2 Date", …) or a single column such as "Deposit"/"Depoist". A bare "Amount" column is ignored on purpose: on a balance sheet it holds the fees owed, not a payment.',
+        dash_fee_import_refused: 'Nothing was imported — the sheet has no column this importer can write.',
+
         // ── Dashboard — Deposits Tab ──
         dash_coach_deposits_label: 'Meet Fee Deposits',
         dash_coach_tab_deposits: 'Meet Fee Deposits',

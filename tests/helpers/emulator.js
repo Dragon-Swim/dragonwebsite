@@ -161,6 +161,31 @@ export async function readDocument(collection, id) {
   return decodeFields((await res.json()).fields);
 }
 
+/**
+ * List a whole collection as `{ id, ...data }`.
+ *
+ * Needed when the app itself creates the document (auto id) — e.g. a deposits
+ * row written by the importers — so the assertion cannot know the id up front.
+ * Follows the REST pagination token; the emulator returns small pages.
+ */
+export async function listDocuments(collection) {
+  const out = [];
+  let pageToken = "";
+  do {
+    const url = `${documentsUrl(collection)}?pageSize=300${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
+    const res = await fetch(url, { headers: { Authorization: "Bearer owner" } });
+    if (!res.ok) {
+      throw new Error(`listDocuments(${collection}) failed: HTTP ${res.status} ${await res.text()}`);
+    }
+    const body = await res.json();
+    for (const doc of body.documents || []) {
+      out.push({ id: doc.name.split("/").pop(), ...decodeFields(doc.fields) });
+    }
+    pageToken = body.nextPageToken || "";
+  } while (pageToken);
+  return out;
+}
+
 /** Delete a document; a missing document is not an error. */
 export async function deleteDocument(collection, id) {
   const res = await fetch(`${documentsUrl(collection)}/${id}`, {

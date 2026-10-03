@@ -15,6 +15,14 @@ import { auditRegistration, sortByAttentionSeverity, partitionAttention, attenti
 import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
 import { sortSwimmersByLastName } from '../utils/swimmerSort.js';
 import {
+  parseCarryOverRows,
+  planCarryOverRows,
+  buildCarryOverWrites,
+  parseDepositDetailRows,
+  planDepositRows,
+  buildDepositWrites,
+} from '../utils/feeImport.js';
+import {
   VOLUNTEER_COLLECTION,
   volunteerDocId,
   normalizeHours,
@@ -2696,7 +2704,7 @@ function renderFeeSummary() {
   const totalDeposits = summary.reduce((sum, s) => sum + s.deposit, 0);
   const negativeCount = summary.filter(s => s.balance < 0).length;
 
-  const fmt = (n) => '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n) => fmtMoney(n);
 
   const hasData = summary.length > 0;
 
@@ -2797,7 +2805,7 @@ function calcDepositTotal(d) {
 
 function renderDeposits() {
   const seasonDeposits = getDepositsForSeason(currentSeason);
-  const fmt = (n) => n != null ? '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+  const fmt = (n) => n != null ? fmtMoney(n) : '—';
   const fmtDate = (d) => d || '—';
 
   const hasData = seasonDeposits.length > 0;
@@ -2938,6 +2946,113 @@ function renderSeasonSelectorRoster(selectedSeason) {
   `;
 }
 
+// ── Fee spreadsheet imports (carry-over balance / deposits) ──
+//
+// Header detection, value parsing and write planning live in
+// src/utils/feeImport.js, where tests/unit/verify-fee-import.mjs pins them
+// down. What stays here: reading the workbook, the preview modal, and the
+// Firestore batch. Both importers share the modal shell and the writer.
+
+/** Message for a sheet the parser refused outright (no writable columns). */
+function importFatalMessage(fatal) {
+  switch (fatal) {
+    case 'no-data-rows': return t('dash_fee_import_no_data_rows');
+    case 'need-name-balance': return t('dash_fee_import_need_name_balance');
+    case 'need-name-amount': return t('dash_fee_import_need_name_amount');
+    default: return t('dash_fee_summary_deposit_parse_error');
+  }
+}
+
+/**
+ * `$1,234.50` / `-$182.00` — the minus goes in front of the `$`, because a
+ * deposit/balance column is read as one signed number (a family that still owes
+ * money must not render as "$-182.00").
+ */
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Prints which spreadsheet column each written field came from. */
+function renderImportColumnMapping(columns) {
+  if (!columns || columns.length === 0) return '';
+  const parts = columns.map((c) => `<code>${escapeHtml(c.field)}</code> ← ${escapeHtml(c.letter)} ("${escapeHtml(c.label)}")`);
+  return `<p class="csv-import-summary">${t('dash_fee_import_columns_detected')}: ${parts.join(' · ')}</p>`;
+}
+
+/** `deposit1Amount` → `D1 amt` (preview table header). */
+function depositFieldLabel(field) {
+  const m = String(field).match(/^deposit([123])(Amount|Date)$/);
+  return m ? `D${m[1]} ${m[2] === 'Amount' ? 'amt' : 'date'}` : field;
+}
+
+/**
+ * Commit a write plan ({ swimmerName, existingId, fields }) in one batch.
+ * A row without an existingId creates a deposits doc for the current season
+ * (zero balance, empty deposit slots) and then applies its own fields.
+ */
+async function commitDepositWrites(writes) {
+  if (!writes || writes.length === 0) return 0;
+  const meta = { updatedAt: new Date(), updatedBy: currentUser?.email || 'unknown' };
+  const batch = writeBatch(db);
+  for (const w of writes) {
+    if (w.existingId) {
+      batch.update(doc(db, 'deposits', w.existingId), { ...w.fields, ...meta });
+    } else {
+      batch.set(doc(collection(db, 'deposits')), {
+        swimmerName: w.swimmerName,
+        season: currentSeason,
+        balance: 0,
+        deposit1Amount: null, deposit1Date: null,
+        deposit2Amount: null, deposit2Date: null,
+        deposit3Amount: null, deposit3Date: null,
+        ...w.fields,
+        ...meta,
+      });
+    }
+  }
+  await batch.commit();
+  return writes.length;
+}
+
+/** Shared preview shell for both importers. */
+function showFeeImportModal({
+  title, filename, validCount, summaryHtml, mappingHtml, tableHtml,
+  errors, skipped, confirmLabel, confirmId, cancelId, onConfirm,
+}) {
+  const errorList = errors || [];
+  const skippedList = skipped || [];
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal csv-import-modal" style="max-width: 900px;">
+      <h3 class="confirm-title">${escapeHtml(title)}</h3>
+      <p class="csv-import-filename">${t('dash_fee_summary_deposit_import_file')}: <strong>${escapeHtml(filename)}</strong></p>
+      <p class="csv-import-summary">${t('dash_fee_summary_deposit_import_summary', { valid: validCount, error: errorList.length })}</p>
+      <p class="csv-import-summary" style="color: var(--text-muted);">${t('dash_fee_import_season_note', { season: escapeHtml(currentSeason) })}</p>
+      ${summaryHtml || ''}
+      ${mappingHtml || ''}
+      ${tableHtml || ''}
+      ${errorList.length > 0 ? `<div class="csv-error-block"><p class="csv-error-title">${t('dash_fee_summary_deposit_import_errors')}</p>${errorList.map(e => `<p class="csv-error-item">${e.rowNum ? `Row ${e.rowNum}: ` : ''}${escapeHtml(e.reason)}</p>`).join('')}</div>` : ''}
+      ${skippedList.length > 0 ? `<div class="csv-error-block" style="border-color: #d97706;"><p class="csv-error-title" style="color: #d97706;">${t('dash_fee_import_skipped_title')}</p>${skippedList.map(s => `<p class="csv-error-item">${escapeHtml(s.reason)}</p>`).join('')}</div>` : ''}
+      ${validCount === 0 ? `<p class="csv-no-valid">${t('dash_fee_summary_deposit_import_no_valid')}</p>` : ''}
+      <div class="confirm-actions">
+        <button class="btn btn-outline btn-sm" id="${cancelId}">${t('dash_fee_summary_deposit_import_cancel')}</button>
+        ${validCount > 0 ? `<button class="btn btn-primary btn-sm" id="${confirmId}">${escapeHtml(confirmLabel)}</button>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#' + cancelId).addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#' + confirmId)?.addEventListener('click', () => { overlay.remove(); onConfirm(); });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+const rowActionLabel = (willCreate) => t(willCreate ? 'dash_fee_import_will_create' : 'dash_fee_import_will_update');
+const planSummaryHtml = (plan) => {
+  const create = plan.filter(r => r.willCreate).length;
+  return `<p class="csv-import-summary">${t('dash_fee_import_plan_create_update', { create, update: plan.length - create })}</p>`;
+};
+
 // ── Carry-over Balance Excel Parser ──
 async function parseCarryOverExcel(file) {
   const XLSX = window.XLSX;
@@ -2947,88 +3062,53 @@ async function parseCarryOverExcel(file) {
     const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-    if (!rows || rows.length < 2) return { valid: [], errors: [{ rowNum: 1, reason: 'File has no data rows.' }] };
-
-    let nameCol = -1, balanceCol = -1, headerRow = -1;
-    for (let r = 0; r < Math.min(10, rows.length); r++) {
-      const row = rows[r]; if (!row) continue;
-      nameCol = -1; balanceCol = -1;
-      for (let c = 0; c < row.length; c++) {
-        const cell = String(row[c] || '').toLowerCase().trim();
-        if (cell.includes('name') || cell.includes('swimmer')) nameCol = c;
-        if (cell.includes('balance')) balanceCol = c;
-      }
-      if (nameCol >= 0 && balanceCol >= 0) { headerRow = r; break; }
-    }
-    if (headerRow < 0) return { valid: [], errors: [{ rowNum: 0, reason: 'Expected columns: Name, Balance.' }] };
-
-    const valid = [], errors = [];
-    for (let r = headerRow + 1; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row || row.every(c => c == null || String(c).trim() === '')) continue;
-      const name = String(row[nameCol] || '').trim();
-      if (!name) { errors.push({ rowNum: r + 1, reason: 'Missing name.' }); continue; }
-      const bal = Number(row[balanceCol]);
-      if (isNaN(bal) || bal < 0) { errors.push({ rowNum: r + 1, reason: `Invalid balance for "${name}": ${row[balanceCol]}` }); continue; }
-      valid.push({ swimmerName: name, balance: bal });
-    }
-    return { valid, errors };
+    return parseCarryOverRows(rows);
   } catch (err) { console.error('Error parsing carry-over Excel:', err); return null; }
 }
 
-function showCarryOverImportModal(validRows, errors, filename) {
-  const overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML = `
-    <div class="confirm-modal csv-import-modal">
-      <h3 class="confirm-title">Import Carry-over Balance</h3>
-      <p class="csv-import-filename">File: <strong>${escapeHtml(filename)}</strong></p>
-      <p class="csv-import-summary">${validRows.length} record(s), ${errors.length} error(s)</p>
-      <p style="font-size: 0.85rem; color: var(--color-accent); margin-bottom: 0.75rem;">⚠ This will <strong>overwrite</strong> existing balance values for matching swimmers in season <strong>${escapeHtml(currentSeason)}</strong>.</p>
-      ${validRows.length > 0 ? `
-        <div class="csv-preview-wrapper">
-          <table class="csv-preview-table">
-            <thead><tr><th>Name</th><th>Balance</th></tr></thead>
-            <tbody>${validRows.map(r => `<tr><td>${escapeHtml(r.swimmerName)}</td><td>$${Number(r.balance).toLocaleString(undefined, {minimumFractionDigits:2})}</td></tr>`).join('')}</tbody>
+function showCarryOverImportModal(parsed, filename) {
+  // Negative balances are meaningful: "balance = deposit − fees", so a minus
+  // means the family still owes money. They are written as-is.
+  const plan = planCarryOverRows(parsed.valid, deposits, currentSeason);
+  const tableHtml = plan.length > 0 ? `
+        <div class="csv-preview-wrapper" style="max-height: 350px;">
+          <table class="csv-preview-table" style="font-size: 0.78rem;">
+            <thead><tr>
+              <th>${t('dash_fee_summary_deposit_header_name')}</th>
+              <th>${t('dash_fee_import_col_will')}</th>
+              <th>${t('dash_fee_import_col_before')}</th>
+              <th>${t('dash_fee_summary_balance')} (${t('dash_fee_import_col_after')})</th>
+            </tr></thead>
+            <tbody>${plan.map(r => `<tr>
+              <td>${escapeHtml(r.swimmerName)}</td>
+              <td>${rowActionLabel(r.willCreate)}</td>
+              <td style="color: var(--text-muted);">${r.previousBalance === null ? '—' : fmtMoney(r.previousBalance)}</td>
+              <td style="font-weight: 700; ${r.balance < 0 ? 'color: var(--color-accent);' : ''}">${fmtMoney(r.balance)}</td>
+            </tr>`).join('')}</tbody>
           </table>
-        </div>` : ''}
-      ${errors.length > 0 ? `<div class="csv-error-block"><p class="csv-error-title">Errors</p>${errors.map(e => `<p class="csv-error-item">Row ${e.rowNum}: ${escapeHtml(e.reason)}</p>`).join('')}</div>` : ''}
-      ${validRows.length === 0 ? '<p class="csv-no-valid">No valid records found.</p>' : ''}
-      <div class="confirm-actions">
-        <button class="btn btn-outline btn-sm" id="carryover-import-cancel">Cancel</button>
-        ${validRows.length > 0 ? '<button class="btn btn-primary btn-sm" id="carryover-import-confirm">Import</button>' : ''}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.querySelector('#carryover-import-cancel').addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#carryover-import-confirm')?.addEventListener('click', async () => {
-    overlay.remove();
-    await importCarryOverRows(validRows);
+        </div>` : '';
+
+  showFeeImportModal({
+    title: t('dash_fee_import_balance_title'),
+    filename,
+    validCount: plan.length,
+    summaryHtml: planSummaryHtml(plan),
+    mappingHtml: renderImportColumnMapping(parsed.columns),
+    tableHtml,
+    errors: parsed.errors,
+    skipped: [],
+    confirmLabel: t('dash_fee_import_confirm_balance', { count: plan.length }),
+    confirmId: 'carryover-import-confirm',
+    cancelId: 'carryover-import-cancel',
+    onConfirm: () => importCarryOverRows(plan),
   });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
-async function importCarryOverRows(rows) {
-  if (!rows || rows.length === 0) return;
-  const normalize = (n) => (n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+async function importCarryOverRows(plan) {
+  if (!plan || plan.length === 0) return;
   try {
-    const batch = writeBatch(db);
-    // For each uploaded row, find existing deposit doc for this swimmer+season or create new
-    for (const row of rows) {
-      const existing = deposits.find(d => d.season === currentSeason && normalize(d.swimmerName) === normalize(row.swimmerName));
-      if (existing) {
-        batch.update(doc(db, 'deposits', existing.id), { balance: Number(row.balance), updatedAt: new Date(), updatedBy: currentUser?.email || 'unknown' });
-      } else {
-        const newRef = doc(collection(db, 'deposits'));
-        batch.set(newRef, {
-          swimmerName: row.swimmerName, season: currentSeason, balance: Number(row.balance),
-          deposit1Amount: null, deposit1Date: null, deposit2Amount: null, deposit2Date: null, deposit3Amount: null, deposit3Date: null,
-          updatedAt: new Date(), updatedBy: currentUser?.email || 'unknown',
-        });
-      }
-    }
-    await batch.commit();
-    showImportStatus(`Updated balance for ${rows.length} swimmer(s) in ${currentSeason}.`);
+    const written = await commitDepositWrites(buildCarryOverWrites(plan));
+    showImportStatus(`Updated balance for ${written} swimmer(s) in ${currentSeason}.`);
   } catch (error) { console.error('Carry-over import failed:', error); showImportStatus('Failed to import: ' + (error.message || ''), true); }
 }
 
@@ -3041,129 +3121,80 @@ async function parseDepositDetailExcel(file) {
     const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-    if (!rows || rows.length < 2) return { valid: [], errors: [{ rowNum: 1, reason: 'File has no data rows.' }] };
-
-    // Find header columns: Name, and deposit/amount/date columns
-    let nameCol = -1;
-    const dCols = {}; // deposit1Amount, deposit1Date, deposit2Amount, deposit2Date, deposit3Amount, deposit3Date
-    let headerRow = -1;
-
-    for (let r = 0; r < Math.min(10, rows.length); r++) {
-      const row = rows[r]; if (!row) continue;
-      let foundName = -1;
-      const tempCols = {};
-      for (let c = 0; c < row.length; c++) {
-        const cell = String(row[c] || '').toLowerCase().trim();
-        if (cell.includes('name') || cell.includes('swimmer')) {
-          foundName = c;
-        } else {
-          // Match deposit N amount/date patterns
-          if (/deposit\s*1.*amount/i.test(cell) || /d1\s*.*amt/i.test(cell)) tempCols.deposit1Amount = c;
-          else if (/deposit\s*1.*date/i.test(cell) || /d1\s*.*date/i.test(cell)) tempCols.deposit1Date = c;
-          else if (/deposit\s*2.*amount/i.test(cell) || /d2\s*.*amt/i.test(cell)) tempCols.deposit2Amount = c;
-          else if (/deposit\s*2.*date/i.test(cell) || /d2\s*.*date/i.test(cell)) tempCols.deposit2Date = c;
-          else if (/deposit\s*3.*amount/i.test(cell) || /d3\s*.*amt/i.test(cell)) tempCols.deposit3Amount = c;
-          else if (/deposit\s*3.*date/i.test(cell) || /d3\s*.*date/i.test(cell)) tempCols.deposit3Date = c;
-        }
-      }
-      if (foundName >= 0) { nameCol = foundName; Object.assign(dCols, tempCols); headerRow = r; break; }
-    }
-
-    if (headerRow < 0) return { valid: [], errors: [{ rowNum: 0, reason: 'Expected a header row with "Name" column.' }] };
-
-    const valid = [], errors = [];
-    for (let r = headerRow + 1; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row || row.every(c => c == null || String(c).trim() === '')) continue;
-      const name = String(row[nameCol] || '').trim();
-      if (!name) { errors.push({ rowNum: r + 1, reason: 'Missing name.' }); continue; }
-
-      const record = { swimmerName: name };
-      for (const [key, col] of Object.entries(dCols)) {
-        if (col >= 0 && col < row.length) {
-          const val = row[col];
-          if (key.includes('Amount')) record[key] = val != null ? Number(val) : null;
-          else record[key] = val ? String(val).trim() : null;
-        }
-      }
-      valid.push(record);
-    }
-    return { valid, errors };
+    return parseDepositDetailRows(rows);
   } catch (err) { console.error('Error parsing deposit detail Excel:', err); return null; }
 }
 
-function showDepositDetailImportModal(validRows, errors, filename) {
-  const overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML = `
-    <div class="confirm-modal csv-import-modal" style="max-width: 900px;">
-      <h3 class="confirm-title">Import Deposit Details</h3>
-      <p class="csv-import-filename">File: <strong>${escapeHtml(filename)}</strong></p>
-      <p class="csv-import-summary">${validRows.length} record(s), ${errors.length} error(s)</p>
-      <p style="font-size: 0.85rem; color: var(--color-accent); margin-bottom: 0.75rem;">⚠ This will <strong>overwrite</strong> existing deposit fields for matching swimmers in season <strong>${escapeHtml(currentSeason)}</strong>.</p>
-      ${validRows.length > 0 ? `
+function showDepositDetailImportModal(parsed, filename) {
+  const { rows: plan, skipped, slotErrors } = planDepositRows(parsed, deposits, currentSeason);
+  const isSimple = parsed.mode === 'simple';
+  const mappedFields = (parsed.columns || [])
+    .filter(c => /^deposit[123](Amount|Date)$/.test(c.field))
+    .map(c => c.field);
+
+  let tableHtml = '';
+  if (plan.length > 0) {
+    if (isSimple) {
+      // A single amount column lands in the swimmer's next free slot.
+      tableHtml = `
         <div class="csv-preview-wrapper" style="max-height: 350px;">
-          <table class="csv-preview-table" style="font-size: 0.75rem;">
-            <thead><tr><th>Name</th><th>D1 Amt</th><th>D1 Date</th><th>D2 Amt</th><th>D2 Date</th><th>D3 Amt</th><th>D3 Date</th></tr></thead>
-            <tbody>${validRows.map(r => `<tr>
+          <table class="csv-preview-table" style="font-size: 0.78rem;">
+            <thead><tr>
+              <th>${t('dash_fee_summary_deposit_header_name')}</th>
+              <th>${t('dash_fee_import_col_will')}</th>
+              <th>${t('dash_fee_import_col_target')}</th>
+              <th>${t('dash_fee_summary_deposit_header_amount')}</th>
+              <th>${t('dash_fee_import_col_date')}</th>
+            </tr></thead>
+            <tbody>${plan.map(r => `<tr>
               <td>${escapeHtml(r.swimmerName)}</td>
-              <td>${r.deposit1Amount != null ? '$' + Number(r.deposit1Amount).toFixed(2) : '—'}</td>
-              <td>${r.deposit1Date || '—'}</td>
-              <td>${r.deposit2Amount != null ? '$' + Number(r.deposit2Amount).toFixed(2) : '—'}</td>
-              <td>${r.deposit2Date || '—'}</td>
-              <td>${r.deposit3Amount != null ? '$' + Number(r.deposit3Amount).toFixed(2) : '—'}</td>
-              <td>${r.deposit3Date || '—'}</td>
+              <td>${rowActionLabel(r.willCreate)}</td>
+              <td>${escapeHtml(r.targetLabel)}</td>
+              <td style="font-weight: 700;">${fmtMoney(r.amount)}</td>
+              <td>${r.date ? escapeHtml(r.date) : '—'}</td>
             </tr>`).join('')}</tbody>
           </table>
-        </div>` : ''}
-      ${errors.length > 0 ? `<div class="csv-error-block"><p class="csv-error-title">Errors</p>${errors.map(e => `<p class="csv-error-item">Row ${e.rowNum}: ${escapeHtml(e.reason)}</p>`).join('')}</div>` : ''}
-      ${validRows.length === 0 ? '<p class="csv-no-valid">No valid records found.</p>' : ''}
-      <div class="confirm-actions">
-        <button class="btn btn-outline btn-sm" id="detail-import-cancel">Cancel</button>
-        ${validRows.length > 0 ? '<button class="btn btn-primary btn-sm" id="detail-import-confirm">Import</button>' : ''}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.querySelector('#detail-import-cancel').addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#detail-import-confirm')?.addEventListener('click', async () => {
-    overlay.remove();
-    await importDepositDetailRows(validRows);
+        </div>`;
+    } else {
+      tableHtml = `
+        <div class="csv-preview-wrapper" style="max-height: 350px;">
+          <table class="csv-preview-table" style="font-size: 0.75rem;">
+            <thead><tr>
+              <th>${t('dash_fee_summary_deposit_header_name')}</th>
+              <th>${t('dash_fee_import_col_will')}</th>
+              ${mappedFields.map(f => `<th>${depositFieldLabel(f)}</th>`).join('')}
+            </tr></thead>
+            <tbody>${plan.map(r => `<tr>
+              <td>${escapeHtml(r.swimmerName)}</td>
+              <td>${rowActionLabel(r.willCreate)}</td>
+              ${mappedFields.map(f => `<td>${r[f] == null || r[f] === '' ? '—' : (f.endsWith('Amount') ? fmtMoney(r[f]) : escapeHtml(r[f]))}</td>`).join('')}
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+  }
+
+  showFeeImportModal({
+    title: t('dash_fee_import_deposit_title'),
+    filename,
+    validCount: plan.length,
+    summaryHtml: planSummaryHtml(plan),
+    mappingHtml: renderImportColumnMapping(parsed.columns),
+    tableHtml,
+    errors: [...(parsed.errors || []), ...slotErrors],
+    skipped,
+    confirmLabel: t('dash_fee_import_confirm_deposit', { count: plan.length }),
+    confirmId: 'detail-import-confirm',
+    cancelId: 'detail-import-cancel',
+    onConfirm: () => importDepositRows(parsed, plan),
   });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
-async function importDepositDetailRows(rows) {
-  if (!rows || rows.length === 0) return;
-  const normalize = (n) => (n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+async function importDepositRows(parsed, plan) {
+  if (!plan || plan.length === 0) return;
   try {
-    const batch = writeBatch(db);
-    for (const row of rows) {
-      const existing = deposits.find(d => d.season === currentSeason && normalize(d.swimmerName) === normalize(row.swimmerName));
-      const updateData = {
-        updatedAt: new Date(),
-        updatedBy: currentUser?.email || 'unknown',
-      };
-      // Only set fields present in the row
-      if ('deposit1Amount' in row) updateData.deposit1Amount = row.deposit1Amount;
-      if ('deposit1Date' in row) updateData.deposit1Date = row.deposit1Date;
-      if ('deposit2Amount' in row) updateData.deposit2Amount = row.deposit2Amount;
-      if ('deposit2Date' in row) updateData.deposit2Date = row.deposit2Date;
-      if ('deposit3Amount' in row) updateData.deposit3Amount = row.deposit3Amount;
-      if ('deposit3Date' in row) updateData.deposit3Date = row.deposit3Date;
-
-      if (existing) {
-        batch.update(doc(db, 'deposits', existing.id), updateData);
-      } else {
-        const newRef = doc(collection(db, 'deposits'));
-        batch.set(newRef, {
-          swimmerName: row.swimmerName, season: currentSeason, balance: 0,
-          deposit1Amount: null, deposit1Date: null, deposit2Amount: null, deposit2Date: null, deposit3Amount: null, deposit3Date: null,
-          ...updateData,
-        });
-      }
-    }
-    await batch.commit();
-    showImportStatus(`Updated deposit details for ${rows.length} swimmer(s) in ${currentSeason}.`);
+    const written = await commitDepositWrites(buildDepositWrites(parsed, plan));
+    showImportStatus(`Updated deposit details for ${written} swimmer(s) in ${currentSeason}.`);
   } catch (error) { console.error('Deposit detail import failed:', error); showImportStatus('Failed to import: ' + (error.message || ''), true); }
 }
 
@@ -5483,9 +5514,10 @@ function bindEvents() {
         const file = e.target.files?.[0];
         e.target.remove();
         if (!file) return;
-        const result = await parseCarryOverExcel(file);
-        if (!result) { alert(t('dash_fee_summary_deposit_parse_error')); return; }
-        showCarryOverImportModal(result.valid, result.errors || [], file.name);
+        const parsed = await parseCarryOverExcel(file);
+        if (!parsed) { alert(t('dash_fee_summary_deposit_parse_error')); return; }
+        if (parsed.fatal) { alert(importFatalMessage(parsed.fatal)); return; }
+        showCarryOverImportModal(parsed, file.name);
       });
       fileInput.click();
     });
@@ -5499,9 +5531,10 @@ function bindEvents() {
         const file = e.target.files?.[0];
         e.target.remove();
         if (!file) return;
-        const result = await parseDepositDetailExcel(file);
-        if (!result) { alert(t('dash_fee_summary_deposit_parse_error')); return; }
-        showDepositDetailImportModal(result.valid, result.errors || [], file.name);
+        const parsed = await parseDepositDetailExcel(file);
+        if (!parsed) { alert(t('dash_fee_summary_deposit_parse_error')); return; }
+        if (parsed.fatal) { alert(importFatalMessage(parsed.fatal)); return; }
+        showDepositDetailImportModal(parsed, file.name);
       });
       fileInput.click();
     });
