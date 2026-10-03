@@ -1,11 +1,13 @@
 // Unit checks for src/utils/swimmerSort.js — the last-name ordering used by the
-// Roster tab, the Swim Times tab and the schedule "manage roster" overlay.
+// Roster tab, the Swim Times tab, the schedule "manage roster" overlay, and the
+// name-only rows of the Fee Summary / Deposits tabs.
 // Pure logic: no network, no Firestore, no DOM.
 //
 // Part of `npm run test:unit` (tests/unit/run-all.mjs). Deliberately NOT named
 // *.spec.js / *.test.js so Playwright's testMatch cannot collect it.
 import {
   normalizeSortKey, swimmerSortKey, compareSwimmersByLastName, sortSwimmersByLastName,
+  displayNameSortKey, buildNamePartsIndex, nameSortKey, compareSwimmerNamesByLastName,
 } from '../../src/utils/swimmerSort.js';
 
 let pass = 0;
@@ -118,6 +120,91 @@ for (let i = 0; i < sample.length - 1; i++) {
   if (compareSwimmersByLastName(sample[i + 1], sample[i]) < 0) consistent = false;
 }
 check('already-sorted list compares as non-decreasing both ways', consistent);
+
+// ── Fee Summary / Deposits rows: one free-text name, no name parts ──────────
+const sortNames = (list, index) => [...list].sort((a, b) => compareSwimmerNamesByLastName(a, b, index));
+
+console.log('8. displayNameSortKey — the fallback when there is no registration');
+check('"Haoran Chen" keys exactly like the structured swimmer',
+  displayNameSortKey('Haoran Chen') === swimmerSortKey(S('Haoran', 'Chen')),
+  displayNameSortKey('Haoran Chen'));
+check('the last token is the surname (compound surname falls to "campo")',
+  displayNameSortKey('Gabriel Martin del Campo').startsWith('campo'),
+  displayNameSortKey('Gabriel Martin del Campo'));
+check('given name is the tiebreak',
+  displayNameSortKey('Liam Norcross') < displayNameSortKey('Logan Norcross'));
+check('"Luo-han Chen" and "Luohan Chen" agree (the 2026-10 punctuation fix)',
+  displayNameSortKey('Luo-han Chen') === displayNameSortKey('Luohan Chen'));
+check('lowercase data still sorts under its letter (the live "lucas li")',
+  displayNameSortKey('lucas li').startsWith('li'));
+check('a single-token name is treated as a surname ("Anjka")',
+  displayNameSortKey('Anjka') === 'anjka\u0000', displayNameSortKey('Anjka'));
+check('…so it sits under A instead of being pinned above the list',
+  sortNames(['Wang', 'Anjka', 'Chen'])[0] === 'Anjka', sortNames(['Wang', 'Anjka', 'Chen']));
+check('empty / null names do not throw', displayNameSortKey('') === '' && displayNameSortKey(null) === '');
+check('compareSwimmerNamesByLastName works without an index',
+  compareSwimmerNamesByLastName('Haoran Chen', 'Ada Gai') < 0);
+
+console.log('9. buildNamePartsIndex — the registration wins over the guess');
+const namePartsIndex = buildNamePartsIndex([
+  { swimmers: [
+    { firstName: 'Gabriel', middleName: '', lastName: 'Martin del Campo' },
+    { firstName: 'Luo-han', middleName: 'Kayden', lastName: 'Chen' },
+    { firstName: 'Gone', lastName: 'Placeholder', deleted: true },
+  ] },
+  { swimmers: [{ firstName: 'lucas', middleName: 'gao', lastName: 'li' }] },
+]);
+check('compound surname resolves through the registration',
+  nameSortKey('Gabriel Martin del Campo', namePartsIndex).startsWith('martin del campo'),
+  nameSortKey('Gabriel Martin del Campo', namePartsIndex));
+check('a fee-sheet spelling resolves to the registered surname',
+  nameSortKey('Luohan Chen', namePartsIndex) === swimmerSortKey(S('Luo-han', 'Chen')));
+check('middle name is indexed too (how "eric chen" → Haoran Chen works)',
+  namePartsIndex.has('lucas gao li'));
+check('soft-deleted swimmers are not indexed', !namePartsIndex.has('gone placeholder'));
+check('an unknown name keeps the fallback',
+  nameSortKey('Celina Feng', namePartsIndex).startsWith('feng'));
+check('a missing index is safe', nameSortKey('Gabriel Martin del Campo', null).startsWith('campo'));
+
+console.log('10. the live Fee Summary / Deposits names, ordered');
+// Names as they are actually stored (a mix of spellings from Hy-Tek, the
+// coach's spreadsheets and the registrations).
+const liveNames = [
+  'Andrew Xiao', 'Logan Norcross', 'Ellora Patel', 'Charlene Tao', 'luke Kamil',
+  'Liam Norcross', 'Leo Wu', 'Daniel Guo', 'Anjka', 'Jonathan Wu', 'Luo-han Chen',
+  'Lasya Agili', 'Miranda Xu', 'Anthony Wang', 'Gabriel Martin del Campo', 'rishik Dandu',
+];
+const expectedOrder = [
+  'Lasya Agili', 'Anjka', 'Gabriel Martin del Campo', 'Luo-han Chen', 'rishik Dandu',
+  'Daniel Guo', 'luke Kamil', 'Liam Norcross', 'Logan Norcross', 'Ellora Patel',
+  'Charlene Tao', 'Anthony Wang', 'Jonathan Wu', 'Leo Wu', 'Andrew Xiao', 'Miranda Xu',
+];
+// The registrations as they exist today: Gabriel Martin del Campo's family is
+// still unregistered, which is exactly why his row falls to the "campo" key.
+const liveIndex = buildNamePartsIndex([{ swimmers: [
+  { firstName: 'Luo-han', middleName: 'Kayden', lastName: 'Chen' },
+  { firstName: 'lucas', middleName: 'gao', lastName: 'li' },
+  { firstName: 'luke', lastName: 'Kamil' },
+  { firstName: 'Liam', lastName: 'Norcross' },
+  { firstName: 'Logan', lastName: 'Norcross' },
+  { firstName: 'Lasya', lastName: 'Agili' },
+] }]);
+const orderedNames = sortNames(liveNames, liveIndex);
+check('surnames first, given name as the tiebreak',
+  orderedNames.join('|') === expectedOrder.join('|'), orderedNames);
+check('every row survives the sort',
+  orderedNames.length === liveNames.length && new Set(orderedNames).size === liveNames.length);
+check('sorting is stable for identical keys',
+  sortNames(['Sam Lee', 'Sam Lee', 'Sam Lee']).length === 3);
+
+// The known gap: an unregistered compound surname lands under C. Registering the
+// child is the fix — the lookup then wins and he moves to the M's.
+const gabrielIndex = buildNamePartsIndex([{ swimmers: [{ firstName: 'Gabriel', lastName: 'Martin del Campo' }] }]);
+const withGabriel = sortNames(liveNames, gabrielIndex);
+check('registering the child moves him from C to M, with no code change',
+  withGabriel[withGabriel.indexOf('Gabriel Martin del Campo') - 1] === 'luke Kamil'
+  && withGabriel[withGabriel.indexOf('Gabriel Martin del Campo') + 1] === 'Liam Norcross',
+  withGabriel);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

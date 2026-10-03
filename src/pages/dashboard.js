@@ -13,7 +13,7 @@ import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js'
 import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
 import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
 import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
-import { sortSwimmersByLastName } from '../utils/swimmerSort.js';
+import { sortSwimmersByLastName, buildNamePartsIndex, compareSwimmerNamesByLastName } from '../utils/swimmerSort.js';
 import {
   parseCarryOverRows,
   planCarryOverRows,
@@ -2759,12 +2759,14 @@ function buildFeeSummaryData(season) {
     });
   }
 
-  // Sort: negative balances first, then by name
-  result.sort((a, b) => {
-    if (a.balance < 0 && b.balance >= 0) return -1;
-    if (a.balance >= 0 && b.balance < 0) return 1;
-    return a.displayName.localeCompare(b.displayName);
-  });
+  // Sort: surname first, exactly like the Roster / Swim Times lists. A negative
+  // balance is still called out (row colour + the "owes money" stat card above),
+  // but it no longer reorders the table — a coach looking for one family wants a
+  // single alphabetical list, not two blocks.
+  // Rows only carry a free-text name, so resolve the real name parts from the
+  // registrations when we can (see swimmerSort.js).
+  const nameParts = buildNamePartsIndex(allRegistrations);
+  result.sort((a, b) => compareSwimmerNamesByLastName(a.displayName, b.displayName, nameParts));
 
   return result;
 }
@@ -2865,9 +2867,13 @@ function renderFeeSummary() {
 // ── Deposits Tab ──
 
 function getDepositsForSeason(season) {
+  // Same surname-first order as the Fee Summary / Roster / Swim Times lists
+  // (the Firestore listener already sorts by swimmerName, but that is a raw
+  // string compare: "ada gai" < "Zhou" and "Luo-han" > "Luohan").
+  const nameParts = buildNamePartsIndex(allRegistrations);
   return deposits
     .filter(d => d.season === season)
-    .sort((a, b) => (a.swimmerName || '').localeCompare(b.swimmerName || ''));
+    .sort((a, b) => compareSwimmerNamesByLastName(a.swimmerName, b.swimmerName, nameParts));
 }
 
 function calcDepositTotal(d) {

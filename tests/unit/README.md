@@ -12,7 +12,7 @@ in about a second and need none of the Playwright/emulator machinery that
 | File | Module under test |
 |---|---|
 | `verify-attention-rules.mjs` | `src/utils/registrationCompleteness.js` — the coach dashboard's Needs Attention engine |
-| `verify-swimmer-sort.mjs` | `src/utils/swimmerSort.js` — last-name ordering in the Roster / Swim Times lists |
+| `verify-swimmer-sort.mjs` | `src/utils/swimmerSort.js` — last-name ordering in the Roster / Swim Times / Fee Summary / Deposits lists |
 | `verify-fetch-health.mjs` | `src/utils/fetchHealth.js` — fetch-failure classification + stop-the-run-early state |
 | `verify-volunteer-hours.mjs` | `src/utils/volunteerHours.js` — Volunteer Hours aggregation and CSV output |
 

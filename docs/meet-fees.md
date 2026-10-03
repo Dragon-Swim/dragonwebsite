@@ -2,8 +2,8 @@
 
 > 目的：说明「Meet Fee Summary」与「Meet Fee Deposits」两个 tab 的数据来源、
 > 两个表格导入器的口径、以及 2026-10-02 误传事故的清理方式。
-> 最后更新：2026-10-02（押金集合清空 + 导入器修正：允许负余额、支持单列表、
-> 无金额列直接拒收、预览显示列映射）。
+> 最后更新：2026-10-03（两个名单改为按姓氏排序，见第 9 节）。2026-10-02（押金集合清空 + 导入器修正：
+> 允许负余额、支持单列表、无金额列直接拒收、预览显示列映射）。
 > 相关代码：`src/utils/feeImport.js`（纯逻辑）、`src/pages/dashboard.js`（渲染与写入）、
 > `execution/fees/clear_deposits_collection.mjs`（清理工具）、
 > `execution/fees/preview_fee_import.mjs`（用真实 xlsx 干跑导入）、
@@ -153,3 +153,25 @@ feeData: { swimmers: [ { name: "eric chen", total: 624.5 }, … ] }
 两条记录（余额一条、押金一条，共 10 人）。已修成写入前按姓名合并（`import_fee_sheet.mjs`），
 历史重复用一次性脚本合并（保留带余额的那条，把押金字段并进去）。仪表盘自带的两个导入器不受
 影响——它的 `deposits` 快照在两次上传之间会由 onSnapshot 刷新。
+
+## 9. 名单排序（2026-10-03）
+
+Fee Summary 与 Deposits 两张表**按姓氏排序（last name → first name）**，与 Roster /
+Swim Times 同一套实现（`src/utils/swimmerSort.js`）。
+
+- **负余额不再置顶**：以前 Fee Summary 把欠费行排在最前面、组内再按名字排，等于把名单切成
+  两块，按姓氏找一家人要翻两遍。现在整表是一份姓氏序；欠费仍然一眼可见（行内红字 + 顶部
+  「Negative balance」统计卡）。
+- **名字怎么拆**：这两张表只存一个自由文本名字（`meets.feeData[].swimmers[].name`、
+  `deposits.swimmerName`），没有 firstName/lastName 字段。所以先拿
+  `normalizeName`（第 7 节那套口径）去 registrations 里查真实姓名，查到就用注册表的
+  `firstName`/`lastName`；查不到才退回**「最后一个词 = 姓」**。
+- **大小写/标点**：兜底时按 `normalizeName` 切词，所以 `Luo-han Chen` 与 `Luohan Chen`
+  得到同一个键（`chen | luo han`），和 Fee Summary 合并这两行的口径一致。
+- **单词名字**（`Anjka`，导入时链接不到家庭）当成姓，落在 A 组，不会孤零零钉在名单最上面。
+- **已知不完美**：复合姓的两张表人士（如未注册的 `Gabriel Martin del Campo`）兜底按最后一个词
+  → 落在 **C**（campo）。**家庭一旦注册就自动归位到 M**，不需要改代码（单测里有一条专门钉这个
+  行为：`tests/unit/verify-swimmer-sort.mjs` 第 9/10 节）。
+- **CSV 导出**跟着表格走（两个 Export CSV 复用同一份排序后的数据）。
+- 只读核验：`node execution/fees/verify_fee_summary.mjs <season>` 打印同一份 join
+  （它的排序偏调试用，按 balance 排，不代表页面顺序）。
