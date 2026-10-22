@@ -55,6 +55,15 @@ const translations = {
         why_growth: 'Personal Growth',
         why_growth_desc: 'Develop discipline, confidence, and lifelong fitness habits.',
 
+        // Home Page — Announcements (content itself lives in src/data/announcements.data.js)
+        news_badge: 'Team News',
+        news_title: 'News & Announcements',
+        news_subtitle: 'Schedule changes, meet notices, and updates from the coaching staff.',
+        news_pinned: 'Pinned',
+        news_read_more: 'Read more',
+        news_dismiss: 'Dismiss',
+        news_empty: 'No announcements right now — check back soon.',
+
         // Registration Page
         reg_title: 'Season Registration',
         reg_subtitle: 'Register your family to start training with Dragon Swim.',

@@ -14,6 +14,13 @@ import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import { t } from '../utils/i18n.js';
+import {
+  currentAnnouncements,
+  currentBanner,
+  renderNewsBanner,
+  renderNewsSection,
+  initNewsBanner,
+} from '../components/news.js';
 
 // Meet The Team 轮播照片:把照片放进 src/assets/team-photos/ 即可自动收录。
 // 顺序按文件名排序(推荐 01-xxx.jpg、02-xxx.jpg …)。
@@ -24,8 +31,15 @@ const TEAM_SLIDE_MS = 3500; // 每张照片停留 3.5 秒(想改快/改慢改这
 initTheme();
 renderNavbar();
 
+// ── 近期消息(内容在 src/data/announcements.data.js) ──
+// 置顶的那条显示在顶部横幅,所有未过期的消息显示在 #news 区块。
+const announcements = currentAnnouncements();
+const bannerAnnouncement = currentBanner();
+
 const app = document.getElementById('app');
 app.innerHTML = `
+  ${renderNewsBanner(bannerAnnouncement)}
+
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-grid-bg"></div>
@@ -38,10 +52,11 @@ app.innerHTML = `
       <div class="hero-right">
         <div class="hero-float-grid">
           <!-- Floating feature cards -->
-          <div class="hero-float-card hfc-1">
+          <a href="#news" class="hero-float-card hfc-1" aria-label="${t('news_title')}">
             <div class="hfc-icon">📰</div>
             <div class="hfc-label">News</div>
-          </div>
+            ${announcements.length ? '<span class="hfc-dot" aria-hidden="true"></span>' : ''}
+          </a>
           <a href="${import.meta.env.BASE_URL}signin.html" class="hero-float-card hfc-2">
             <div class="hfc-icon">🏆</div>
             <div class="hfc-label">Swim Meets</div>
@@ -70,6 +85,8 @@ app.innerHTML = `
     <div class="corner-dot corner-bl"></div>
     <div class="corner-dot corner-br"></div>
   </section>
+
+  ${renderNewsSection(announcements)}
 
   <!-- Why Dragon Swim Section -->
   <section class="section features-section" style="background: var(--bg-secondary);">
@@ -235,6 +252,21 @@ app.innerHTML = `
 `;
 
 renderFooter();
+
+// ── 置顶消息横幅:关闭按钮 ──
+initNewsBanner(bannerAnnouncement);
+
+// ── 带动画滚动到 #news(Hero 里的 News 图标)──
+document.querySelectorAll('a[href="#news"]').forEach((link) => {
+  link.addEventListener('click', (event) => {
+    const target = document.getElementById('news');
+    if (!target) return;
+    event.preventDefault();
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    history.replaceState(null, '', '#news');
+  });
+});
 
 // ── Intersection Observer for Animations ──
 const observerOptions = {
