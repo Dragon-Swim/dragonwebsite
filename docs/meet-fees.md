@@ -175,3 +175,35 @@ Swim Times 同一套实现（`src/utils/swimmerSort.js`）。
 - **CSV 导出**跟着表格走（两个 Export CSV 复用同一份排序后的数据）。
 - 只读核验：`node execution/fees/verify_fee_summary.mjs <season>` 打印同一份 join
   （它的排序偏调试用，按 balance 排，不代表页面顺序）。
+
+## 10. 顶部四张统计卡的字号（2026-10-25）
+
+**症状**：教练端 Fee Summary 顶部「Total Deposits」的数字**撑出了卡片方框**。
+
+**原因**：`.dash-stat-number` 用的是 `--fs-3xl`（40px 特粗），是按"51""28"这种两位数
+设计的；两笔金额 `$2,424.00` / `$12,424.50` 宽得多——1366px 窗口下多出 **12px**，
+1280px 下多出 **34px**（实测见下），金额一到五位数在更宽的屏幕上也照样溢出。
+
+**修法**（`src/pages/dashboard.css`，只作用于 `.fee-summary-stats` 这一行，
+不影响 Overview / Volunteer Hours 的同名卡片）：
+
+| 规则 | 作用 |
+|---|---|
+| `.fee-summary-stats .dash-stat-card { container-type: inline-size }` | 让卡片成为容器查询的参照 |
+| `.fee-summary-stats .dash-stat-number { font-size: clamp(1.05rem, 17cqi, var(--fs-2xl)) }` | 字号按**卡片自身宽度**算，不是按视口——窗口把侧栏占比压扁也挤不出来。17cqi 给最长金额留约 12% 余量；32px 封顶 |
+| `@media (max-width: 1200px) { .fee-summary-stats { grid-template-columns: repeat(2, minmax(0,1fr)) } }` | 1025–1200px 四列会把金额压到 ~17px（挤得难看），这一行改成 2×2，字号回到 32px |
+
+外加 `font-variant-numeric: tabular-nums`（等宽数字，两位/三位金额切换时不抖动）与
+`letter-spacing: -0.01em`。
+
+**回归验证**（`.tmp/design-check/`，可重新生成）：一个只链接真实 CSS 的静态页面
+`fee-summary-stats.html` + `measure.mjs`，在 390 → 1920px 共 14 个宽度下量
+"文字实际宽度 vs 卡片内容宽度"，同时跑真实金额与压力值（`$12,424.50`）：
+
+```powershell
+node .tmp/design-check/measure.mjs          # 全绿 = 无溢出；exit 1 = 有卡片溢出
+node .tmp/design-check/shots.mjs            # 输出 before/after 截图到 .tmp/design-check/
+```
+
+以后改这四张卡（加字段、加卡、改字号变量）都跑一次 `measure.mjs`——只靠肉眼看，
+1280px 那档的 30 多像素溢出很容易被当成"字体没加载好"。
