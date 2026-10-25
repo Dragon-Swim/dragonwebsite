@@ -767,7 +767,7 @@ import{t as o,i as _t,a as Xs}from"./i18n-CWIaZc2X.js";import{b as Zs,p as Js,c 
       <button class="btn btn-outline btn-sm" id="fee-summary-export-btn">📥 Export CSV</button>
     </div>
 
-    <div class="dash-stats-row">
+    <div class="dash-stats-row fee-summary-stats">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${e.length}</div>
         <div class="dash-stat-label">${o("dash_fee_summary_total_swimmers")}</div>
