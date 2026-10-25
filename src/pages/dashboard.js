@@ -2788,7 +2788,7 @@ function renderFeeSummary() {
       <button class="btn btn-outline btn-sm" id="fee-summary-export-btn">📥 Export CSV</button>
     </div>
 
-    <div class="dash-stats-row">
+    <div class="dash-stats-row fee-summary-stats">
       <div class="dash-stat-card">
         <div class="dash-stat-number">${summary.length}</div>
         <div class="dash-stat-label">${t('dash_fee_summary_total_swimmers')}</div>

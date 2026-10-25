@@ -305,6 +305,33 @@
     overflow-wrap: anywhere;
 }
 
+/* Fee Summary totals (`.fee-summary-stats`): "$12,424.50" is nearly six times the
+   width of the plain counts these cards were sized for, so at --fs-3xl the two
+   money values spill past the card padding — at 1366px "$2,424.00" overruns its
+   box by 12px, and any 5-figure sum does it on wider screens too.
+   The size is therefore derived from the CARD width (cqi), not the viewport: a
+   window that resizes the sidebar/content ratio can't squeeze the number out.
+   17cqi keeps ~12% headroom for the longest realistic sum ($12,424.50). */
+.fee-summary-stats .dash-stat-card {
+    container-type: inline-size;
+}
+
+.fee-summary-stats .dash-stat-number {
+    font-size: clamp(1.05rem, 17cqi, var(--fs-2xl));
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+/* Between 1024px (where the dashboard drops to a 2-up row) and ~1200px a 4-up row
+   gets too tight for the money values — they fit, but only at ~17px next to a 12px
+   label. Wrap this row to 2×2 instead so the totals keep the dashboard's size. */
+@media (max-width: 1200px) {
+    .fee-summary-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .dash-overview-meta {
     font-size: var(--fs-sm);
     color: var(--text-muted);
