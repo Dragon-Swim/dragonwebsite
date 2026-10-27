@@ -14,11 +14,13 @@ import { initTheme } from '../components/theme-toggle.js';
 import { renderNavbar } from '../components/navbar.js';
 import { renderFooter } from '../components/footer.js';
 import { t } from '../utils/i18n.js';
+import { getActiveAnnouncements } from '../data/announcements.data.js';
+import { loadAnnouncements } from '../data/announcements.remote.js';
 import {
-  currentAnnouncements,
-  currentBanner,
+  pickBanner,
   renderNewsBanner,
   renderNewsSection,
+  paintNews,
   initNewsBanner,
 } from '../components/news.js';
 
@@ -31,14 +33,15 @@ const TEAM_SLIDE_MS = 3500; // 每张照片停留 3.5 秒(想改快/改慢改这
 initTheme();
 renderNavbar();
 
-// ── 近期消息(内容在 src/data/announcements.data.js) ──
-// 置顶的那条显示在顶部横幅,所有未过期的消息显示在 #news 区块。
-const announcements = currentAnnouncements();
-const bannerAnnouncement = currentBanner();
+// ── 近期消息(内容在 Firestore 的 announcements 集合,admin 在 dashboard 里发)──
+// 先用上次缓存的画出来(回访者不看空屏),网络结果到了 paintNews() 再重画一次。
+const { cached: cachedAnnouncements, fresh: freshAnnouncements } = loadAnnouncements();
+const cachedActive = getActiveAnnouncements(cachedAnnouncements);
+const bannerAnnouncement = pickBanner(cachedActive);
 
 const app = document.getElementById('app');
 app.innerHTML = `
-  ${renderNewsBanner(bannerAnnouncement)}
+  <div id="news-banner-slot">${renderNewsBanner(bannerAnnouncement)}</div>
 
   <!-- Hero Section -->
   <section class="hero">
@@ -55,7 +58,7 @@ app.innerHTML = `
           <a href="#news" class="hero-float-card hfc-1" aria-label="${t('news_title')}">
             <div class="hfc-icon">📰</div>
             <div class="hfc-label">News</div>
-            ${announcements.length ? '<span class="hfc-dot" aria-hidden="true"></span>' : ''}
+            <span class="hfc-dot" id="news-dot" aria-hidden="true" ${cachedActive.length ? '' : 'hidden'}></span>
           </a>
           <a href="${import.meta.env.BASE_URL}signin.html" class="hero-float-card hfc-2">
             <div class="hfc-icon">🏆</div>
@@ -86,7 +89,7 @@ app.innerHTML = `
     <div class="corner-dot corner-br"></div>
   </section>
 
-  ${renderNewsSection(announcements)}
+  ${renderNewsSection(cachedActive, { pending: cachedActive.length === 0 })}
 
   <!-- Why Dragon Swim Section -->
   <section class="section features-section" style="background: var(--bg-secondary);">
@@ -255,6 +258,17 @@ renderFooter();
 
 // ── 置顶消息横幅:关闭按钮 ──
 initNewsBanner(bannerAnnouncement);
+
+// ── 消息刷新:缓存先画,网络结果到了再画一次(失败就保持缓存,不报错)──
+freshAnnouncements.then(({ items, error, fromCache }) => {
+  if (fromCache && error) {
+    console.warn('[news] 读不到公告,沿用缓存:', error.message);
+    // 缓存本来就是空的 → 把"载入中"的空列表换成空状态提示
+    if (cachedActive.length === 0) paintNews([], { pending: false });
+    return;
+  }
+  paintNews(items);
+});
 
 // ── 带动画滚动到 #news(Hero 里的 News 图标)──
 document.querySelectorAll('a[href="#news"]').forEach((link) => {

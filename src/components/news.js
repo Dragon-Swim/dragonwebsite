@@ -5,7 +5,8 @@
  *   1) 顶部横幅 —— 显示 pinned 的那一条(可关闭,关闭状态记在 localStorage)
  *   2) News 区块(#news) —— 列出所有未过期的消息,Hero 里的 News 图标指向这里
  *
- * 内容全部来自 src/data/announcements.data.js,这个文件只负责渲染和关闭记忆。
+ * 内容来自 Firestore(见 data/announcements.remote.js),这里是**渲染 + 关闭记忆**。
+ * 主页先渲染缓存(可能有),网络结果到了再调 paintNews() 重画一次。
  */
 
 import { t } from '../utils/i18n.js';
@@ -57,14 +58,9 @@ function toParagraphs(body) {
         .filter(Boolean);
 }
 
-/** News 区块要列出的消息。 */
-export function currentAnnouncements() {
-    return getActiveAnnouncements();
-}
-
 /** 横幅要显示的那一条;用户已经关掉了同一个 id 则返回 null。 */
-export function currentBanner() {
-    const pinned = getBannerAnnouncement();
+export function pickBanner(items, now = new Date()) {
+    const pinned = getBannerAnnouncement(items, now);
     if (!pinned) return null;
     return readDismissedIds().includes(pinned.id) ? null : pinned;
 }
@@ -89,26 +85,9 @@ export function renderNewsBanner(announcement) {
     `;
 }
 
-/** #news 区块:列出所有有效消息;一条都没有时显示一行提示。 */
-export function renderNewsSection(announcements) {
-    const list = Array.isArray(announcements) ? announcements : [];
-    const cards = list.length
-        ? list.map(newsCard).join('')
-        : `<p class="news-empty">${t('news_empty')}</p>`;
-
-    return `
-      <section class="section news-section" id="news">
-        <div class="container">
-          <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
-            <span class="badge badge-primary">${t('news_badge')}</span>
-            <h2 class="section-title" style="margin-top: var(--space-md);">${t('news_title')}</h2>
-            <div class="divider" style="margin: var(--space-md) auto;"></div>
-            <p class="section-subtitle" style="margin: 0 auto;">${t('news_subtitle')}</p>
-          </div>
-          <div class="news-grid">${cards}</div>
-        </div>
-      </section>
-    `;
+/** 所有消息的卡片 HTML。 */
+export function newsCardsHtml(announcements) {
+    return (Array.isArray(announcements) ? announcements : []).map(newsCard).join('');
 }
 
 function newsCard(a) {
@@ -132,6 +111,68 @@ function newsCard(a) {
         ${link}
       </article>
     `;
+}
+
+/**
+ * #news 区块。`pending: true` 表示"数据还没到"——此时列表为空就不显示
+ * "No announcements right now" 那句,避免先闪一句空状态再被内容顶掉。
+ */
+export function renderNewsSection(announcements, { pending = false } = {}) {
+    const list = Array.isArray(announcements) ? announcements : [];
+    const cards = list.length
+        ? newsCardsHtml(list)
+        : (pending ? '' : `<p class="news-empty">${t('news_empty')}</p>`);
+
+    return `
+      <section class="section news-section" id="news">
+        <div class="container">
+          <div class="text-center animate-on-scroll" style="margin-bottom: var(--space-2xl);">
+            <span class="badge badge-primary">${t('news_badge')}</span>
+            <h2 class="section-title" style="margin-top: var(--space-md);">${t('news_title')}</h2>
+            <div class="divider" style="margin: var(--space-md) auto;"></div>
+            <p class="section-subtitle" style="margin: 0 auto;">${t('news_subtitle')}</p>
+          </div>
+          <div class="news-grid" id="news-grid">${cards}</div>
+        </div>
+      </section>
+    `;
+}
+
+/**
+ * 把一批公告画到 DOM 上(横幅 + 列表 + Hero 的小红点)。可以反复调用:
+ * 缓存先画一次,网络结果到了再画一次。
+ */
+export function paintNews(items, { pending = false } = {}) {
+    const active = getActiveAnnouncements(items);
+    const banner = pickBanner(active);
+
+    const slot = document.getElementById('news-banner-slot');
+    if (slot) {
+        const hadBanner = !!slot.querySelector('.news-banner');
+        slot.innerHTML = renderNewsBanner(banner);
+        // 首次出现(缓存为空、网络结果才带来横幅)时淡入,避免 navbar 下的内容突然被顶下去
+        const fresh = slot.querySelector('.news-banner');
+        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (fresh && !hadBanner && !reduceMotion) {
+            fresh.style.opacity = '0';
+            fresh.style.transition = 'opacity 220ms ease';
+            requestAnimationFrame(() => { fresh.style.opacity = '1'; });
+        }
+    }
+
+    const grid = document.getElementById('news-grid');
+    if (grid) {
+        grid.innerHTML = active.length
+            ? newsCardsHtml(active)
+            : (pending ? '' : `<p class="news-empty">${t('news_empty')}</p>`);
+    }
+
+    // Hero 里 News 卡片上的红点:有消息才亮
+    const dot = document.getElementById('news-dot');
+    if (dot) dot.hidden = active.length === 0;
+
+    initNewsBanner(banner);
+    return active;
 }
 
 /**

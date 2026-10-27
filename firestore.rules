@@ -178,6 +178,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── announcements — homepage notices ─────────────────────────
+    // The homepage is public, so reads are open to anonymous visitors. Rules
+    // deliberately use no get()/exists() here: every call in a rule is a billed
+    // document read, and this collection is read on every homepage visit.
+    // Publishing is admin-only (decided 2026-10-27) — coaches read, don't write.
+    match /announcements/{docId} {
+      allow read: if true;
+
+      allow create, update: if isAdmin()
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 4000
+        && request.resource.data.level in ['info', 'urgent']
+        && request.resource.data.pinned is bool
+        && request.resource.data.date is string
+        && (!('until' in request.resource.data) || request.resource.data.until == null
+            || (request.resource.data.until is string && request.resource.data.until.size() == 10));
+
+      allow delete: if isAdmin();
+    }
+
     // ── settings — app configuration (API credentials, etc.) ──────
 
     match /settings/{docId} {

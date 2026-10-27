@@ -30,7 +30,8 @@ import {
     orderBy,
     limit,
     getDocs,
-    writeBatch
+    writeBatch,
+    serverTimestamp
 } from "firebase/firestore";
 
 // ============================================================
@@ -133,4 +134,5 @@ export {
     limit,
     getDocs,
     writeBatch,
+    serverTimestamp,
 };

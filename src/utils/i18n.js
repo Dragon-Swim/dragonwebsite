@@ -587,6 +587,10 @@ const translations = {
         dash_coach_deposits_label: 'Meet Fee Deposits',
         dash_coach_tab_deposits: 'Meet Fee Deposits',
 
+        // ── Dashboard — Announcements Tab (admin only) ──
+        dash_coach_news_label: 'Announcements',
+        dash_coach_tab_news: 'Homepage Announcements',
+
         // ── Dashboard — Volunteer Hours Tab ──
         dash_coach_volunteer_label: 'Volunteer Hours',
         dash_coach_tab_volunteer: 'Volunteer Hours',

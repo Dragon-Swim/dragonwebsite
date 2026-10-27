@@ -36,6 +36,7 @@ import {
   volunteerDetailCSV,
 } from '../utils/volunteerHours.js';
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
+import { renderAnnouncementAdmin, initAnnouncementAdmin } from '../components/announcementAdmin.js';
 import { t } from '../utils/i18n.js';
 import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
@@ -513,6 +514,9 @@ function renderCoachDashboard(user) {
             <button class="dash-nav-item ${currentTab === 'deposits' ? 'active' : ''}" data-tab="deposits">
               <span class="dash-nav-icon">🏦</span> ${t('dash_coach_deposits_label')}
             </button>
+            <button class="dash-nav-item ${currentTab === 'news' ? 'active' : ''}" data-tab="news">
+              <span class="dash-nav-icon">📰</span> ${t('dash_coach_news_label')}
+            </button>
             ` : ''}
             <button class="dash-nav-item ${currentTab === 'results' ? 'active' : ''}" data-tab="results">
               <span class="dash-nav-icon">🏊</span> Swim Times
@@ -572,6 +576,8 @@ function renderCoachDashboard(user) {
   // Results tab:innerHTML 已就位,此时读回持久化状态才不会找不到 cell
   // (refreshUI 是异步的,导航点击处立即调用会因 DOM 未渲染而空跑 → 状态列恒 "—")
   if (currentTab === 'results') loadAthleteDataStatus();
+  // Announcements tab:表单绑定 + 拉列表(数据在 Firestore,不是实时监听)
+  if (currentTab === 'news' && dbRole === 'admin') initAnnouncementAdmin();
 
   bindEvents();
   initTheme();
@@ -595,6 +601,7 @@ function getTabTitle(tab, role = 'swimmer') {
       'feesummary': t('dash_coach_tab_fee_summary'),
       'deposits': t('dash_coach_tab_deposits'),
       'volunteer': t('dash_coach_tab_volunteer'),
+      'news': t('dash_coach_tab_news'),
     };
     return titles[tab] || t('dash_coach_tab_overview');
   }
@@ -630,6 +637,8 @@ function renderTabContent(tab, role = 'swimmer') {
       case 'feesummary': return renderFeeSummary();
       case 'deposits': return renderDeposits();
       case 'volunteer': return renderVolunteerHours();
+      // Admin-only: publishing homepage notices (rules enforce it server-side too)
+      case 'news': return dbRole === 'admin' ? renderAnnouncementAdmin() : renderCoachOverview();
       default: return renderCoachOverview();
     }
   }
