@@ -1,8 +1,6 @@
-import{t as a,i as $}from"./i18n-CWIaZc2X.js";import{a as k,r as C}from"./footer-ByNUqTun.js";const x="/assets/980639303bf1d86ee10c28975f44ac03-D6wAvmae.jpg",A="/assets/DSC_0235-BcK4YLPT.jpg",D="/assets/DSC_0484-DNBuOau_.jpg",M="/assets/DSC_0491-DjuYdXrf.jpg",j="/assets/DSC_0530-jKnjlx_M.jpg",T="/assets/DSC_0915%20(2)-Ba7p0FwD.jpg",I="/assets/DSC_1000%20(2)-DIpZBNi1.jpg",E="/assets/IMG_4429-B7GHJQMZ.jpg",B="/assets/IMG_8124-BbgwW0FJ.jpg",F=[{id:"dulles-south-weekend-2026-10-24",date:"2026-10-22",until:"2026-10-25",level:"urgent",pinned:!0,title:"Weekend Update: No Dulles South Training, Oct 24–25",body:`There is no training at Dulles South this Saturday and Sunday (10/24 & 10/25).
+import{t as a,i as $}from"./i18n-CWIaZc2X.js";import{a as k,r as C}from"./footer-ByNUqTun.js";const x="/assets/980639303bf1d86ee10c28975f44ac03-D6wAvmae.jpg",A="/assets/DSC_0235-BcK4YLPT.jpg",D="/assets/DSC_0484-DNBuOau_.jpg",M="/assets/DSC_0491-DjuYdXrf.jpg",j="/assets/DSC_0530-jKnjlx_M.jpg",T="/assets/DSC_0915%20(2)-Ba7p0FwD.jpg",I="/assets/DSC_1000%20(2)-DIpZBNi1.jpg",E="/assets/IMG_4429-B7GHJQMZ.jpg",B="/assets/IMG_8124-BbgwW0FJ.jpg",N=[{id:"claude-moore-weekend-2026-10-31",date:"2026-10-27",until:"2026-11-01",level:"urgent",pinned:!0,title:"Weekend Update: No Claude Moore Training, Oct 31 – Nov 1",body:`There is no training at Claude Moore this Saturday and Sunday (10/31 & 11/1) — the facility is closed for the weekend.
 
-All other locations keep their regular weekend practices, unchanged.
-
-Dulles South swimmers who would still like to get in the water this weekend are welcome to join a practice at another location. Please let your coach know in advance so we can plan lane space.`}];function L(e=new Date){const s=e.getFullYear(),t=String(e.getMonth()+1).padStart(2,"0"),n=String(e.getDate()).padStart(2,"0");return`${s}-${t}-${n}`}function N(e,s=new Date){const t=L(s);return!(e.date&&t<e.date||e.until&&t>e.until)}function v(e=new Date){return F.filter(s=>N(s,e)).sort((s,t)=>String(t.date||"").localeCompare(String(s.date||"")))}function O(e=new Date){return v(e).find(s=>s.pinned===!0)||null}function P(e){if(!e)return"";const s=new Date(`${e}T12:00:00`);return Number.isNaN(s.getTime())?e:s.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}const u="dragon.home.banner.dismissed.v1";function f(){try{const e=window.localStorage.getItem(u),s=e?JSON.parse(e):[];return Array.isArray(s)?s:[]}catch{return[]}}function z(e){try{const s=f().filter(t=>t!==e);s.push(e),window.localStorage.setItem(u,JSON.stringify(s.slice(-20)))}catch{}}function i(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}function w(e){return String(e??"").split(`
+Tysons and Dulles South keep their regular weekend practices. Swimmers who would like to swim there instead are welcome; please let your coach know in advance so we can plan lane space.`}];function F(e=new Date){const s=e.getFullYear(),t=String(e.getMonth()+1).padStart(2,"0"),n=String(e.getDate()).padStart(2,"0");return`${s}-${t}-${n}`}function L(e,s=new Date){const t=F(s);return!(e.date&&t<e.date||e.until&&t>e.until)}function v(e=new Date){return N.filter(s=>L(s,e)).sort((s,t)=>String(t.date||"").localeCompare(String(s.date||"")))}function O(e=new Date){return v(e).find(s=>s.pinned===!0)||null}function z(e){if(!e)return"";const s=new Date(`${e}T12:00:00`);return Number.isNaN(s.getTime())?e:s.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}const u="dragon.home.banner.dismissed.v1";function f(){try{const e=window.localStorage.getItem(u),s=e?JSON.parse(e):[];return Array.isArray(s)?s:[]}catch{return[]}}function P(e){try{const s=f().filter(t=>t!==e);s.push(e),window.localStorage.setItem(u,JSON.stringify(s.slice(-20)))}catch{}}function i(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}function w(e){return String(e??"").split(`
 `).map(s=>s.trim()).filter(Boolean)}function W(){return v()}function H(){const e=O();return e?f().includes(e.id)?null:e:null}function q(e){if(!e)return"";const[s]=w(e.body),t=e.level==="urgent";return`
       <div class="news-banner${t?" is-urgent":""}" role="status" aria-live="polite">
         <div class="container news-banner-inner">
@@ -30,14 +28,14 @@ Dulles South swimmers who would still like to get in the water this weekend are 
     `}function Y(e){const s=e.level==="urgent",t=w(e.body).map(o=>`<p>${i(o)}</p>`).join(""),n=e.link&&e.link.href?(()=>{const o=/^https?:/i.test(e.link.href);return`<a class="news-card-link" href="${i(e.link.href)}"${o?' target="_blank" rel="noopener"':""}>${i(e.link.label||a("news_read_more"))} &rarr;</a>`})():"";return`
       <article class="news-card${s?" is-urgent":""}">
         <div class="news-card-meta">
-          <time class="news-card-date" datetime="${i(e.date||"")}">${i(P(e.date))}</time>
+          <time class="news-card-date" datetime="${i(e.date||"")}">${i(z(e.date))}</time>
           ${e.pinned?`<span class="news-card-pin">${a("news_pinned")}</span>`:""}
         </div>
         <h3 class="news-card-title">${i(e.title)}</h3>
         <div class="news-card-body">${t}</div>
         ${n}
       </article>
-    `}function G(e){const s=document.querySelector(".news-banner"),t=document.getElementById("news-banner-close");!s||!t||!e||t.addEventListener("click",()=>{z(e.id),s.style.transition="opacity 150ms ease",s.style.opacity="0",window.setTimeout(()=>s.remove(),160)})}const m=Object.assign({"../assets/team-photos/980639303bf1d86ee10c28975f44ac03.jpg":x,"../assets/team-photos/DSC_0235.jpg":A,"../assets/team-photos/DSC_0484.jpg":D,"../assets/team-photos/DSC_0491.jpg":M,"../assets/team-photos/DSC_0530.jpg":j,"../assets/team-photos/DSC_0915 (2).jpg":T,"../assets/team-photos/DSC_1000 (2).jpg":I,"../assets/team-photos/IMG_4429.jpg":E,"../assets/team-photos/IMG_8124.jpg":B}),h=Object.keys(m).sort((e,s)=>e.localeCompare(s,void 0,{numeric:!0})).map(e=>m[e]),J=3500;$();k();const g=W(),b=H(),K=document.getElementById("app");K.innerHTML=`
+    `}function G(e){const s=document.querySelector(".news-banner"),t=document.getElementById("news-banner-close");!s||!t||!e||t.addEventListener("click",()=>{P(e.id),s.style.transition="opacity 150ms ease",s.style.opacity="0",window.setTimeout(()=>s.remove(),160)})}const m=Object.assign({"../assets/team-photos/980639303bf1d86ee10c28975f44ac03.jpg":x,"../assets/team-photos/DSC_0235.jpg":A,"../assets/team-photos/DSC_0484.jpg":D,"../assets/team-photos/DSC_0491.jpg":M,"../assets/team-photos/DSC_0530.jpg":j,"../assets/team-photos/DSC_0915 (2).jpg":T,"../assets/team-photos/DSC_1000 (2).jpg":I,"../assets/team-photos/IMG_4429.jpg":E,"../assets/team-photos/IMG_8124.jpg":B}),h=Object.keys(m).sort((e,s)=>e.localeCompare(s,void 0,{numeric:!0})).map(e=>m[e]),J=3500;$();k();const g=W(),b=H(),K=document.getElementById("app");K.innerHTML=`
   ${q(b)}
 
   <!-- Hero Section -->
@@ -131,10 +129,10 @@ Dulles South swimmers who would still like to get in the water this weekend are 
         <p class="section-subtitle" style="margin: 0 auto;">${a("seasons_subtitle")}</p>
       </div>
       <div class="seasons-grid">
-        ${l("spring","🌸","#22C55E")}
-        ${l("summer","☀️","#F59E0B")}
-        ${l("fall","🍂","#E84D25")}
-        ${l("winter","❄️","#3B82F6")}
+        ${c("spring","🌸","#22C55E")}
+        ${c("summer","☀️","#F59E0B")}
+        ${c("fall","🍂","#E84D25")}
+        ${c("winter","❄️","#3B82F6")}
       </div>
 
       <div class="season-schedule animate-on-scroll">
@@ -170,11 +168,11 @@ Dulles South swimmers who would still like to get in the water this weekend are 
         <div class="divider" style="margin: var(--space-md) auto;"></div>
       </div>
       <div class="team-grid animate-on-scroll" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg);">
-        ${c("Coach Kevin","Head Coach",`Coach Kevin is an ASCA Level 5 Coach—the highest level of ASCA coaching certification—and an ASCA Life Member, maintaining Level 5 status for three consecutive years (2024–2026). He has been recognized among the nation's top age group coaches, including the ASCA Top 50 in 2019, Top 25 Small Team Coaches in 2025, and Top 5 Small Team Coaches in 2026.
+        ${l("Coach Kevin","Head Coach",`Coach Kevin is an ASCA Level 5 Coach—the highest level of ASCA coaching certification—and an ASCA Life Member, maintaining Level 5 status for three consecutive years (2024–2026). He has been recognized among the nation's top age group coaches, including the ASCA Top 50 in 2019, Top 25 Small Team Coaches in 2025, and Top 5 Small Team Coaches in 2026.
 
 Coach Kevin was a finalist for the 2024 ASCA Top 4 Impact Coach Award and is one of five finalists for the 2026 ASCA Age Group Coach of the Year Award in the Small Team Division. His focus is simple: helping every swimmer reach their potential through strong fundamentals, individualized coaching, and a positive training environment.`)}
-        ${c("Coach Lisa","Coach & Manager","Coach Lisa is an expert in stroke technique and fundamentals. By utilizing precise stroke breakdown and biomechanical analysis, she optimizes each swimmer's entry angle, catch, and pulling efficiency. As a team manager, Coach Lisa also truly cares about swimmers' mental health. She is skilled at noticing emotional changes and helping swimmers overcome issues arising from swimming and life, enabling them to achieve their best in a healthy, happy state of mind.")}
-        ${c("Coach Sue","Coach","Coach Sue has been with Dragon Swim Team for more than 15 years and has more than 20 years of coaching experience. She is a master of aquatic conditioning and race strategy, focused on unlocking an athlete's full physiological potential through scientific, dynamic, and comprehensive training. Coach Sue eliminates the monotony of one-dimensional practices by designing highly engaging, multi-stroke swim sets that seamlessly transition between butterfly, backstroke, breaststroke, and freestyle. This high-intensity, comprehensive approach not only significantly boosts a swimmer's Individual Medley (IM) prowess but also precisely targets different energy systems—from the aerobic base to anaerobic lactate threshold sprinting.")}
+        ${l("Coach Lisa","Coach & Manager","Coach Lisa is an expert in stroke technique and fundamentals. By utilizing precise stroke breakdown and biomechanical analysis, she optimizes each swimmer's entry angle, catch, and pulling efficiency. As a team manager, Coach Lisa also truly cares about swimmers' mental health. She is skilled at noticing emotional changes and helping swimmers overcome issues arising from swimming and life, enabling them to achieve their best in a healthy, happy state of mind.")}
+        ${l("Coach Sue","Coach","Coach Sue has been with Dragon Swim Team for more than 15 years and has more than 20 years of coaching experience. She is a master of aquatic conditioning and race strategy, focused on unlocking an athlete's full physiological potential through scientific, dynamic, and comprehensive training. Coach Sue eliminates the monotony of one-dimensional practices by designing highly engaging, multi-stroke swim sets that seamlessly transition between butterfly, backstroke, breaststroke, and freestyle. This high-intensity, comprehensive approach not only significantly boosts a swimmer's Individual Medley (IM) prowess but also precisely targets different energy systems—from the aerobic base to anaerobic lactate threshold sprinting.")}
       </div>
     </div>
   </section>
@@ -259,14 +257,14 @@ Coach Kevin was a finalist for the 2024 ASCA Top 4 Impact Coach Award and is one
     <div class="team-slideshow" id="team-slideshow" role="region" aria-label="Dragon Swim team photos">
       ${h.map((e,s)=>`<img class="team-slide${s===0?" active":""}" src="${e}" alt="Dragon Swim team photo ${s+1}" />`).join("")}
     </div>
-  `}function l(e,s,t){return`
+  `}function c(e,s,t){return`
     <div class="card season-card" style="--season-accent: ${t}">
       <div class="season-emoji">${s}</div>
       <h3 class="season-name">${a("season_"+e)}</h3>
       <p class="season-dates">${a("season_"+e+"_dates")}</p>
       <p class="season-desc">${a("season_"+e+"_desc")}</p>
     </div>
-  `}function c(e,s,t){return`
+  `}function l(e,s,t){return`
     <div class="card team-card text-center">
       <div class="team-img-placeholder" style="width: 120px; height: 120px; border-radius: 50%; background: var(--border-color); margin: 0 auto var(--space-md); overflow: hidden; border: 3px solid var(--color-primary);">
         <img src="/placeholder-coach.jpg" alt="${e}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0;" onload="this.style.opacity=1" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath fill=%22%23ccc%22 d=%22M50 50c11 0 20-9 20-20s-9-20-20-20-20 9-20 20 9 20 20 20zm0 10c-13.3 0-40 6.7-40 20v10h80V80c0-13.3-26.7-20-40-20z%22/%3E%3C/svg%3E'" />
