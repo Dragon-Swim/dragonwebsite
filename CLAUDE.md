@@ -68,6 +68,7 @@ Key principle: Local files are only for processing. Deliverables live in cloud s
 | `.tmp/standards/` | USA Swimming standards PDF + the text extracted from it |
 | `.tmp/cf526/` | Cloudflare custom-domain + GitHub Support ticket material |
 | `.tmp/pw-tmp/` | Playwright profile temp dir — created and wiped by scripts/run-playwright.mjs |
+| `.tmp/usas-api-audit/` | Full JSON samples of the new Data Hub `/api/times/swims` responses (`local-tools/probe-usas-cookie.mjs --dump`), for checking field-name drift |
 
 Rules: put new work in the matching bucket (create a clearly-named one if none fits);
 tool defaults in `execution/` point at these paths, so update a tool's defaults when you

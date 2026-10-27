@@ -1,7 +1,9 @@
 # 游泳成绩抓取(USA Swimming Data Hub)工作流说明
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
-> 最后更新:2026-09-21(新增第 10 节:两个 USAS 端点返回无 CORS 头的 406,会导致每个队员在
+> 最后更新:2026-10-27(新增第 12 节:Data Hub 改版,旧 `times-api` host 整站 403,
+> 前端改走 `data.usaswimming.org/api/*` + SSO cookie 且拒绝 dragonswim.org 来源 ——
+> 浏览器直连路线结束,必须服务端代理。此前 2026-09-21 新增第 10 节:两个 USAS 端点返回无 CORS 头的 406,会导致每个队员在
 > 第一个请求就失败;第 5 节新增 `responseUnreadable` 字段与「连续 3 个队员首个请求失败即中止
 > 整轮」的 fail-fast 行为;此前 2026-09-19 新增 Fetch New Athletes Only / 错误持久化 /
 > 首阶段重试与鉴权处理)。
@@ -124,6 +126,9 @@
 
 ## 10. 已知的 USAS API 异常 — 两个端点返回「不带 CORS 头的 406」
 
+> ⚠ **本节描述的是 2026-09-21 的状态,已被第 12 节取代**:同一个 host 现在整站 403,
+> 且 Data Hub 前端已改走 `data.usaswimming.org/api/times/swims`。读第 12 节先。
+
 **2026-09-21 观测到**(此前约 14:55 UTC 仍正常,14:56 起失效)。
 
 现象:点 Fetch New Athletes Only / Fetch All 后,**每个队员都在第一个请求就失败**,日志只有
@@ -175,3 +180,203 @@
 
 - 改增量逻辑时保持 `needsFetch` 单一职责,并同步更新本文。
 - 若 USAS API 行为变化(空结果语义、限流状态码等),先更新本文再改代码。
+
+## 12. 2026-10-27:Data Hub 改版 —— 旧 API 已关,「更新 API key」这条路不存在了
+
+**触发问题**:教练按第 8 节之外的老办法(Data Hub → `F12` → Network → 过滤 `times-api`)
+去「更新 API key」,**一条请求都过滤不出来**,三个输入框无从填写。
+
+### 12.1 实测结论(2026-10-27,本机)
+
+| 检查 | 结果 |
+|---|---|
+| `GET https://times-api.usaswimming.org/` | **403**,body 为空;`Via: varnish`(Fastly)→ Azure 源站(`Request-Context: appId=cid-v1:…`) |
+| 同 host 任意路径 `/foo/bar` | **403** —— 是整站/整 host 被拒,不是某条路由 |
+| 三个抓取端点(真凭证 / 伪造凭证 / 无凭证) | 全部 **403**(2026-09-21 时还是 406) |
+| `node local-tools/check-usas-endpoints.mjs` | `credentials: inconclusive`、`fetch endpoints: BLOCKED` |
+| 新版前端 bundle `/assets/index-Dbex2T8i.js`(839 KB) | 出现 `times-api` **0 次** |
+
+**旧 host 已经没有「能不能调通」的问题,而是整体关门。** 它连站点根都 403,
+所以第 10 节那条「根路径 200 不能证明抓取端点可用」的判据也失效了。
+
+### 12.2 新版前端长什么样
+
+Data Hub 的前端换成了 TanStack Start / React 的 SPA(`data.usaswimming.org`),
+API 变成**同源**路径:
+
+```js
+const NM = { times:  "/api/times/swims",
+             person: "/api/person/swims",
+             meet:   "/api/meet/swims",
+             common: "/api/common/swims" };
+
+// 每个请求只带这两个头 + 浏览器自动附带的会话 cookie
+headers = { "Device-Id": <localStorage.deviceId>, "X-CSRF": "1" };
+fetch(url, { credentials: "include" });
+```
+
+要点:
+
+- **端点名没变**,和本项目调的一模一样:
+  `/TimesSearch/GetBestTimesForMember/{id}`、`/TimesSearch/GetSwimmerMeets/{id}`、
+  `/TimesSearch/GetSwimmerMeetTimes/{id}/{meetId}` —— 只是 host 从 `times-api` 换成了
+  `data.usaswimming.org/api/times/swims`。
+- **鉴权从自定义头换成 cookie**。`AppName` / `Usas-Sub-Id` / `usas-session-id`
+  三个头新前端**根本不发**(全局仅剩一处 `Usas-Sub-Id: "Anonymous"`,用于 dashboard 调用)。
+- 登录走 BFF:`/bff/login/silent?returnUrl=…`;`/bff/securityinfo` 匿名访问返回 **401**。
+  会话是 HttpOnly cookie,页面 JS 读不到,也没有「复制 key」这回事。
+- `Device-Id` 变成前端**本地生成**后写进 `localStorage["deviceId"]`,
+  不再是账号凭据(生成逻辑:`platform - vendor - fingerprint - Date.now()` 再 base64 重排)。
+
+**所以:教练端那三个输入框的老配方已经没有来源。** 不是找错地方,是值不存在了。
+
+### 12.3 就算拿到 cookie,浏览器也调不通
+
+新 API 有来源白名单,跨域预检直接被拒:
+
+```
+OPTIONS https://data.usaswimming.org/api/times/swims/SearchFilter/GetCompetitionGenders
+Origin: https://dragonswim.org
+→ 400  "The origin 'https://dragonswim.org' is not allowed."
+```
+
+`data.usaswimming.org` 的静态资源照常给任何 origin,但 `/api/*` 只认它自己(及白名单内)的
+来源。**结论:浏览器从 dragonswim.org 直连新 API 是不可能的**,与填什么凭据无关。
+
+### 12.4 因此,能走的只有三条路
+
+| 方向 | 做法 | 代价 / 风险 |
+|---|---|---|
+| **A. 服务端代理**(最接近现状) | Cloudflare Worker 持有一个手动更新的 Data Hub 会话 cookie,转发 `/api/times/swims/*` 并自己加 CORS 头;前端只需把 `USAS_BASE` 指向 Worker | 需要每次 cookie 过期后人工更新(过期时长未测);属于对着自家账号数据做代理,注意 USAS 条款。**2026-10-27 已验证服务端可行,见 §12.6** |
+| **B. 导出/人工入库** | 教练从 Data Hub 导出成绩(或按 meet 页复制),由 `execution/` 里的确定性脚本解析入库,不再依赖任何凭据 | 每场 meet 一步人工;但零凭据、零 CORS、绝不会因为上游改版而整条断掉 |
+| **C. 官方 API** | 向 USA Swimming 申请正式的 Data Hub / SWIMS 接口权限 | 周期长;拿到之前 B 是兜底 |
+
+**⚠ 不要再去外部找「API key」** —— 外面流传的 device-id / session-id 抓取教程
+全部对应已下线的旧 host,照做只会浪费一轮。
+
+### 12.5 本次验证用过的最小检查
+
+```powershell
+# 旧 host 是否还活着(期望:现在全是 403)
+curl.exe -sS -o NUL -w "%{http_code}\n" https://times-api.usaswimming.org/
+
+# 新 API 是否需要登录(期望:401 匿名)
+curl.exe -sS -o NUL -w "%{http_code}\n" `
+  https://data.usaswimming.org/api/times/swims/TimesSearch/GetBestTimesForMember/D2754213666C4F
+
+# 新 API 是否放行本站来源(期望:400 origin not allowed)
+curl.exe -sS -i -X OPTIONS -H "Origin: https://dragonswim.org" `
+  -H "Access-Control-Request-Method: GET" `
+  https://data.usaswimming.org/api/times/swims/SearchFilter/GetCompetitionGenders
+```
+
+### 12.6 2026-10-27 验证:服务端带 cookie 调用是通的
+
+用 `local-tools/probe-usas-cookie.mjs`(教练浏览器登录后复制的会话 cookie)实测:
+
+| 请求 | 结果 |
+|---|---|
+| `GET /bff/securityinfo` | **200**,返回账号身份 |
+| `GET /api/times/swims/TimesSearch/GetBestTimesForMember/{id}` | **200**,真实成绩数组 |
+| `GET /api/times/swims/TimesSearch/GetSwimmerMeets/{id}` | **200**,`2026 PV October Open - Claude Moore` 等 |
+| `GET /api/times/swims/TimesSearch/GetSwimmerMeetTimes/{id}/{meetId}` | **200**,`50 FR SCY 34.56` |
+| 同上,不带 cookie(对照) | **401** |
+
+结论:**方案 A 成立**,前提是三个头都带对:
+
+```
+Cookie:     <浏览器里复制的整段,10 段 1100+ 字符>
+Device-Id:  <见下>
+X-CSRF:     1
+```
+
+`Device-Id` **只校验格式,不绑账号**。生成算法(照抄前端 `jM()`):
+
+```js
+const raw = `Win32 - Google Inc. - ${fingerprint8hex} - ${Date.now()}`; // 四段 " - " 连接
+const b64 = btoa(raw);                                                  // 64 字符
+const deviceId = b64.slice(0, 15) + b64.slice(0, 5) + b64.slice(15);     // 把前 5 个字符再插一遍 → 69 字符
+```
+
+两个坑(都踩过):
+
+1. **别截断**。69 字符截到 60 就 base64 解不开,服务端直接
+   `400 "Invalid Device-Id format in request headers."` —— 看起来像被拒,其实只是本地拼错。
+2. 变形那一步不是常见的 base64 直出,漏了 `slice(0,5)` 的重复段同样是 400。
+
+服务端调用**不要**带 `Origin` / `Referer` —— 那是浏览器跨域检查才需要的,
+带上反而触发 §12.3 的来源白名单。
+
+**滑动续期(易踩)**:服务端可能用 `Set-Cookie` 续期。代理如果只保存启动时那一份,
+浏览器那边还在续、代理这边却会先过期,于是出现「浏览器明明能用、代理却 401」的
+假性过期,把寿命结论带偏。`local-tools/usas-proxy.mjs` 已改为吸收响应里的
+`Set-Cookie` 并用于后续请求(日志会打 `↻ cookie 已续期`);Worker 版本必须照做。
+
+尚未验证:**cookie 能活多久**。做法是隔 3～5 天拿同一个 cookie 重跑一次探针;
+若那时已 401,人工续 cookie 会变成常态负担,应优先转方案 B。
+
+基线时间:**2026-10-27 12:52 UTC** 这个 cookie 首次验证通过(三个端点全 200)。
+之后每次复用同一个 cookie 都记一行“时间 → 200/401”,寿命就有实测值了。
+(2026-09 的旧结论是旧 header 体系的 `usas-session-id` ≥6 天,与这个 cookie 不是一回事。)
+
+### 12.7 2026-10-27:新 BFF 把数组**双重编码**了
+
+浏览器里从代理拿到 body 后,`res.json()` 的结果是 **string 而不是数组**,因为 body 长这样:
+
+```
+"[
+  {
+    \"swimTimeRecognitionId\": 232163720, ...
+```
+
+外层是一个 JSON 字符串,里面才是数组。**症状很有欺骗性**:
+
+| 现象 | 真实含义 |
+|---|---|
+| `bestTimes 4084`、`meets 3466` | 是**字符数**,不是条数(一个运动员不可能有 3466 场 meet) |
+| `meets[0]` 打印成 `[` | 数组第 0 个元素是第一个字符 |
+| `meets[0].meetId === undefined` | 于是拼出 `.../GetSwimmerMeetTimes/{id}/undefined` → **400** |
+| 抓取"成功"但每场都 `empty` | `Array.isArray(raw)` 为 false,被静默兜底成空数组 |
+
+最后一条最危险:代码里的 `const swims = Array.isArray(raw) ? raw : []` 把「格式不对」
+和「这场真没成绩」混为一谈,日志一切正常,数据却全是空。
+
+**修法**(`src/pages/dashboard.js`):
+
+- `tryFetchOnce` 里加 `unwrapJsonString()`:解析结果若是字符串且以 `[` / `{` 开头,
+  再 `JSON.parse` 一次;不是字符串就原样返回(所以对正常响应无副作用)。
+- `fetchMeetTimes` 取到非数组时打 `console.warn`,不再只是静默当空。
+
+判断依据要看**类型**,不看长度 —— 长度会被误读成"几千条成绩"。
+
+**修复后端到端实测(2026-10-27 19:14 UTC,dev + 本机代理)**:
+
+```
+swimResults/4F957CD1DCDD4B   Fargoer Zhou
+  bestTimes 8 · meets 4 → {"ok":4} · swims 19
+  ok 4 swims SCY "Nov 14 - Nov 16" 2025 PV November Open - Dulles South
+  ok 5 swims SCY "Jan 17 - Jan 18" 2026 PV January Open - Audrey Moore
+  ok 4 swims SCY "Oct 09 - Oct 11" 2026 PV October Open - Claude Moore
+  ok 6 swims SCY "Oct 24 - Oct 25" 2026 PV MAKO Pink Ribbon Invitational
+```
+
+`status` 是 `ok` 而不是 `empty`、`meetDates` / `courseCode` 都有值,
+说明解析、存储、字段名三处都对得上。核对工具:`local-tools/inspect-swim-results.mjs`。
+
+同一段 cookie 在 12:52 → 19:14 UTC 之间持续可用(≥6.4 小时),cookie 寿命继续观察。
+
+### 12.8 界面上的处理(2026-10-27)
+
+改版让「教练自己填凭据」这件事失去意义,所以 `renderCoachResults()` 做了两处调整:
+
+| 位置 | 之前 | 现在 |
+|---|---|---|
+| 🔑 API Credentials | 三个可编辑输入框 + 「How to get credentials?」三步教程 | 面板标题标 `deprecated`、状态 `⛔ Expired 2026-10-27`、一段说明替代教程;**输入框只读**,保存按钮删掉 |
+| 🔄 Fetch Swim Times | 按钮始终可按 | 新增模块级 `FETCH_ENABLED = import.meta.env.DEV`:**生产暂停**并显示原因,dev 保持可用(本地代理已跑通) |
+| View Athlete Results | 选中运动员即可「Refetch Selected Athlete」 | 同上开关:生产端选中后按钮仍保持 disabled |
+
+保留只读值是为了万一要对照历史配置;等 Worker 上线、`/api/usas/*` 就位后,
+这一整块应该换成「会话状态」指示,`saveSwimApiCredentials()` 也可以删掉。
+
+**注意**:这两处改动连同 §12.7 的解析修复,在写这份文档时**只改了源码、
+没有 build、没有部署** —— 线上仍是旧界面。
