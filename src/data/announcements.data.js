@@ -21,17 +21,15 @@
 
 export const ANNOUNCEMENTS = [
     {
-        id: 'dulles-south-weekend-2026-10-24',
-        date: '2026-10-22',
-        until: '2026-10-25',
+        id: 'claude-moore-weekend-2026-10-31',
+        date: '2026-10-27',
+        until: '2026-11-01',
         level: 'urgent',
         pinned: true,
-        title: 'Weekend Update: No Dulles South Training, Oct 24–25',
-        body: `There is no training at Dulles South this Saturday and Sunday (10/24 & 10/25).
+        title: 'Weekend Update: No Claude Moore Training, Oct 31 – Nov 1',
+        body: `There is no training at Claude Moore this Saturday and Sunday (10/31 & 11/1) — the facility is closed for the weekend.
 
-All other locations keep their regular weekend practices, unchanged.
-
-Dulles South swimmers who would still like to get in the water this weekend are welcome to join a practice at another location. Please let your coach know in advance so we can plan lane space.`,
+Tysons and Dulles South keep their regular weekend practices. Swimmers who would like to swim there instead are welcome; please let your coach know in advance so we can plan lane space.`,
     },
 
     // ── 示例:普通公告(不置顶横幅,只出现在 News 列表里)──────────────
