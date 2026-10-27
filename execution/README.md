@@ -5,7 +5,7 @@ One folder per job. All commands are run **from the repo root**.
 | Folder | Tools | What they do |
 |---|---|---|
 | `fees/` | `match_fee_names.mjs`, `import_fee_sheet.mjs`, `export_correct_fee_sheets.mjs`, `preview_fee_import.mjs`, `verify_fee_summary.mjs`, `clear_deposits_collection.mjs` | 教练端费用/押金：把手写表格的名字对到系统里的人 → 批量导入 → 导出给教练确认的正确格式 → 只读复算 Fee Summary → 必要时清空集合 |
-| `meet-entry/` | `extract_hytek_entries.py`, `meet-entries-vs-registrations.mjs` | Hy-Tek 报名表 PDF → JSON（自带 Total Athletes 校验）→ 未注册 / 缺 USA-S ID 的名单 + 英文草稿 |
+| `meet-entry/` | `extract_hytek_entries.py`, `meet-entries-vs-registrations.mjs`, `coach-followup-report.mjs` | Hy-Tek 报名表 PDF → JSON（自带 Total Athletes 校验）→ 未注册 / 缺 USA-S ID 的名单 + 英文草稿；`coach-followup-report.mjs` 是升级版：一次跑出 A–F 六组可直接发信的名单（报名未注册 / 建号未交表 / 白名单待注册 / 欠费逐封发 / 报名缺 ID / 未报名缺 ID）+ 人工确认清单 |
 | `standards/` | `extract_standards_text.py`, `parse_usas_standards.py` | USAS 激励标准 PDF → 逐页文本 → `src/data/timeStandards.data.js` |
 | `data-admin/` | `add_meet.mjs`, `seed_fall_2026_slots.mjs`, `audit_registration_completeness.mjs`, `audit_volunteer_hours.mjs`, `cleanup_orphan_auth_users.mjs`, `cleanup_test_accounts.mjs` | Firestore / Auth 的增删查：加 meet、按赛季播时段、注册完整性与志愿小时审计、清理孤儿账号 |
 | (root) | `hello.py` | 3 层脚手架的冒烟示例，见 `directives/hello_world.md` |
