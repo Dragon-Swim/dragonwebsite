@@ -832,6 +832,15 @@ function getActiveSwimmerNames(reg) {
 const USAS_BASE = import.meta.env.DEV
   ? '/usas-api/swims/TimesSearch'
   : 'https://times-api.usaswimming.org/swims/TimesSearch';
+
+// 2026-10-27:上面的生产地址(times-api)已整站 403 —— USA Swimming 把 Data Hub 改成
+// 同源 /api/times/swims + 登录 cookie,且拒绝本站来源跨域。抓取改由服务端代理完成
+// (本机 local-tools/usas-proxy.mjs 已跑通,Cloudflare Worker 待部署)。
+// 在 Worker 就位之前,生产端**暂停抓取**,避免教练点了之后每个队员白烧约 85 秒退避重试。
+// Worker 上线后:把 USAS_BASE 的生产分支指向 /api/usas,并把这里改成 true。
+// 见 docs/swim-results-fetch.md §12.8。
+const FETCH_ENABLED = import.meta.env.DEV;
+
 let swimApiCredentials = null;  // { deviceId, subId, sessionId } — cached from Firestore
 let swimResultsFetching = false;
 
@@ -1012,6 +1021,19 @@ async function fetchMeets(creds, memberId) {
   return fetchJsonWithRetry(url, creds, `GetSwimmerMeets/${memberId}`);
 }
 
+// 2026-10-27:新 Data Hub 的 BFF 会把整个数组再 JSON 序列化一次,
+// body 实际是 `"[{...}]"`(带引号的字符串)。`res.json()` 只解外层,
+// 拿到的是 string 而不是数组 —— 不解开的话 fetchMeetTimes 里的
+// `Array.isArray(raw)` 永远为 false,每场 meet 都会被存成 empty。
+// 用 text 长度当特征很容易误判(会以为是"几千条成绩"),所以这里统一拆一层。
+// 见 docs/swim-results-fetch.md §12.7。
+function unwrapJsonString(value) {
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  if (!s || (s[0] !== '[' && s[0] !== '{')) return value;
+  try { return JSON.parse(s); } catch { return value; }
+}
+
 // 单次请求。retryable=true 表示值得重试(限流/5xx/网络/超时)
 async function tryFetchOnce(url, creds) {
   const controller = new AbortController();
@@ -1022,7 +1044,7 @@ async function tryFetchOnce(url, creds) {
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (res.ok) return { ok: true, data: await res.json() };
+    if (res.ok) return { ok: true, data: unwrapJsonString(await res.json()) };
     let detail = "";
     try { detail = await res.text(); } catch (e) { detail = "(could not read body)"; }
     const err = new Error(`HTTP ${res.status}: ${detail.slice(0, 200)}`);
@@ -1323,7 +1345,12 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
     const meet = pending[i];
     try {
       const raw = await fetchMeetTimes(creds, memberId, meet.meetId);
-      const swims = Array.isArray(raw) ? raw : []; // 防御:非数组响应按空处理
+      // 防御:非数组响应按空处理。但要**说出来** —— 2026-10-27 那次双重编码
+      // 就是被这条静默兜底吞掉的:每个 meet 都被存成 empty,日志却一切正常。
+      if (!Array.isArray(raw)) {
+        console.warn(`[fetch] ${meet.meetId}: expected array, got ${typeof raw}`, typeof raw === 'string' ? raw.slice(0, 120) : raw);
+      }
+      const swims = Array.isArray(raw) ? raw : [];
       // 空数组可能是"真的没成绩",也可能是 API 软降级(200+空)。
       // 标记 empty 而非 ok,下次增量会重试;连续空则触发软降级暂停。
       const status = swims.length === 0 ? "empty" : "ok";
@@ -1536,85 +1563,68 @@ function renderCoachResults() {
 
   const hasCreds = swimApiCredentials && swimApiCredentials.deviceId && swimApiCredentials.sessionId;
 
-  // Step-by-step guide for non-technical coaches
-  const credentialGuide = `
-    <div class="credential-guide" id="credential-guide" style="display:none; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: var(--space-lg); margin-top: var(--space-md); font-size: 0.9rem; line-height: 1.8;">
-      <h4 style="margin: 0 0 0.75rem 0;">📖 How to Get Your Credentials</h4>
-      <ol style="padding-left: 1.25rem; margin: 0;">
-        <li>Open <a href="https://data.usaswimming.org/" target="_blank" rel="noopener">https://data.usaswimming.org/</a> and <strong>log in</strong> to your USA Swimming account</li>
-        <li>Press <kbd>F12</kbd> on your keyboard (opens Developer Tools)</li>
-        <li>Click the <strong>Network</strong> tab at the top</li>
-        <li>Type <code>times-api</code> in the filter box to narrow down requests</li>
-        <li>In the left sidebar, <strong>click any athlete's name</strong></li>
-        <li>Click any request that appears on the right → then click the <strong>Headers</strong> tab</li>
-        <li>Under <strong>Request Headers</strong>, find and copy these three values:</li>
-      </ol>
-      <table style="margin-top: 0.75rem; width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">Device-Id</td>
-          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">Long string (e.g. <code>V2luMzIgLSBHb29V...</code>). Tied to your computer + browser — <strong>rarely changes</strong>.</td>
-        </tr>
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">Usas-Sub-Id</td>
-          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">UUID format (e.g. <code>a05b310b-0c25-47a9-...</code>). Tied to your USA Swimming account — <strong>never changes</strong> as long as you use the same account.</td>
-        </tr>
-        <tr>
-          <td style="padding: 0.4rem 0.5rem; font-weight: 600; white-space: nowrap;">usas-session-id</td>
-          <td style="padding: 0.4rem 0.5rem; color: var(--text-muted);">32-character hex (e.g. <code>6F7FF3AF...</code>). <strong>Long-lived — rarely needs replacing</strong>. Only refresh it if fetching fails with an auth error (401/403): log in to Data Hub again and copy a fresh one.</td>
-        </tr>
-      </table>
-      <p style="margin: 0.75rem 0 0 0; font-size: 0.8rem; color: var(--color-accent);">
-        ⚠ <strong>Tip:</strong> Device-Id, Usas-Sub-Id, and usas-session-id all only need to be set once. The session-id is long-lived — only refresh it if fetching fails with an auth error (401/403): log in to Data Hub again and copy a fresh session-id.
-      </p>
-    </div>
-  `;
+  // 2026-10-27:上游 API 已下线,抓取先在生产停用,等 Cloudflare Worker 代理上线。
+  // 开关在模块顶部(FETCH_ENABLED),dev 保持可用以便用本地代理继续验证。
+  const fetchBlocked = !hasCreds || swimResultsFetching || !FETCH_ENABLED;
+
+  // 旧的「三步获取凭据」教程已删除:那套值在 Data Hub 改版后不再存在于任何请求里,
+  // 照着做只会浪费时间。改为一段固定的说明。见 docs/swim-results-fetch.md §12。
 
   return `
     <div class="dash-panel" style="margin-bottom: 1.5rem;">
       <div class="dash-panel-header">
-        <h3 style="margin: 0;">🔑 API Credentials</h3>
-        <span id="creds-status" style="font-size: 0.85rem; color: ${hasCreds ? '#16A34A' : 'var(--color-accent)'};">
-          ${hasCreds ? '✅ Configured' : '⚠ Not configured'}
-        </span>
+        <h3 style="margin: 0;">🔑 API Credentials <span style="font-size: 0.8rem; font-weight: 400; color: var(--color-accent);">— deprecated</span></h3>
+        <span id="creds-status" style="font-size: 0.85rem; color: var(--color-accent);">⛔ Expired 2026-10-27</span>
       </div>
-      <div class="profile-fields" style="margin-top: var(--space-md);">
+
+      <div style="border-left: 3px solid var(--color-accent); background: var(--bg-primary); border-radius: var(--radius-sm); padding: var(--space-md); margin-top: var(--space-md); font-size: 0.85rem; line-height: 1.7;">
+        <p style="margin: 0 0 0.5rem 0;"><strong>These three values stopped working on 2026-10-27.</strong>
+        USA Swimming rebuilt the Data Hub. The old <code>times-api</code> endpoint now answers
+        <code>403</code> to every request, and the new site signs in with a login cookie instead of these headers.</p>
+        <p style="margin: 0 0 0.5rem 0;">Fetching now has to go through a small server-side proxy that holds that cookie.
+        It runs locally today; a hosted version is being set up.</p>
+        <p style="margin: 0;">Kept read-only for reference. <strong>Do not try to re-copy them</strong> —
+        the values no longer appear in the Data Hub's requests.</p>
+      </div>
+
+      <div class="profile-fields" style="margin-top: var(--space-md); opacity: 0.55;">
         <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr;">
           <div class="form-group">
-            <label class="form-label">Device-Id <span style="font-size:0.75rem;color:var(--text-muted);">(set once — tied to computer/browser)</span></label>
-            <input class="form-input" id="creds-device-id" placeholder="Copy from Data Hub" value="${escapeHtml(swimApiCredentials?.deviceId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+            <label class="form-label">Device-Id <span style="font-size:0.75rem;color:var(--text-muted);">(retired)</span></label>
+            <input class="form-input" id="creds-device-id" disabled value="${escapeHtml(swimApiCredentials?.deviceId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
           </div>
           <div class="form-group">
-            <label class="form-label">Usas-Sub-Id <span style="font-size:0.75rem;color:var(--text-muted);">(set once — tied to your account)</span></label>
-            <input class="form-input" id="creds-sub-id" placeholder="UUID format" value="${escapeHtml(swimApiCredentials?.subId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+            <label class="form-label">Usas-Sub-Id <span style="font-size:0.75rem;color:var(--text-muted);">(retired)</span></label>
+            <input class="form-input" id="creds-sub-id" disabled value="${escapeHtml(swimApiCredentials?.subId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
           </div>
           <div class="form-group">
-            <label class="form-label">usas-session-id <span style="font-size:0.75rem;color:var(--text-muted);">(set once — long-lived, refresh only on auth errors)</span></label>
-            <input class="form-input" id="creds-session-id" placeholder="32-char hex — rarely changes" value="${escapeHtml(swimApiCredentials?.sessionId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
+            <label class="form-label">usas-session-id <span style="font-size:0.75rem;color:var(--text-muted);">(retired)</span></label>
+            <input class="form-input" id="creds-session-id" disabled value="${escapeHtml(swimApiCredentials?.sessionId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
           </div>
         </div>
       </div>
-      <div style="display: flex; gap: 0.75rem; margin-top: var(--space-md);">
-        <button class="btn btn-primary btn-sm" id="save-creds-btn">💾 Save Credentials</button>
-        <button class="btn btn-outline btn-sm" id="toggle-guide-btn">💡 How to get credentials?</button>
-      </div>
-      ${credentialGuide}
       <p id="creds-message" style="margin-top: 0.5rem; font-size: 0.85rem;"></p>
     </div>
 
     <div class="dash-panel" style="margin-bottom: 1.5rem;">
       <div class="dash-panel-header">
         <h3 style="margin: 0;">🔄 Fetch Swim Times</h3>
-        <span id="fetch-status" style="font-size: 0.85rem;">Ready</span>
+        <span id="fetch-status" style="font-size: 0.85rem;">${FETCH_ENABLED ? 'Ready' : '⏸ Paused'}</span>
       </div>
       <p style="color: var(--text-muted); margin: var(--space-md) 0; font-size: 0.9rem;">
         Incremental fetch checks <strong>${withId.length}</strong> athlete(s) with USA Swimming IDs.
         New athletes get their full meet history; previously fetched meets are skipped.
       </p>
+      ${FETCH_ENABLED ? '' : `
+      <p style="margin: 0 0 var(--space-md) 0; font-size: 0.85rem; color: var(--color-accent); border-left: 3px solid var(--color-accent); padding-left: 0.6rem;">
+        ⏸ <strong>Paused.</strong> USA Swimming's old API is offline, so these buttons would fail on every athlete.
+        Fetching stays local until the proxy is hosted.
+      </p>`}
       <div style="display: flex; gap: 0.75rem; margin-bottom: var(--space-md); flex-wrap: wrap;">
-        <button class="btn btn-primary btn-sm" id="fetch-new-btn" data-default-label="🆕 Fetch New Athletes Only" ${!hasCreds || swimResultsFetching ? "disabled" : ""}>
+        <button class="btn btn-primary btn-sm" id="fetch-new-btn" data-default-label="🆕 Fetch New Athletes Only" ${fetchBlocked ? "disabled" : ""}>
           ${swimResultsFetching ? "⏳ Fetching..." : "🆕 Fetch New Athletes Only"}
         </button>
-        <button class="btn btn-outline btn-sm" id="fetch-all-btn" data-default-label="🔄 Fetch All Swimmer Results" ${!hasCreds || swimResultsFetching ? "disabled" : ""}>
+        <button class="btn btn-outline btn-sm" id="fetch-all-btn" data-default-label="🔄 Fetch All Swimmer Results" ${fetchBlocked ? "disabled" : ""}>
           ${swimResultsFetching ? "⏳ Fetching..." : "🔄 Fetch All Swimmer Results"}
         </button>
       </div>
@@ -5656,38 +5666,8 @@ function bindEvents() {
 
     // ── Results Tab — Swim Times Management ──
 
-    // Save credentials
-    document.getElementById('save-creds-btn')?.addEventListener('click', async () => {
-      const msgEl = document.getElementById('creds-message');
-      const deviceId = document.getElementById('creds-device-id')?.value || '';
-      const subId = document.getElementById('creds-sub-id')?.value || '';
-      const sessionId = document.getElementById('creds-session-id')?.value || '';
-
-      if (!deviceId || !subId || !sessionId) {
-        msgEl.textContent = '❌ Please fill in all three credential fields.';
-        msgEl.style.color = 'var(--color-accent)';
-        return;
-      }
-
-      try {
-        await saveSwimApiCredentials(deviceId, subId, sessionId);
-        msgEl.textContent = '✅ Credentials saved to Firestore.';
-        msgEl.style.color = '#16A34A';
-        setTimeout(() => { msgEl.textContent = ''; }, 3000);
-        refreshUI(); // refresh to update status display
-      } catch (err) {
-        msgEl.textContent = '❌ Save failed: ' + err.message;
-        msgEl.style.color = 'var(--color-accent)';
-      }
-    });
-
-    // Toggle credential guide
-    document.getElementById('toggle-guide-btn')?.addEventListener('click', () => {
-      const guide = document.getElementById('credential-guide');
-      if (guide) {
-        guide.style.display = guide.style.display === 'none' ? 'block' : 'none';
-      }
-    });
+    // 凭据输入框已于 2026-10-27 停用(上游 API 下线),保存/教程两个按钮一并移除。
+    // 旧值仍从 settings/swimApi 读出、只读展示,供对照历史配置。
 
     // Athlete results viewer — dropdown select
     const athleteSelect = document.getElementById('results-athlete-select');
@@ -5697,7 +5677,8 @@ function bindEvents() {
       const memberId = e.target.value;
       if (memberId) {
         loadAthleteResults(memberId);
-        if (refetchOneBtn) refetchOneBtn.disabled = false;
+        // 生产端暂停抓取(见模块顶部 FETCH_ENABLED),这里也不能把按钮点亮。
+        if (refetchOneBtn) refetchOneBtn.disabled = !FETCH_ENABLED;
       } else {
         const viewer = document.getElementById('results-viewer');
         if (viewer) viewer.style.display = 'none';
