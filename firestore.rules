@@ -24,6 +24,10 @@ service cloud.firestore {
       return isAuth() && userRole() == 'admin';
     }
 
+    function isCoachOrAdmin() {
+      return isAuth() && (userRole() == 'coach' || userRole() == 'admin');
+    }
+
     // ── contacts — public contact form submissions ───────────────
 
     match /contacts/{docId} {
@@ -100,11 +104,64 @@ service cloud.firestore {
 
     // ── meets — swim meets (admin-managed, coach read-only) ─────
 
-    match /meets/{docId} {
+    match /meets/{meetId} {
       // All authenticated users can view meets
       allow read: if isAuth();
       // Only admins can create, update, or delete meets
       allow create, update, delete: if isAdmin();
+
+      // ── meet entries — one doc per swimmer per meet ────────────
+      // docId = `${familyId}__${USA_SWIMMING_ID}` (no roster index, because the
+      // swimmers array gets reordered). Written by src/components/meetEntries.js.
+      //
+      // Families may write their OWN entry only while it is a draft or a pending
+      // submission. Once the coach confirms it, client writes stop being allowed
+      // — that is what keeps a late parent edit from undoing the coach's review.
+      // Coaches/admins may write any entry at any time (the deadline is enforced
+      // in the UI, not here: a coach must still be able to fix a late problem).
+      match /entries/{entryId} {
+        // `get` is per-document, so it may look at the document's own fields.
+        // The `resource == null` arm covers "this swimmer has no entry yet": the
+        // read must succeed (with no data) instead of erroring, because the
+        // family view reads each swimmer's entry by id before anything exists.
+        allow get: if isAuth() && (
+          isCoachOrAdmin()
+          || resource == null
+          || resource.data.familyId == request.auth.uid
+          || request.auth.uid in get(/databases/$(database)/documents/registrations/$(resource.data.familyId)).data.editors
+        );
+
+        // A `list` (collection listener) is evaluated WITHOUT a concrete document,
+        // so `resource.data.familyId` is undefined there and Firestore rejects the
+        // query outright. Only coaches list the whole meet; the family view reads
+        // its own documents by id (src/components/meetEntries.js).
+        allow list: if isCoachOrAdmin();
+
+        allow create: if isAuth() && (
+          isCoachOrAdmin()
+          || (
+            request.resource.data.familyId == request.auth.uid
+            && request.resource.data.meetId == meetId
+            && request.resource.data.status in ['draft', 'submitted']
+          )
+        );
+
+        allow update: if isAuth() && (
+          isCoachOrAdmin()
+          || (
+            resource.data.status in ['draft', 'submitted']
+            && request.resource.data.status in ['draft', 'submitted']
+            && request.resource.data.familyId == resource.data.familyId
+            && request.resource.data.meetId == meetId
+            && (
+              request.auth.uid == resource.data.familyId
+              || request.auth.uid in get(/databases/$(database)/documents/registrations/$(resource.data.familyId)).data.editors
+            )
+          )
+        );
+
+        allow delete: if isAdmin();
+      }
     }
 
     // ── sessionSlots — season practice slots (admin-managed, authenticated read) ─

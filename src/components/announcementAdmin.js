@@ -44,7 +44,21 @@ const state = {
     editingId: null,
     draft: null,
     busy: false,
+    // 保存结果那一行也得跨重渲染:每个 Firestore 快照都会重建 #app
+    // (initDataListeners → refreshUI),直接写进 #news-form-msg 的文字会在
+    // 别人一写 meets / registrations / deposits 时消失 —— 而那正是管理员
+    // 最需要看到"已经存上了"的时候。
+    formMsg: null,
 };
+
+/** 设置表单结果行(同时记进 state,渲染重建后由 initAnnouncementAdmin 复原)。 */
+function setFormMsg(text, color) {
+    state.formMsg = text ? { text, color } : null;
+    const el = document.getElementById('news-form-msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = color || '';
+}
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -148,6 +162,7 @@ export function initAnnouncementAdmin() {
     // 每次重建 innerHTML 都会重新走一遍:先把模块里的草稿放回表单
     applyDraft();
     paintPreview();
+    if (state.formMsg) setFormMsg(state.formMsg.text, state.formMsg.color);
 
     form.addEventListener('submit', onSubmit);
     document.getElementById('news-reset-btn')?.addEventListener('click', () => resetForm(true));
@@ -205,8 +220,7 @@ function resetForm(focusTitle) {
     state.editingId = null;
     applyDraft();
     paintPreview();
-    const msg = field('news-form-msg');
-    if (msg) msg.textContent = '';
+    setFormMsg('');
     if (focusTitle) field('news-title')?.focus();
 }
 
@@ -324,11 +338,10 @@ function startEdit(id) {
     };
     applyDraft();
     paintPreview();
-    const msg = field('news-form-msg');
-    if (msg) {
-        msg.textContent = 'Editing an existing notice — saving keeps it in place, so families who already dismissed the banner will not see it again.';
-        msg.style.color = 'var(--text-muted)';
-    }
+    setFormMsg(
+        'Editing an existing notice — saving keeps it in place, so families who already dismissed the banner will not see it again.',
+        'var(--text-muted)',
+    );
     document.getElementById('news-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -366,9 +379,8 @@ async function onSubmit(event) {
 
     const draft = captureDraft();
     const problem = validate(draft);
-    const msg = field('news-form-msg');
     if (problem) {
-        if (msg) { msg.textContent = `❌ ${problem}`; msg.style.color = 'var(--color-accent)'; }
+        setFormMsg(`❌ ${problem}`, 'var(--color-accent)');
         return;
     }
 
@@ -415,11 +427,11 @@ async function onSubmit(event) {
 
         resetForm(false);
         paintList();
-        if (msg) { msg.textContent = '✅ Saved. The homepage will show it within a page refresh.'; msg.style.color = '#16A34A'; }
+        setFormMsg('✅ Saved. The homepage will show it within a page refresh.', '#16A34A');
         load();
     } catch (error) {
         console.error('[news-admin] save failed:', error);
-        if (msg) { msg.textContent = `❌ Save failed: ${error.message}`; msg.style.color = 'var(--color-accent)'; }
+        setFormMsg(`❌ Save failed: ${error.message}`, 'var(--color-accent)');
     } finally {
         state.busy = false;
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = label; }
@@ -445,11 +457,9 @@ async function onDelete(id) {
         state.items = state.items.filter((a) => a.id !== id);
         if (state.editingId === id) resetForm(false);
         paintList();
-        const msg = field('news-form-msg');
-        if (msg) { msg.textContent = '🗑 Deleted.'; msg.style.color = 'var(--text-muted)'; }
+        setFormMsg('🗑 Deleted.', 'var(--text-muted)');
     } catch (error) {
         console.error('[news-admin] delete failed:', error);
-        const msg = field('news-form-msg');
-        if (msg) { msg.textContent = `❌ Delete failed: ${error.message}`; msg.style.color = 'var(--color-accent)'; }
+        setFormMsg(`❌ Delete failed: ${error.message}`, 'var(--color-accent)');
     }
 }

@@ -8,7 +8,8 @@
 > Meet Management 段、`getMeetDisplay`、`getMeetSeason`、`getSeasonOptions`）、
 > `src/pages/dashboard.css`（`#add-meet-form` 的 `scroll-margin-top`）、
 > `src/utils/i18n.js`（`dash_meets_*`）、`firestore.rules`、`execution/data-admin/add_meet.mjs`、
-> `tests/meet-edit.spec.js`（E2E）。费用/押金见 `docs/meet-fees.md`，工时见 `docs/volunteer-hours.md`。
+> `tests/meet-edit.spec.js`（E2E）。费用/押金见 `docs/meet-fees.md`，工时见 `docs/volunteer-hours.md`，
+> **报名（家长自助 / 教练审核 / 达标检查）见 `docs/meet-entries.md`**。
 
 ## 1. 口径（先读这一节）
 
@@ -41,6 +42,9 @@
 ```
 
 - `updatedAt` 只有 `add_meet.mjs --update` 会写；教练端表单不写（所以"最后改动时间"在两条路径上不一致，排查时别只看它）。
+- **报名相关字段（`events` / `sessions` / `entryDeadline` / `limits`）只由
+  `add_meet.mjs --from-json` 写入**，教练端表单不碰它们（`updateDoc` 是合并语义，不会冲掉）。
+  家长自助报名 + 教练审核的完整链路见 `docs/meet-entries.md`。
 - **改名是安全的**：费用与工时都按 `meetId` 关联，不看名字。`volunteerHours` 里存了 `meetName` 快照，
   但读取时**meet 存在就用实时名字**（`docs/volunteer-hours.md` §2.3）。
 

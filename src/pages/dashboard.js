@@ -9,7 +9,9 @@ import '../styles/global.css';
 import './dashboard.css';
 
 import { initTheme, toggleTheme } from '../components/theme-toggle.js';
+import { openMeetEntries } from '../components/meetEntries.js';
 import { getTimeStandardLevels, ageGroupForAge } from '../data/timeStandards.js';
+import { ageOnDate, ageGroupForMeetAge } from '../utils/meetEligibility.js';
 import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
 import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
 import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
@@ -4280,6 +4282,12 @@ function getMeetDisplay(meet, now = new Date()) {
 
 function renderSwimMeets() {
   const canEdit = dbRole === 'admin';
+  // Coach-only rollout (decision 2026-10-28). Family self-service is built and
+  // tested, but the entry button stays hidden until a coach flips
+  // `meet.entriesOpenToFamilies = true` — a data switch, so opening it to one
+  // meet later needs no redeploy. Never open it before the roster has USA
+  // Swimming IDs: without one a swimmer cannot be entered at all.
+  const canEnter = userRole === 'coach';
   const now = new Date();
 
   // Only meets in the currently selected season (explicit season or inferred from date)
@@ -4297,6 +4305,12 @@ function renderSwimMeets() {
       ? `<span>🔗 <a href="${escapeHtml(m.sourceUrl)}" target="_blank" rel="noopener noreferrer">Meet Page</a></span>`
       : '';
     const dateText = escapeHtml(m.startDate && m.endDate ? `${m.startDate} – ${m.endDate}` : (m.date || ''));
+    // A meet is enterable only when the schedule has been parsed onto the meet
+    // document (execution/data-admin/add_meet.mjs --from-json).
+    const hasEvents = Array.isArray(m.events) && m.events.length > 0;
+    const needsTimes = hasEvents && m.events.some(
+      (e) => !e.relay && (e.standards?.SCY != null || e.standards?.LCM != null));
+    const showEntries = hasEvents && (canEnter || m.entriesOpenToFamilies === true);
     return `
         <div class="dash-card"${dimStyle}>
           <div class="dash-card-header">
@@ -4309,7 +4323,9 @@ function renderSwimMeets() {
               <span>📍 ${escapeHtml(m.location || '')}</span>
               ${source}
             </div>
-            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+            ${needsTimes ? `<div class="meet-qual-line">⏱ ${t('meet_entries_requires_times')}</div>` : ''}
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+              ${showEntries ? `<button class="btn btn-outline btn-sm meet-entries-btn" data-id="${m.id}">🎽 ${t('meet_entries_open_btn')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${escapeHtml(m.name || '')}">${t('dash_meets_fee')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${escapeHtml(m.name || '')}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${escapeHtml(m.location || '')}" data-season="${m.season || currentSeason}" data-source="${escapeHtml(m.sourceUrl || '')}">${t('dash_meets_edit')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}
@@ -5156,6 +5172,48 @@ async function showFeeModal(meetId, meetName) {
   });
 }
 
+// ── Meet entries (2026-10-28) ────────────────────────────────────────
+// One entry document per swimmer per meet: meets/{meetId}/entries/{familyId}__{usaId}.
+// A USA Swimming ID is required to enter (decision 2026-10-28), which also makes
+// it the only stable swimmer key we have — roster array indexes are not.
+function collectEntrySwimmers(meet) {
+  const onDate = meet.ageDeterminedOn || meet.startDate;
+  const list = [];
+  const push = (familyId, s) => {
+    const age = ageOnDate(s.dob, onDate);
+    list.push({
+      familyId,
+      usaId: String(s.usaSwimmingId || '').trim().toUpperCase(),
+      name: [s.firstName, s.lastName].filter(Boolean).join(' ').trim(),
+      dob: s.dob || '',
+      gender: s.gender || '',
+      age,
+      ageGroup: ageGroupForMeetAge(age),
+    });
+  };
+  if (userRole === 'coach') {
+    for (const reg of allRegistrations) {
+      for (const s of (reg.swimmers || [])) if (s && !s.deleted) push(reg.id, s);
+    }
+  } else if (familyData) {
+    for (const s of (familyData.swimmers || [])) if (s && !s.deleted) push(familyDataId, s);
+  }
+  return list;
+}
+
+function showMeetEntriesFor(meetId) {
+  const meet = swimMeets.find((m) => m.id === meetId);
+  if (!meet) return;
+  const role = userRole === 'coach' ? (dbRole === 'admin' ? 'admin' : 'coach') : 'family';
+  openMeetEntries({
+    meet,
+    role,
+    swimmers: collectEntrySwimmers(meet),
+    familyId: familyDataId,
+    actorId: currentUser?.uid || null,
+  });
+}
+
 // ── Events ──
 function bindEvents() {
   // 一次性数据迁移(后台执行):修复 2026-08-01 setDoc merge 把 meets.{id}
@@ -5479,6 +5537,13 @@ function bindEvents() {
     } finally {
       if (btnEl) btnEl.disabled = false;
     }
+  });
+
+  // ── Meet entries (both roles) ────────────────────────────────────────
+  // Deliberately OUTSIDE the `userRole === 'coach'` block below: families open
+  // the same modal from their Meets tab, they just get a family-scoped view.
+  document.querySelectorAll('.meet-entries-btn').forEach(btn => {
+    btn.addEventListener('click', () => showMeetEntriesFor(btn.dataset.id));
   });
 
   // ── Coach Management Events ──
