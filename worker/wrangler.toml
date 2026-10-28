@@ -1,0 +1,44 @@
+# dragonswim-usas-proxy —— Cloudflare Worker 配置
+#
+# 部署前先做两件事(详见同目录 README.md):
+#   1. npx wrangler kv namespace create USAS_KV   → 把返回的 id 填到下面
+#   2. npx wrangler deploy
+#
+# 部署稳定后,把 ADMIN_EMAILS 填成教练的 Firebase 登录邮箱(逗号分隔)。
+
+name = "dragonswim-usas-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 不发布到 xxx.workers.dev —— 我们走站点同源路由 dragonswim.org/api/usas/*。
+# 设成 false 之后 `wrangler deploy` 不会再问「要不要注册 workers.dev 子域名」。
+# 哪天想临时要一个公开测试地址:改成 true(或删掉这行)再 deploy。
+workers_dev = false
+
+[vars]
+# 公开信息,不是密钥。必须和 .env.local 里的 VITE_FIREBASE_PROJECT_ID 一致。
+FIREBASE_PROJECT_ID = "dragonwebsite-db"
+
+# 允许使用本 Worker 的邮箱白名单(逗号分隔,小写)。
+# 留空 = 任何已登录本站的用户都能用(首次部署方便测试;**稳定后务必填上**)。
+ADMIN_EMAILS = "chuech@gmail.com,dragonswim@outlook.com"
+
+# 仅当要从别的源(例如本地 5173 直连线上 Worker)测试时才需要填,
+# 填了才会给该 Origin 发 CORS 头。同源部署时留空即可。
+ALLOWED_ORIGIN = ""
+
+# ── KV:存 Data Hub 的会话 cookie ──
+[[kv_namespaces]]
+binding = "USAS_KV"
+id = "d7dfa893d21b407bb6cc8ae375c5056f"
+
+# ── 路由(推荐):与站点同源,浏览器不跨域、也不用配 CORS ──
+# 两种绑法,任选一种:
+#   ① Dashboard → Workers & Pages → 该 Worker → Settings → Triggers → Add route
+#      dragonswim.org/api/usas/*
+#   ② 取消下面三行注释后 `npx wrangler deploy`(需要 token 带 Zone:Workers Routes:Edit)
+# 注意:站点在 GitHub Pages + Cloudflare 橙云后面,这条路由只接管 /api/usas/*,
+# 不影响其它路径 —— 也**不要**为了它去改 SSL 模式或关橙云。
+# routes = [
+#   { pattern = "dragonswim.org/api/usas/*", zone_name = "dragonswim.org" }
+# ]

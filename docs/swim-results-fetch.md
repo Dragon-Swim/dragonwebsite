@@ -1,7 +1,8 @@
 # 游泳成绩抓取(USA Swimming Data Hub)工作流说明
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
-> 最后更新:2026-10-27(新增第 12 节:Data Hub 改版,旧 `times-api` host 整站 403,
+> 最后更新:2026-10-28(新增 §12.8/§12.9:界面改成「Data Hub Session」面板;
+> Worker 已写好并有 33 项本机测试,待部署。此前 2026-10-27 新增第 12 节:Data Hub 改版,旧 `times-api` host 整站 403,
 > 前端改走 `data.usaswimming.org/api/*` + SSO cookie 且拒绝 dragonswim.org 来源 ——
 > 浏览器直连路线结束,必须服务端代理。此前 2026-09-21 新增第 10 节:两个 USAS 端点返回无 CORS 头的 406,会导致每个队员在
 > 第一个请求就失败;第 5 节新增 `responseUnreadable` 字段与「连续 3 个队员首个请求失败即中止
@@ -312,11 +313,37 @@ const deviceId = b64.slice(0, 15) + b64.slice(0, 5) + b64.slice(15);     // 把�
 假性过期,把寿命结论带偏。`local-tools/usas-proxy.mjs` 已改为吸收响应里的
 `Set-Cookie` 并用于后续请求(日志会打 `↻ cookie 已续期`);Worker 版本必须照做。
 
-尚未验证:**cookie 能活多久**。做法是隔 3～5 天拿同一个 cookie 重跑一次探针;
-若那时已 401,人工续 cookie 会变成常态负担,应优先转方案 B。
+**2026-10-28 实测:服务端根本不续期。** 完整跑一轮探针(4 个请求)之后,
+`↻ 本次探针没有收到任何 Set-Cookie`。所以 cookie 的寿命是**登录那一刻定死的绝对时间**,
+用请求"保活"没有意义。
 
-基线时间:**2026-10-27 12:52 UTC** 这个 cookie 首次验证通过(三个端点全 200)。
-之后每次复用同一个 cookie 都记一行“时间 → 200/401”,寿命就有实测值了。
+**鉴权只有一枚 cookie**:10 段里 9 段是统计用的(`_ga` / `_fbp` / `__gads` / `_clck` …),
+真正起作用的只有 `bff_auth_session`(326 字符、`HttpOnly` + `Secure` + `SameSite=Lax`)。
+做代理时只需要带它,不必整段照搬 —— 但整段照搬也没坏处。
+
+**DevTools 里可以直接读到到期时间**:Application → Cookies → `data.usaswimming.org`
+→ `bff_auth_session` 的 `Expires / Max-Age`。它是一个确定的 UTC 时间戳(不是 `Session`)。
+
+**2026-10-28 实测值:`2026-10-28T20:39:52.425Z`,登录时刻 `12:39:52Z` → 恰好 8 小时。**
+这是**绝对寿命**(不随请求延长,见上一段),所以可以按"一张 8 小时的门票"来设计。
+
+够不够用:本队 `registrations` 共 61 名队员、**32 名有 USA ID**。按当前节奏
+(`swimmerGapMs` 3 分钟/人 + 每场 5 秒)跑一轮全队增量约 **2 小时**,一个 8 小时窗口
+能跑完,因此**不需要定时任务**,也不需要每天惦记续期 —— 教练登录一次、粘贴、跑完即可。
+
+尚未确证:登录页是否有 `Remember me` / `Stay signed in` 能把这 8 小时拉长(本次未见)。
+
+寿命实测记录(同一账号,不同次登录):
+
+| 时间 (UTC) | 结果 | 说明 |
+|---|---|---|
+| 2026-10-27 12:52 | 200 | 首次验证基线 |
+| 2026-10-27 19:48 | 200 | ≥6h56m,期间完成一次真实 refetch |
+| 2026-10-28 11:23 | **401** | 隔夜失效;浏览器本身也要求重新登录 → 会话真的到期 |
+
+结论:寿命 **恰好 8 小时**(2026-10-28 实测登录 12:39:52Z → 过期 20:39:52Z),且**不随请求续期**。
+所以 Worker 需要一个"粘贴 cookie"的入口,但**不必每天维护** —— 一次登录足够跑完一轮全队增量(约 2 小时)。
+
 (2026-09 的旧结论是旧 header 体系的 `usas-session-id` ≥6 天,与这个 cookie 不是一回事。)
 
 ### 12.7 2026-10-27:新 BFF 把数组**双重编码**了
@@ -365,18 +392,40 @@ swimResults/4F957CD1DCDD4B   Fargoer Zhou
 
 同一段 cookie 在 12:52 → 19:14 UTC 之间持续可用(≥6.4 小时),cookie 寿命继续观察。
 
-### 12.8 界面上的处理(2026-10-27)
+### 12.8 界面上的处理(2026-10-28 定稿)
 
-改版让「教练自己填凭据」这件事失去意义,所以 `renderCoachResults()` 做了两处调整:
+旧的「三件套凭据 + 三步教程」整块删掉了 —— 那套值在新版 Data Hub 的任何请求里都不存在,
+照着找只会浪费时间。现在 `renderCoachResults()` 里是:
 
-| 位置 | 之前 | 现在 |
-|---|---|---|
-| 🔑 API Credentials | 三个可编辑输入框 + 「How to get credentials?」三步教程 | 面板标题标 `deprecated`、状态 `⛔ Expired 2026-10-27`、一段说明替代教程;**输入框只读**,保存按钮删掉 |
-| 🔄 Fetch Swim Times | 按钮始终可按 | 新增模块级 `FETCH_ENABLED = import.meta.env.DEV`:**生产暂停**并显示原因,dev 保持可用(本地代理已跑通) |
-| View Athlete Results | 选中运动员即可「Refetch Selected Athlete」 | 同上开关:生产端选中后按钮仍保持 disabled |
+| 位置 | 现在 |
+|---|---|
+| 🔑 **Data Hub Session** | 显示状态(`✅ Saved` / `⚠ Not configured` / `⛔ Expired` / dev 走本机代理);一个 textarea 用来粘贴 cookie;`💾 Save session` 与 `🔍 Test connection` 两个按钮;保存后自动跑一次验证,显示「连接正常(已登录:Keke)」 |
+| 🔄 Fetch Swim Times | 只有 `sessionReady`(Worker 里存在 cookie)时才可点;否则显示 `⏸ Paused` 并说明原因 |
+| View Athlete Results | 同样的开关:没有会话时「Refetch Selected Athlete」保持 disabled |
+| 抓取请求 | `tryFetchOnce` 会给每个请求加 `Authorization: Bearer <Firebase ID token>`;dev 下这个头被本机代理忽略 |
+| 抓取失败 | 遇到 401 会自动重读会话状态并刷新面板,不必手动刷新页面 |
 
-保留只读值是为了万一要对照历史配置;等 Worker 上线、`/api/usas/*` 就位后,
-这一整块应该换成「会话状态」指示,`saveSwimApiCredentials()` 也可以删掉。
+三个入口都读同一份状态:`usasSession`(`/api/usas/session` 的返回)。
+`saveSwimApiCredentials()` 已删除;`settings/swimApi` 里的旧值只是历史残留,不参与鉴权。
 
-**注意**:这两处改动连同 §12.7 的解析修复,在写这份文档时**只改了源码、
-没有 build、没有部署** —— 线上仍是旧界面。
+**dev 与生产的差别**:dev 没有 Worker,`USAS_BASE` 仍是 `/usas-api/swims/TimesSearch`
+(Vite 代理 → 本机 `local-tools/usas-proxy.mjs`),会话面板显示提示、不出现粘贴框;
+生产 `USAS_BASE = /api/usas/TimesSearch`,走同源 Worker。
+
+### 12.9 Worker 落地(2026-10-28)
+
+代码在仓库里:`worker/`(`src/index.js` + `src/firebase-auth.js` + `wrangler.toml` + `test/`)。
+
+设计要点:
+
+- **同源路由** `dragonswim.org/api/usas/*` —— 浏览器不跨域,连 CORS 都不用配
+- **鉴权用 Firebase ID token**:每个请求验 RS256 签名(Google JWKS 缓存 1 小时),
+  可选 `ADMIN_EMAILS` 白名单 —— 所以它**不是开放代理**
+- **cookie 只存 KV**,状态接口只回长度和时间戳,不回传内容
+- 只转发 `/TimesSearch/`,拒 `..` 与 `%2f` 绕行,上游域名写死
+- 上游 401 → 记录 `invalidAt`,面板立刻变「已失效」
+
+本机测试:`npm run test:worker`(33 项,含 1 次真实上游请求;不碰 Firestore)。
+
+**未完成 / 需要现场做的**:`wrangler login` → 建 KV → `deploy` → 绑定路由,
+都依赖 Cloudflare 账号,这一步只能在用户机器上做。步骤见 `worker/README.md`。

@@ -134,8 +134,10 @@ function initApp() {
         console.log("Dashboard: Initializing data listeners...");
         initDataListeners();
         if (userRole === 'coach') {
-          loadSwimApiCredentials().then(() => {
-            console.log('Dashboard: Swim API credentials loaded:', !!swimApiCredentials);
+          // 两件事并行:旧的 settings/swimApi(仅作兼容头)与 Worker 里的 Data Hub 会话。
+          Promise.all([loadSwimApiCredentials(), loadUsasSession()]).then(() => {
+            console.log('Dashboard: Data Hub session:', usasSession?.dev ? 'dev proxy' : usasSession?.hasCookie ? 'saved' : 'missing');
+            refreshUI(); // 会话状态影响抓取按钮的可用性
           });
         }
         isInitialized = true;
@@ -838,19 +840,86 @@ function getActiveSwimmerNames(reg) {
 // dev:走 Vite proxy(本地免 CORS);生产:直连 times-api
 // (2026-08-01 验证:Access-Control-Allow-Origin: * 且允许 appname/
 // device-id/usas-session-id/usas-sub-id 自定义头,无需代理)
+// 2026-10-27:旧 host times-api 整站 403;新版 Data Hub 用登录 cookie 鉴权且拒绝本站来源。
+// 生产环境改走同源的 Cloudflare Worker(worker/README.md),由它持有会话 cookie。
+// dev 仍走 Vite 代理 → 本机 usas-proxy.mjs。见 docs/swim-results-fetch.md §12。
 const USAS_BASE = import.meta.env.DEV
   ? '/usas-api/swims/TimesSearch'
-  : 'https://times-api.usaswimming.org/swims/TimesSearch';
+  : '/api/usas/TimesSearch';
 
-// 2026-10-27:上面的生产地址(times-api)已整站 403 —— USA Swimming 把 Data Hub 改成
-// 同源 /api/times/swims + 登录 cookie,且拒绝本站来源跨域。抓取改由服务端代理完成
-// (本机 local-tools/usas-proxy.mjs 已跑通,Cloudflare Worker 待部署)。
-// 在 Worker 就位之前,生产端**暂停抓取**,避免教练点了之后每个队员白烧约 85 秒退避重试。
-// Worker 上线后:把 USAS_BASE 的生产分支指向 /api/usas,并把这里改成 true。
-// 见 docs/swim-results-fetch.md §12.8。
-const FETCH_ENABLED = import.meta.env.DEV;
+// ── Data Hub 会话(由 Worker 保管,寿命固定 8 小时)──
+const USAS_SESSION_URL = '/api/usas/session';
+// dev 下没有 Worker:直接视为"已就绪",避免首屏闪一下 Paused。
+let usasSession = import.meta.env.DEV ? { dev: true, hasCookie: true } : null;
 
-let swimApiCredentials = null;  // { deviceId, subId, sessionId } — cached from Firestore
+async function getAuthToken() {
+  try {
+    if (!currentUser) return null;
+    return await currentUser.getIdToken();
+  } catch (err) {
+    console.warn('[usas] getIdToken failed:', err);
+    return null;
+  }
+}
+
+/** 带 Firebase token 调 Worker。 */
+async function usasFetch(url, init = {}) {
+  const token = await getAuthToken();
+  const headers = { ...(init.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(url, { ...init, headers });
+}
+
+async function loadUsasSession() {
+  if (import.meta.env.DEV) {
+    // dev 没有 Worker;请求走本机代理,不需要会话。
+    usasSession = { dev: true, hasCookie: true };
+    return usasSession;
+  }
+  try {
+    const res = await usasFetch(USAS_SESSION_URL);
+    usasSession = res.ok ? await res.json() : null;
+  } catch (err) {
+    console.warn('[usas] session status failed:', err);
+    usasSession = null;
+  }
+  return usasSession;
+}
+
+/** 会话是否可用(dev 恒为 true)。抓取按钮的开关依据。 */
+function usasSessionReady() {
+  return !!(usasSession && usasSession.hasCookie);
+}
+
+/** 让 Worker 真打一次上游,判断 cookie 还活着没有。 */
+async function verifyUsasSession(msgEl) {
+  if (!msgEl) msgEl = document.getElementById('session-message');
+  try {
+    const res = await usasFetch(`${USAS_SESSION_URL}/verify`);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.valid) {
+      if (msgEl) {
+        msgEl.textContent = `✅ 连接正常${data.name ? `(已登录:${data.name})` : ''}`;
+        msgEl.style.color = '#16A34A';
+      }
+    } else {
+      if (msgEl) {
+        msgEl.textContent = '⛔ 会话已失效 —— 重新登录 Data Hub,复制新的 cookie 再粘贴一次。';
+        msgEl.style.color = 'var(--color-accent)';
+      }
+    }
+    await loadUsasSession();
+    return data;
+  } catch (err) {
+    if (msgEl) {
+      msgEl.textContent = `❌ 验证失败:${err.message}`;
+      msgEl.style.color = 'var(--color-accent)';
+    }
+    return null;
+  }
+}
+
+let swimApiCredentials = null;  // 旧三件套,Worker 时代仅作兼容头,不再参与鉴权
 let swimResultsFetching = false;
 
 // ── Rate limiting & retry policy ──
@@ -975,12 +1044,16 @@ function mockSeed(memberId) {
 const mockFailCounts = new Map();
 if (MOCK_MODE) window.__mockStore = mockStore; // console 里检查断点续传结果用
 
+// 2026-10-28:Worker 时代这三个头已经没用了(上游不再认),留着只为兼容旧的
+// 本机代理日志;生产请求真正的凭证是 Authorization: Bearer <Firebase ID token>。
+// creds 可能为 null(settings/swimApi 读不到),这里必须容错。
 function buildUsasHeaders(creds) {
+  const c = creds || {};
   return {
     'AppName': 'DataHub',
-    'Usas-Sub-Id': creds.subId || '',
-    'Device-Id': creds.deviceId || '',
-    'usas-session-id': creds.sessionId || '',
+    'Usas-Sub-Id': c.subId || '',
+    'Device-Id': c.deviceId || '',
+    'usas-session-id': c.sessionId || '',
   };
 }
 
@@ -1048,8 +1121,12 @@ async function tryFetchOnce(url, creds) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
+    // 生产走 Worker,需要带 Firebase ID token;dev 走本机代理,这个头会被忽略。
+    const token = await getAuthToken();
+    const headers = buildUsasHeaders(creds);
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(url, {
-      headers: buildUsasHeaders(creds),
+      headers,
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -1121,17 +1198,8 @@ async function loadSwimApiCredentials() {
   return null;
 }
 
-async function saveSwimApiCredentials(deviceId, subId, sessionId) {
-  const data = {
-    deviceId: deviceId.trim(),
-    subId: subId.trim(),
-    sessionId: sessionId.trim(),
-    updatedAt: new Date(),
-    updatedBy: currentUser?.email || 'unknown',
-  };
-  await setDoc(doc(db, 'settings', 'swimApi'), data);
-  swimApiCredentials = data;
-}
+// 2026-10-28:旧的三件套保存函数已删除。凭据改为「Data Hub 会话 cookie」,
+// 由 Cloudflare Worker 保管(worker/src/index.js),不再写 settings/swimApi。
 
 function getSwimmersWithUsaId() {
   const swimmers = [];
@@ -1570,64 +1638,72 @@ function renderCoachResults() {
   const withId = swimmers.filter(s => s.hasId);
   const withoutId = swimmers.filter(s => !s.hasId);
 
-  const hasCreds = swimApiCredentials && swimApiCredentials.deviceId && swimApiCredentials.sessionId;
+  // 2026-10-28:鉴权改成「Worker 保管的 Data Hub 会话」,只有存过 cookie 才能抓。
+  const sessionReady = !!(usasSession && usasSession.hasCookie);
+  const sessionInvalid = !!(usasSession && usasSession.invalidAt);
+  const sessionDev = !!(usasSession && usasSession.dev);
+  const fetchBlocked = !sessionReady || swimResultsFetching;
 
-  // 2026-10-27:上游 API 已下线,抓取先在生产停用,等 Cloudflare Worker 代理上线。
-  // 开关在模块顶部(FETCH_ENABLED),dev 保持可用以便用本地代理继续验证。
-  const fetchBlocked = !hasCreds || swimResultsFetching || !FETCH_ENABLED;
-
-  // 旧的「三步获取凭据」教程已删除:那套值在 Data Hub 改版后不再存在于任何请求里,
-  // 照着做只会浪费时间。改为一段固定的说明。见 docs/swim-results-fetch.md §12。
+  const sessionColor = sessionInvalid || !sessionReady ? 'var(--color-accent)' : '#16A34A';
+  const sessionLabel = sessionDev
+    ? '🛠 dev — local proxy'
+    : sessionInvalid
+      ? '⛔ Expired — paste a new cookie'
+      : sessionReady
+        ? '✅ Saved'
+        : '⚠ Not configured';
+  const savedAtLabel = usasSession?.savedAt
+    ? new Date(usasSession.savedAt).toLocaleString()
+    : '';
 
   return `
     <div class="dash-panel" style="margin-bottom: 1.5rem;">
       <div class="dash-panel-header">
-        <h3 style="margin: 0;">🔑 API Credentials <span style="font-size: 0.8rem; font-weight: 400; color: var(--color-accent);">— deprecated</span></h3>
-        <span id="creds-status" style="font-size: 0.85rem; color: var(--color-accent);">⛔ Expired 2026-10-27</span>
+        <h3 style="margin: 0;">🔑 Data Hub Session</h3>
+        <span id="session-status" style="font-size: 0.85rem; color: ${sessionColor};">${sessionLabel}</span>
       </div>
 
-      <div style="border-left: 3px solid var(--color-accent); background: var(--bg-primary); border-radius: var(--radius-sm); padding: var(--space-md); margin-top: var(--space-md); font-size: 0.85rem; line-height: 1.7;">
-        <p style="margin: 0 0 0.5rem 0;"><strong>These three values stopped working on 2026-10-27.</strong>
-        USA Swimming rebuilt the Data Hub. The old <code>times-api</code> endpoint now answers
-        <code>403</code> to every request, and the new site signs in with a login cookie instead of these headers.</p>
-        <p style="margin: 0 0 0.5rem 0;">Fetching now has to go through a small server-side proxy that holds that cookie.
-        It runs locally today; a hosted version is being set up.</p>
-        <p style="margin: 0;">Kept read-only for reference. <strong>Do not try to re-copy them</strong> —
-        the values no longer appear in the Data Hub's requests.</p>
-      </div>
+      <p style="margin: var(--space-md) 0; font-size: 0.85rem; color: var(--text-muted);">
+        USA Swimming now requires a signed-in session instead of API keys. The cookie lasts
+        <strong>8 hours</strong> and cannot be renewed — paste a fresh one before each results run.
+      </p>
 
-      <div class="profile-fields" style="margin-top: var(--space-md); opacity: 0.55;">
-        <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr;">
-          <div class="form-group">
-            <label class="form-label">Device-Id <span style="font-size:0.75rem;color:var(--text-muted);">(retired)</span></label>
-            <input class="form-input" id="creds-device-id" disabled value="${escapeHtml(swimApiCredentials?.deviceId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Usas-Sub-Id <span style="font-size:0.75rem;color:var(--text-muted);">(retired)</span></label>
-            <input class="form-input" id="creds-sub-id" disabled value="${escapeHtml(swimApiCredentials?.subId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">usas-session-id <span style="font-size:0.75rem;color:var(--text-muted);">(retired)</span></label>
-            <input class="form-input" id="creds-session-id" disabled value="${escapeHtml(swimApiCredentials?.sessionId || '')}" style="font-family: monospace; font-size: 0.8rem;" />
-          </div>
-        </div>
+      ${sessionDev ? `
+      <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted); border-left: 3px solid var(--border-color); padding-left: 0.6rem;">
+        Development build: requests go through the Vite proxy to <code>local-tools/usas-proxy.mjs</code>,
+        so there is no session to manage here.
+      </p>` : `
+      <div class="form-group">
+        <label class="form-label">Paste the Data Hub cookie
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            (F12 → Network → filter <code>api/times</code> → any request → Headers → <code>cookie:</code> → Copy value)
+          </span>
+        </label>
+        <textarea class="form-input" id="session-cookie" rows="3" spellcheck="false"
+          placeholder="bff_auth_session=..."
+          style="font-family: monospace; font-size: 0.75rem; resize: vertical;"></textarea>
       </div>
-      <p id="creds-message" style="margin-top: 0.5rem; font-size: 0.85rem;"></p>
+      <div style="display: flex; gap: 0.75rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <button class="btn btn-primary btn-sm" id="save-session-btn">💾 Save session</button>
+        <button class="btn btn-outline btn-sm" id="verify-session-btn">🔍 Test connection</button>
+        ${savedAtLabel ? `<span style="font-size: 0.8rem; color: var(--text-muted);">saved ${escapeHtml(savedAtLabel)}</span>` : ''}
+      </div>
+      <p id="session-message" style="margin-top: 0.5rem; font-size: 0.85rem;"></p>`}
     </div>
 
     <div class="dash-panel" style="margin-bottom: 1.5rem;">
       <div class="dash-panel-header">
         <h3 style="margin: 0;">🔄 Fetch Swim Times</h3>
-        <span id="fetch-status" style="font-size: 0.85rem;">${FETCH_ENABLED ? 'Ready' : '⏸ Paused'}</span>
+        <span id="fetch-status" style="font-size: 0.85rem;">${sessionReady ? 'Ready' : '⏸ Paused'}</span>
       </div>
       <p style="color: var(--text-muted); margin: var(--space-md) 0; font-size: 0.9rem;">
         Incremental fetch checks <strong>${withId.length}</strong> athlete(s) with USA Swimming IDs.
         New athletes get their full meet history; previously fetched meets are skipped.
       </p>
-      ${FETCH_ENABLED ? '' : `
+      ${sessionReady ? '' : `
       <p style="margin: 0 0 var(--space-md) 0; font-size: 0.85rem; color: var(--color-accent); border-left: 3px solid var(--color-accent); padding-left: 0.6rem;">
-        ⏸ <strong>Paused.</strong> USA Swimming's old API is offline, so these buttons would fail on every athlete.
-        Fetching stays local until the proxy is hosted.
+        ⏸ <strong>Paused.</strong> Save a Data Hub session above first — without one every request
+        would fail before reaching USA Swimming.
       </p>`}
       <div style="display: flex; gap: 0.75rem; margin-bottom: var(--space-md); flex-wrap: wrap;">
         <button class="btn btn-primary btn-sm" id="fetch-new-btn" data-default-label="🆕 Fetch New Athletes Only" ${fetchBlocked ? "disabled" : ""}>
@@ -5675,8 +5751,36 @@ function bindEvents() {
 
     // ── Results Tab — Swim Times Management ──
 
-    // 凭据输入框已于 2026-10-27 停用(上游 API 下线),保存/教程两个按钮一并移除。
-    // 旧值仍从 settings/swimApi 读出、只读展示,供对照历史配置。
+    // ── Data Hub 会话(Worker 保管的 cookie,8 小时到期)──
+    document.getElementById('save-session-btn')?.addEventListener('click', async () => {
+      const msg = document.getElementById('session-message');
+      const ta = document.getElementById('session-cookie');
+      const cookie = (ta?.value || '').trim();
+      if (!cookie) {
+        if (msg) { msg.textContent = '请先粘贴 cookie。'; msg.style.color = 'var(--color-accent)'; }
+        return;
+      }
+      if (msg) { msg.textContent = '保存中…'; msg.style.color = 'var(--text-muted)'; }
+      try {
+        const res = await usasFetch(USAS_SESSION_URL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ cookie }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+        if (ta) ta.value = '';
+        if (msg) { msg.textContent = '已保存,正在验证…'; msg.style.color = 'var(--text-muted)'; }
+        await verifyUsasSession(msg);
+        refreshUI();
+      } catch (err) {
+        if (msg) { msg.textContent = `❌ ${err.message}`; msg.style.color = 'var(--color-accent)'; }
+      }
+    });
+
+    document.getElementById('verify-session-btn')?.addEventListener('click', () => {
+      verifyUsasSession();
+    });
 
     // Athlete results viewer — dropdown select
     const athleteSelect = document.getElementById('results-athlete-select');
@@ -5686,8 +5790,8 @@ function bindEvents() {
       const memberId = e.target.value;
       if (memberId) {
         loadAthleteResults(memberId);
-        // 生产端暂停抓取(见模块顶部 FETCH_ENABLED),这里也不能把按钮点亮。
-        if (refetchOneBtn) refetchOneBtn.disabled = !FETCH_ENABLED;
+        // 没有 Data Hub 会话时不允许点,免得白跑一轮全是 401。
+        if (refetchOneBtn) refetchOneBtn.disabled = !usasSessionReady();
       } else {
         const viewer = document.getElementById('results-viewer');
         if (viewer) viewer.style.display = 'none';
@@ -5748,8 +5852,8 @@ function bindEvents() {
     const runSwimFetch = async ({ buttonId, newOnly }) => {
       if (swimResultsFetching) return;
 
-      if (!swimApiCredentials || !swimApiCredentials.deviceId || !swimApiCredentials.sessionId) {
-        alert("Please configure and save API credentials first.");
+      if (!usasSessionReady()) {
+        alert('请先在「🔑 Data Hub Session」里粘贴并保存 cookie。');
         return;
       }
 
@@ -5844,7 +5948,9 @@ function bindEvents() {
             break;
           case "done":
             if (evt.authError) {
-              appendLog(`⛔ Stopped after ${evt.attempted}/${evt.total} athlete(s): credentials need refresh.`, true);
+              appendLog(`⛔ Stopped after ${evt.attempted}/${evt.total} athlete(s): the Data Hub session expired — paste a fresh cookie.`, true);
+              // 让面板立刻变成「已失效」,而不是等下次刷新
+              loadUsasSession().then(() => refreshUI()).catch(() => {});
             } else if (evt.blockedAbort) {
               appendLog(`⛔ Run stopped early — ${evt.success} succeeded, ${evt.failed} failed. Retry when the API is reachable again.`, true);
             } else {

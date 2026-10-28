@@ -10,6 +10,7 @@
     "pretest": "node scripts/free-emulator-ports.mjs",
     "test": "firebase emulators:exec --only auth,firestore --project demo-dragon-swim \"node scripts/run-playwright.mjs\"",
     "test:unit": "node tests/unit/run-all.mjs",
+    "test:worker": "node worker/test/run.mjs",
     "test:ui": "node scripts/free-emulator-ports.mjs && firebase emulators:exec --only auth,firestore --project demo-dragon-swim \"node scripts/run-playwright.mjs --ui\""
   },
   "devDependencies": {
