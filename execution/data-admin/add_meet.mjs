@@ -20,6 +20,12 @@
 //   - 校验必填字段与日期格式(YYYY-MM-DD),end >= start
 //   - 默认按 name + season 去重;命中则打印已存在文档并退出(退出码 2),不写入
 //   - --update <docId>  改为更新指定文档(仅覆盖传入字段)
+//   - --events-only     配合 --update:只写「报名相关」字段(项目表/场次/限额/费用/截止/
+//                       年龄口径/course/sanction/host/bonus/接力限报),**不动**
+//                       name/location/sourceUrl/status/startDate/endDate/season。
+//                       为什么要这个:主办方的 .ev3 里名字和场地常是缩写甚至占位符
+//                       (27-29 就是 "add your facility" / "your city"),而人工录入的
+//                       那份更准确 —— 补项目表时不该把好数据覆盖成差的。
 //   - --dry-run         只打印将要写入的内容,不写库
 //
 // schema 与 src/pages/dashboard.js 的 meetSaveBtn 保持一致:
@@ -55,6 +61,15 @@ const SEASON = flag('season');
 const SOURCE = flag('source');
 const STATUS = flag('status', 'Open');
 const UPDATE_ID = flag('update');
+// --events-only:补项目表时只写报名相关字段,别把人工录入的名字/场地覆盖成 .ev3 的缩写值。
+// 「比赛是否已结束」不靠 status 判断(dashboard 按日期分桶,见 src/pages/dashboard.js
+// 里「不能用 meet.status」那段),所以这里也不需要为过期比赛发明一个 Closed 状态。
+const EVENTS_ONLY = has('events-only');
+const EVENTS_ONLY_FIELDS = [
+  'events', 'sessions', 'ageGroups', 'ageDeterminedOn', 'limits', 'entryDeadline',
+  'entryFeePerEvent', 'qualifyingPeriodStart', 'courses', 'sanction', 'host',
+  'relayLimitPerClub', 'bonusRule',
+];
 const KEY_PATH = resolve(flag('key', 'serviceAccountKey.json'));
 const DRY_RUN = has('dry-run');
 const ALLOW_DUP = has('allow-duplicate');
@@ -85,7 +100,7 @@ if (FROM_JSON) {
   for (const [i, ev] of (parsed.events || []).entries()) {
     const where = `events[${i}]`;
     if (!Number.isInteger(ev.eventNo)) errors.push(`${where} eventNo 必须是整数`);
-    if (!['F', 'M'].includes(ev.gender)) errors.push(`${where} gender 必须是 F/M`);
+    if (!['F', 'M', 'X'].includes(ev.gender)) errors.push(`${where} gender 必须是 F/M/X(X = 混合项目)`);
     if (!ev.ageGroup) errors.push(`${where} 缺少 ageGroup`);
     if (!Number.isFinite(ev.distance)) errors.push(`${where} distance 必须是数字`);
     if (!ev.stroke) errors.push(`${where} 缺少 stroke`);
@@ -172,19 +187,46 @@ if (existing && !UPDATE_ID && !ALLOW_DUP) {
   process.exit(2);
 }
 
+if (EVENTS_ONLY && !UPDATE_ID && !DRY_RUN) {
+  console.error('❌ --events-only 必须配 --update <docId>(它是"给已有文档补项目表",不是新增)');
+  process.exit(1);
+}
+
 if (DRY_RUN) {
   console.log('🔎 DRY RUN — 将写入以下内容(未写库):');
-  const shown = FROM_JSON
-    ? { ...meet, events: `[${meet.events.length} 条,已省略]`, sessions: `[${meet.sessions.length} 条,已省略]` }
+  const target = EVENTS_ONLY && UPDATE_ID
+    ? Object.fromEntries(EVENTS_ONLY_FIELDS.filter((k) => meet[k] !== undefined).map((k) => [k, meet[k]]))
     : meet;
+  const shown = FROM_JSON
+    ? { ...target, events: `[${(target.events || []).length} 条,已省略]`, sessions: `[${(target.sessions || []).length} 条,已省略]` }
+    : target;
+  if (EVENTS_ONLY && UPDATE_ID) {
+    console.log(`   (--events-only → 只更新 docId=${UPDATE_ID} 的 ${Object.keys(target).length} 个报名字段, created/updatedAt 由服务端补)`);
+    console.log(`   保留未动: ${['name', 'location', 'sourceUrl', 'status', 'startDate', 'endDate', 'season'].join(', ')}`);
+    console.log(JSON.stringify(shown, null, 2));
+    process.exit(0);
+  }
   console.log(JSON.stringify({ ...shown, createdAt: '<serverTimestamp>' }, null, 2));
   process.exit(0);
 }
 
 // ── 写入 ─────────────────────────────────────────────────────────
 if (UPDATE_ID) {
-  await db.collection('meets').doc(UPDATE_ID).update({ ...meet, updatedAt: FieldValue.serverTimestamp() });
-  console.log(`✅ 已更新 meet:docId=${UPDATE_ID}`);
+  const patch = EVENTS_ONLY
+    ? Object.fromEntries(EVENTS_ONLY_FIELDS.filter((k) => meet[k] !== undefined).map((k) => [k, meet[k]]))
+    : meet;
+  const before = (await db.collection('meets').doc(UPDATE_ID).get()).data() || {};
+  await db.collection('meets').doc(UPDATE_ID).update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
+  console.log(`✅ 已更新 meet:docId=${UPDATE_ID}` + (EVENTS_ONLY ? '(--events-only)' : ''));
+  if (EVENTS_ONLY) {
+    for (const k of Object.keys(patch)) {
+      const old = before[k];
+      const oldText = Array.isArray(old) ? `Array(${old.length})` : JSON.stringify(old) ?? 'undefined';
+      const newText = Array.isArray(patch[k]) ? `Array(${patch[k].length})` : JSON.stringify(patch[k]) ?? 'undefined';
+      console.log(`   ${k.padEnd(22)} ${oldText} → ${newText}`);
+    }
+    console.log(`   未动: name / location / sourceUrl / status / startDate / endDate / season`);
+  }
 } else {
   const ref = await db.collection('meets').add({ ...meet, createdAt: FieldValue.serverTimestamp() });
   console.log(`✅ 已新增 meet:docId=${ref.id}`);
