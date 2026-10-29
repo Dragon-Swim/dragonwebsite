@@ -247,10 +247,54 @@ python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>
 解析脚本自带 6 项自校验(性别配对 / 号码连续 / 秒数区间 / 与决赛表交叉核对),
 不过就退出码 1、不产出文件。**不要手改 events.json**——重跑脚本。
 
-## 6. 未做 / 下一步
+## 6. 导出准备（2026-10-29）
 
-- **导出**:meet director 要 "report by name with proof of time"。还没做打印版/CSV。
-  最省事的路子是生成打印友好的 HTML → 浏览器打印成 PDF(零依赖)。
+`src/utils/meetEntryExport.js` —— 纯函数，只回答三个问题：哪些报名该出去、每条用什么成绩、这份结果合不合法。
+
+### 6.1 成绩必须在导出时重算
+
+`entries.events[].seedTime` 是**家长提交那一刻的快照**。从提交到截止之间选手几乎一定会再游一次，
+快照就过期了 —— 而成绩不是装饰：它决定 heat/lane 顺序，也决定这一行还算不算达标（还是只能算 bonus）。
+27-41 的截止日（12/1）在 11/6 Loughmiller 和 11/13 PV Nov Open **之后**，
+所以"导出时用最新成绩"是常态，不是边缘情况。
+
+`resolveSeedTime()` 的取值顺序：`swimResults` 里达标期内的最好成绩（`source: 'db'`）
+→ 报名时手填的值（`source: 'manual'`）→ 都没有则 `missing`，该行不能进入队文件。
+它复用家庭端同一套原语（`buildBestTimesIndex` + `evaluateEvent`，含比赛的 `qualifyingPeriodStart`），
+所以确认稿上的数字与家长当时看到的数字同源，除非之后有更快的一游。
+
+快照值仍保留在行上（`storedSeedSeconds`），确认稿可以并排显示"家长看到多少 / 现在提交多少"。
+
+### 6.2 只有 `confirmed` 进导出
+
+`draft` / `submitted` / `declined` 一律不出，但**必须报出来** ——「还有 7 家没确认」是教练发信前
+必须看到的事实，静默导出 26/33 人就是把孩子漏在比赛之外。
+
+### 6.3 校验（`validateExport`）
+
+| 级别 | 条件 |
+|---|---|
+| **error** | 没有 seed time（meet 不收 NT） |
+| **error** | 没有 USA Swimming ID（入队文件靠它认人） |
+| **error** | 超过 `limits.maxEvents` / `limits.maxPerDay` —— **导出时重算**，不信报名时那次 |
+| warning | 有未确认的报名 |
+| warning | 有成绩被刷新（附前后对比） |
+| warning | 有只能算 bonus 的行（比达标线慢） |
+
+### 6.4 工作表 CSV（`toWorksheetCsv`）
+
+16 列，每个单元格加引号，行尾 CRLF，文件带 UTF-8 BOM（否则 Excel 在中文 Windows 上会乱码）。
+其中 `Changed` 列专门放 `1:12.53 → 1:11.03` 这种前后对比，`Time source` 区分"我们的记录 / 手填"。
+
+### 6.5 还没做
+
+给家长的确认稿（打印页）和 SDIF v3 `.cl2` writer 都还没做 —— 两者都建立在这一层的输出之上
+（见 `docs/meet-entry-export-feasibility.md` §7）。
+
+## 7. 未做 / 下一步
+
+- **导出**:组行 / 成绩重算 / 工作表 CSV 已完成(见 §6)。还差**给家长的确认稿打印页**和
+  **SDIF v3 `.cl2` writer**,路线见 `docs/meet-entry-export-feasibility.md` §7。
 - **`.hy3` 入队文件**:暂不做。格式无公开规范,出错代价是整场报名被拒。
   ⚠️ 2026-10-29 更正:真正该做的是 **`.cl2`(= SDIF v3,有公开规范、无校验码)**,
   `.hy3` 才是无规范的那个。评估与证据见 `docs/meet-entry-export-feasibility.md`。
@@ -260,10 +304,11 @@ python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>
 - **`swimmerId` 迁移**:用 USA ID 当键的代价见 §1.2;要根治还是得给每个 swimmer 一个
   稳定 id(`registrations.swimmers[].swimmerId`),那要同时改注册表单和迁移脚本。
 
-## 7. 测试约定
+## 8. 测试约定
 
 ```powershell
-npm run test:unit   # 含 verify-meet-eligibility.mjs(80 项,真实 27-41 达标线)
+npm run test:unit   # verify-meet-eligibility.mjs(106 项,真实 27-41 数据)
+                    # + verify-meet-entry-export.mjs(57 项:成绩重算/挡下原因/CSV)
 npm test            # 含 meet-entries.spec.js(家庭提交 / 手填成绩 / 无 ID / 截止 / 教练确认)
 ```
 

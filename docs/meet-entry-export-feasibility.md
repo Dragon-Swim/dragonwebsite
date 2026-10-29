@@ -189,11 +189,13 @@ usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线�
 
 ## 7. 分期与时间线（对着 RMSC 12/1 20:00 ET 截止倒推）
 
-| 阶段 | 内容 | 估计 |
+| 阶段 | 内容 | 状态 |
 |---|---|---|
-| 一 | `.ev3` 导入器（替换 PDF 解析）+ 录入工作表 CSV + 家长确认稿打印页 | 1.5–2 天 |
-| 二 | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | 2–3 天 |
-| 三 | 接力 `E0`/`F0`（前提：§6.1 有答案） | 1 天 |
+| **A 赛程入库** | `.ev3` 导入器（替掉 PDF 解析）+ 年龄组数值匹配 | ✅ 2026-10-29 完成（`d468df0` / `d3e2a4f`，三场已写入生产） |
+| **B 导出准备** | 组行 + **成绩重算** + 校验 + 工作表 CSV | ✅ 2026-10-29 完成（见 §10.5） |
+| **C 确认稿** | 给家长的打印页（独立 Vite entry + 浏览器打印） | 待做，约 1 天 |
+| **D 入队文件** | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | 待做，2–3 天 |
+| **E 接力** | `E0`/`F0` | 阻塞：§6.1 还没有答案 |
 
 | 时间 | 门 | 内容 |
 |---|---|---|
@@ -338,7 +340,29 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 27-29   12 岁 → group=11-12, 本组 15 项 / Open 14 项（含混合项目）
 ```
 
-### 10.5 还没做的
+### 10.5 阶段三第一部分已落地：导出组行 + 成绩重算 + 工作表 CSV
+
+`src/utils/meetEntryExport.js`（纯函数，零 DOM / 零 Firestore）：
+
+- `resolveSeedTime()` —— **导出时重算 seed time**（`swimResults` 内达标期最好成绩 → 手填值 → `missing`），
+  并保留快照值做"家长看到 vs 现在提交"的对比，与家庭端同源（同一套 `buildBestTimesIndex`/`evaluateEvent`）
+- `buildExportRows()` —— 只放行 `confirmed`；`draft`/`submitted`/`declined` 与"无 USA ID"分别列出原因
+- `validateExport()` —— error：缺成绩 / 缺 ID / **导出时重算**的 `maxEvents`、`maxPerDay`；
+  warning：未确认 / 成绩已刷新 / 只能算 bonus
+- `toWorksheetCsv()` —— 16 列、全引号、CRLF、UTF-8 BOM，`Changed` 列直接给 `1:12.53 → 1:11.03`
+- `groupRowsBySwimmer()` —— 确认稿要的分组形状（按姓排序、每人一份）
+
+测试：`tests/unit/verify-meet-entry-export.mjs`（57 项）。单测总入口现在 8 个脚本全绿。
+
+**线上彩排（只读）**：拿 27-41 的真实项目表 + 3 名真实泳手的真实成绩，造一份"已确认报名"跑通全链路：
+
+```
+9 行 / 3 人 / 全部达标 / 9 行检测到成绩刷新 / 1 份未确认被挡下并说明原因
+例如 Miranda Xu #19 100 Breast  1:12.53 → 1:11.03（线 1:16.69，达标）
+工作表 CSV 1646 字符，BOM + CRLF + 10 行
+```
+
+### 10.6 还没做的
 
 - 阶段三（导出组行 / CSV / 确认稿 / SDIF writer）——按 §7 的顺序在 Gate A2 之后
 - 接力：仍卡在"今天怎么报的"这个信息上
