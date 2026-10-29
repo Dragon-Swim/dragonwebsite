@@ -37,6 +37,7 @@ import {
 } from '../utils/meetEligibility.js';
 import { t } from '../utils/i18n.js';
 import { openRelayEntries } from './relayEntries.js';
+import { exportEntryFileZip } from './exportEntryFile.js';
 
 const STATUS_KEYS = {
   draft: 'meet_entries_status_draft',
@@ -527,7 +528,15 @@ function footerHtml() {
     const relayBtn = isCoach()
       ? `<button type="button" class="btn btn-outline btn-sm" data-action="relays">${esc(t('meet_entries_relays_btn'))}</button>`
       : '';
+    // The coach-facing way to produce the file the meet director wants: one click,
+    // zip in the Downloads folder. The command line can do the same thing
+    // (execution/meet-entry/export_cl2.mjs) but a coach will not open a terminal.
+    const exportBtn = isCoach()
+      ? `<button type="button" class="btn btn-primary btn-sm" data-action="export-zip">${esc(t('meet_entries_export_zip'))}</button>`
+      : '';
     return `<span class="me-footer-note">${esc(t('meet_entries_footer_list'))}</span>`
+      + `<span class="me-footer-note me-save-note" id="me-export-note"></span>`
+      + exportBtn
       + relayBtn
       + printLink('', t('meet_entries_print_all'))
       + printLink('&group=sex', t('meet_entries_print_team'));
@@ -561,6 +570,38 @@ function footerHtml() {
     ${sheetLink}
     <span class="me-footer-note me-save-note">${esc(state.saving ? t('meet_entries_saving') : (state.error || ''))}</span>
   `;
+}
+
+// ── export the entry file (coach) ────────────────────────────────────────
+
+/**
+ * Build and download the zip the meet director receives.
+ *
+ * The heavy lifting lives in `utils/meetEntryPackage.js`; this only reports
+ * progress into the footer so a 30-swimmer meet does not look frozen while the
+ * best times are read.
+ */
+async function exportZip() {
+  const note = document.getElementById('me-export-note');
+  const btn = document.querySelector('#meet-entries-container [data-action="export-zip"]');
+  const say = (text, isError = false) => {
+    if (!note) return;
+    note.textContent = text;
+    note.classList.toggle('me-error', isError);
+  };
+
+  if (btn) btn.disabled = true;
+  say('Preparing…');
+  try {
+    const result = await exportEntryFileZip({
+      meet: state.meet,
+      swimmers: state.swimmers,
+      onProgress: (msg) => say(msg),
+    });
+    say(result.ok ? `✅ ${result.message}` : `⛔ ${result.message}`, !result.ok);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ── summary + problem text ───────────────────────────────────────────────
@@ -643,6 +684,7 @@ function onClick(e) {
   if (!btn) return;
   const action = btn.dataset.action;
 
+  if (action === 'export-zip') { exportZip(); return; }
   if (action === 'back') { state.view = 'list'; state.ctx = null; paint(); return; }
   if (action === 'relays') {
     // Relays are club data with their own collection, so they get their own

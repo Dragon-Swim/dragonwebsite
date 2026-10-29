@@ -490,6 +490,7 @@ const translations = {
 
         // ── Relay line-ups (coach only) ──
         meet_entries_relays_btn: '🏊 Relays',
+        meet_entries_export_zip: '📦 Entry file (.cl2)',
         meet_relays_title: 'Relay line-ups',
         meet_relays_sub: 'Coaches only — four swimmers per squad, in running order.',
         meet_relays_no_events: 'This meet has no relay events.',

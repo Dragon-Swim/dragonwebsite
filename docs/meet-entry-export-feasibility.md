@@ -586,3 +586,29 @@ node execution/meet-entry/export_cl2.mjs --meet <docId>            # 写到 .tmp
 
 工具位置：**不做进网页**（这是一次性验证，不是产品功能）。落在
 `execution/meet-entry/compare_cl2.mjs`（命令行，带自测）。
+
+### 10.15 「导出报名文件」改成了网页按钮（2026-10-29 晚）
+
+用户的原话："教练不会起命令行，如果一个按钮能生成文件，就可以了，跟 tm 一样。"
+所以把 `export_cl2.mjs` 的组装逻辑抽出来，做成了**纯函数 + 一个按钮**：
+
+| 层 | 文件 | 干什么 |
+|---|---|---|
+| 逻辑（纯） | `src/utils/meetEntryPackage.js` | `buildEntryPackage()` —— 组行、校验、接力、生成 `.cl2` + `README.TXT` + zip；按钮和命令行都调它 |
+| zip（纯） | `src/utils/zip.js` | 自己写的**只存储不压缩** ZIP（无新依赖，约 90 行）；用 PowerShell `Expand-Archive` 验证过能被真实解压器读 |
+| 浏览器 | `src/components/exportEntryFile.js` | 从 Firestore 取数据 → 调上面的纯函数 → `Blob` 下载 |
+| 按钮 | `entries` 弹窗名单视图 `📦 Entry file (.cl2)`（教练） | 一次点击得到 `DRAG-PV-Entries-<meet>-<ddMonyyyy>-001.ZIP` |
+| 命令行 | `execution/meet-entry/export_cl2.mjs` | 同一套逻辑，另写一份裸 `.cl2`（方便和 TM 的文件逐字段比对） |
+
+**zip 内容**：`<同名>.CL2` + `README.TXT`。README 里有比赛信息、sanction、
+"Files in this archive"、**怎么导进 Meet Manager**（`File > Import > Entries`）、
+泳手/项目/接力队数量、联系人。全 ASCII，任何编辑器都不会乱码。
+
+**文件名**沿用 TM 的规律，让主办方收到的附件形状和往年一致：
+`DRAG-PV-Entries-Riley Eaton Holiday Invitational-10Dec2026-001.ZIP`
+
+**失败时不出文件**：缺 seed time / 缺 USA ID / 超限额 / 接力队不合格 → 按钮下方红字说明
+`Nothing exported — N problem(s): <codes>`，不下载半成品。
+
+测试：`tests/unit/verify-zip.mjs`(29) + `tests/unit/verify-meet-entry-package.mjs`(38) +
+`tests/export-entry-file.spec.js`(3，含真实下载事件与文件名断言)。总入口 **12 个单测脚本 + 42 个 E2E**。

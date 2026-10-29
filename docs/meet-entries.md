@@ -354,14 +354,33 @@ Female IE's: 39   Male IE's: 95   Total IE's: 134   Total Athletes: 26
 家长视角没有。入口：报名弹窗底部 `🖨 Confirmation sheet`（单家庭）与名单视图的
 `🖨 Confirmation sheets`（全队）。
 
-### 6.6 入队文件：SDIF v3 `.cl2`
+### 6.6 入队文件：SDIF v3 `.cl2`（网页按钮 / 命令行）
 
-```powershell
-node execution/meet-entry/export_cl2.mjs --meet <docId> [--dry-run] [--out <path>]
+**教练用的是按钮**：`entries` 弹窗名单视图底部的 **`📦 Entry file (.cl2)`**。一次点击，
+浏览器直接下载：
+
+```
+DRAG-PV-Entries-Riley Eaton Holiday Invitational-10Dec2026-001.ZIP
+├── DRAG-PV-Entries-…-001.CL2      ← SDIF v3，给 Meet Manager
+└── README.TXT                      ← 比赛信息 + 怎么导入 + 联系人
 ```
 
-读 `meets/{id}` + `meets/{id}/entries/*` + `registrations/*`（生日）+ `swimResults/*`（成绩重算），
-产出主办方 Meet Manager 认的 **SDIF v3 `.cl2`**（`src/utils/sdif.js` 负责编解码）。
+文件名沿用 Team Manager 的规律，主办方收到的附件形状和往年一致。
+**失败不会出文件**：缺 seed time / 缺 USA ID / 超限额 / 接力队不合格时，
+按钮下方红字说明 `Nothing exported — N problem(s): <codes>`。
+
+命令行版（同一套逻辑，另写一份裸 `.cl2` 便于和 TM 的文件逐字段比对）：
+
+```powershell
+node execution/meet-entry/export_cl2.mjs --meet <docId> [--dry-run] [--out <dir>]
+```
+
+两者都调 `src/utils/meetEntryPackage.js` 的 `buildEntryPackage()`，不会各说一套；
+zip 由 `src/utils/zip.js` 生成（只存储不压缩，无第三方依赖）。
+
+读 `meets/{id}` + `meets/{id}/entries/*` + `meets/{id}/relayEntries/*` + `registrations/*`（生日）
++ `swimResults/*`（成绩重算），产出主办方 Meet Manager 认的 **SDIF v3 `.cl2`**
+（`src/utils/sdif.js` 负责编解码）。
 
 为什么是它：`.cl2` 不是 Hy-Tek 私有格式，而是美国泳协 1998 年公布的 **SDIF v3**，
 Meet Manager 官方承认能导"其他厂商生成的 meet entry SD3"。评估与证据见
