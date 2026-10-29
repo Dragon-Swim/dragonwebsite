@@ -63,10 +63,30 @@ const showEntries = hasEvents && (canEnter || meet.entriesOpenToFamilies === tru
                warmup:"6:30–8:00 AM", start:"8:05 AM", audience:"13-14 / Open" }],
   events: [   // ⚠️ 平铺行:项目 × 年龄组 × 性别
     { eventNo:19, gender:"F", ageGroup:"13-14", distance:100, stroke:"BR",
+      ageMin:13, ageMax:14, openToAll:false,
       relay:false, sessionId:"fri-am", standards:{ SCY:76.69, LCM:82.99 } }
   ]
 }
 ```
+
+**`ageMin`/`ageMax`/`openToAll`（2026-10-29 起由 `.ev3` 导入）**：判断"这个年龄能不能报"
+**只看这三个字段**，`ageGroup` 仅用于显示。因为每场比赛的年龄分区都不一样：
+
+| 比赛 | 分区 |
+|---|---|
+| 27-41 RMSC | `10&U`(0-10) / `11-12` / `12&U`(0-12) / `13-14` / `Open`(15-109, **openToAll**) |
+| 27-29 PV Nov Open | `9-10` / `11-12` / `13-14` / `Open`(15-109, openToAll) + 混合项目(`gender:"X"`) |
+| 27-21 Loughmiller | `8&U`(0-8) / `9-10` / `11-12` / `13&O`(13-109, **不是** openToAll) |
+
+`openToAll` 对应赛程单原文 "open events which are open to all ages" —— PVS 的 Open 组在 `.ev3` 里
+编码成 `15-109`（颁奖按 15+ 算），但报名对任何年龄开放，所以**不能只靠数字推**；
+Loughmiller 的 `13-109` 则是真的"13 岁及以上"。老文档没有这三个字段时，
+`isEventEnterable()` 自动回退到旧的标签白名单，线上已有数据不受影响。
+
+**年龄怎么算**：按**比赛第一天**该选手的年龄（27-41 赛程单原文
+"Swimmers will compete at the age attained on the first day of the meet"）。落库字段是
+`ageDeterminedOn`；`.ev3` 的 `field[4]` 直接给这个日期（四场比赛实测都等于起始日，
+但**读字段、不要假设等于首日**）。
 
 两个容易踩的点:
 
@@ -107,7 +127,7 @@ const showEntries = hasEvents && (canEnter || meet.entriesOpenToFamilies === tru
 | # | 规则 | 实现 | 拦截级别 |
 |---|---|---|---|
 | 1 | 年龄按 **比赛第一天** 算 | `ageOnDate(dob, meet.ageDeterminedOn)` | 自动 |
-| 2 | 只能报本组 + 12&U(10&U/11-12)+ Open(Open 折进可选区块) | `enterableGroupsForAgeGroup` | 自动 |
+| 2 | 只能报本组 + 12&U(10&U/11-12)+ Open(Open 折进可选区块) | `isEventEnterable`(数值) / `enterableGroupsForAgeGroup`(老文档兜底) | 自动 |
 | 3 | 达标线按**同一 course** 比较,`秒数 ≤ 线` | `evaluateEvent` | 软提醒 |
 | 4 | 没有成绩 → 必须手填 seed time | `validateSelection` → `missing-seed-time` | **硬拦截** |
 | 5 | 成绩须在达标期内(默认 2024-10-01 之后) | `buildBestTimesIndex` 的 `qualifyingPeriodStart` | 自动过滤 + 说明 |
@@ -192,10 +212,37 @@ events or in open events which are open to all ages"),所以 `enterableGroupsFor
 费用单回来照旧走 `Fee` 弹窗上传(`docs/meet-fees.md`),与本功能无关。
 
 **加一场新 meet**
+
+首选走官方 `.ev3`（主办方的赛程包，机器可读、比 PDF 权威）：
+
 ```powershell
-python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>/events.json
+# ① 解析赛程包（.ev3 / .hyv / 含两者的 zip）。同一场已经有 PDF 解析结果时，
+#    用 --sessions-from 把场次的日期/类型借过来（.ev3 本身不含场次日历）
+python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/<N>-events.zip `
+    -o .tmp/<meet>/events.json `
+    --sessions-from .tmp/<meet>/pdf-events.json `
+    --deadline "2026-12-01T20:00:00-05:00" `   # .ev3 只有日期，具体时刻要照赛程单补
+    --source-url "https://www.files.pvswim.org/2627meet/<N>-events.zip"
+
 node execution/data-admin/add_meet.mjs --from-json .tmp/<meet>/events.json --dry-run   # 先看
-node execution/data-admin/add_meet.mjs --from-json .tmp/<meet>/events.json
+node execution/data-admin/add_meet.mjs --from-json .tmp/<meet>/events.json             # 新增
+node execution/data-admin/add_meet.mjs --from-json .tmp/<meet>/events.json --update <docId>  # 覆盖既有
+node execution/data-admin/add_meet.mjs --from-json .tmp/<meet>/events.json --update <docId> --events-only  # 只补项目表
+```
+
+**`--events-only`**（2026-10-29 新增）：只写「报名相关」字段（`events`/`sessions`/`limits`/
+`entryDeadline`/`entryFeePerEvent`/`ageGroups`/`ageDeterminedOn`/`qualifyingPeriodStart`/
+`courses`/`sanction`/`host`/`relayLimitPerClub`/`bonusRule`），**不动**
+`name`/`location`/`sourceUrl`/`status`/`startDate`/`endDate`/`season`。
+给已有比赛补项目表时用它：主办方 `.ev3` 里的名字和场地常是缩写甚至占位符
+（27-29 的 "add your facility"），而人工录入的那份更准确。写完会打印每个字段的 旧值 → 新值。
+
+脚本会打印警告，需要人工补的通常是四类：场次日期（没给 `--sessions-from`）、报名截止的**时刻**、
+场地占位符（主办方文件没填完，如 27-29 的 "add your facility"）、以及 `course` 里没识别的码。
+
+PDF 路线保留作交叉核对（`.ev3` 缺项目表或版式特殊时用）：
+```powershell
+python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>/pdf-events.json
 ```
 解析脚本自带 6 项自校验(性别配对 / 号码连续 / 秒数区间 / 与决赛表交叉核对),
 不过就退出码 1、不产出文件。**不要手改 events.json**——重跑脚本。
@@ -205,6 +252,8 @@ node execution/data-admin/add_meet.mjs --from-json .tmp/<meet>/events.json
 - **导出**:meet director 要 "report by name with proof of time"。还没做打印版/CSV。
   最省事的路子是生成打印友好的 HTML → 浏览器打印成 PDF(零依赖)。
 - **`.hy3` 入队文件**:暂不做。格式无公开规范,出错代价是整场报名被拒。
+  ⚠️ 2026-10-29 更正:真正该做的是 **`.cl2`(= SDIF v3,有公开规范、无校验码)**,
+  `.hy3` 才是无规范的那个。评估与证据见 `docs/meet-entry-export-feasibility.md`。
 - **接力**:目前只在家长界面显示"由教练安排",教练端也没有排棒次的界面。
 - **bonus 自动判定**:现在只提示"还能用 N 个 bonus",不校验实际用了几个。
 - **提醒**:没有邮件/站内通知,教练需要自己看 `Submitted` 筛选。

@@ -1,0 +1,345 @@
+# 用网站替代 Team Manager：报名导出可行性备忘
+
+> 目的：记录 2026-10-29 的可行性评估结论与证据，供后续动手时直接接续，不必重新摸底。
+> 状态：**评估完成，未开工**。等待「接力的实际报法」与开工决定。
+> 相关：`docs/meet-entries.md`（报名功能现状）、`.tmp/handoff/handoff-2026-10-28-meet-entries.md`（上一阶段交接）
+> 调研全文：`.tmp/hytek-research/hytek-entry-formats-report.md`
+
+---
+
+## 0. 一句话结论
+
+**可行，且成本比预想低。** 真正的门槛不在技术（`.cl2` 是公开规范的 SDIF v3，照表填即可），
+而在**主办方是否接受我们生成的文件**——这一步只能靠一次真实导入来证明。
+
+---
+
+## 1. 格式事实（推翻旧判断）
+
+`docs/meet-entries.md` §6 曾写「`.hy3` 入队文件：暂不做，格式无公开规范」。这个前提**部分不成立**：
+
+| 文件 | 方向 | 实质 | 公开规范? |
+|---|---|---|---|
+| `.hyv` / `.ev3` | Meet Manager → Team Manager（主办方发给教练） | 分号分隔变长文本 | 无官方规范，但**纯文本可直读** |
+| **`.cl2`** | Team Manager → Meet Manager | **SDIF v3**，定长 160 字符 + CRLF | ✅ **有**（USA Swimming, 1998-04-28） |
+| `.hy3` | Team Manager → Meet Manager | Hy-Tek 自有格式，定长 130 字符 | ❌ 无，且有 2 位校验码 |
+
+三条硬事实：
+
+1. **`.cl2` = SDIF v3**。Hy-Tek 官方把 "CL2" 与 "SD3" 当同义词；Meet Manager 明确支持导入
+   「其他厂商软件生成的 meet entry SD3」。
+2. **SDIF v3 没有校验码**。规范修订记录第 3 条原文：
+   > "Remove all **checksum** fields. The resulting space will be for future use."
+3. **记录长度**：规范写「每条记录 162 字节，前 160 字节数据 + CRLF」。
+   实测样本 177 × 162 = **28,674 字节，分毫不差**。
+
+> 注：Hy-Tek 自己的 `.cl2` 在 bytes 146–148（规范里的 "future use" 区）塞了 `N##`（如 `N18`）。
+> 规范要求这块**必须留空**，我们生成时留空即可，比 Hy-Tek 自己写的还合规。
+> 而 `.hy3` 的行尾 2 位才是真校验码（社区逆向文档有算法，非官方）。
+
+### 1.1 已逐字段验证（D0 记录，按规范切片，全部对位）
+
+```
+D01PV      Chen, Haoran E      8B1279F2394C USA0309201115MM 500 1 2F 15OV  5:10.86Y
+  12/28姓名      40/12 USS#  53/3国旗 56/8生日 64/2龄 66/1性别 68/4距离 72/1泳姿
+                                        73/4项目号 77/4年龄组 89/8报名成绩 97/1 course
+```
+
+其余字段表（写 writer 时照抄规范）：`98/8` prelim time、`107/8` swim-off、`116/8` finals、
+`125/2` prelim heat、`127/2` prelim lane、`133/3` prelim place、`143/2` event time class、
+`145/1` flight status、`146/15` future use。记录顺序：`A0 → B1 → (C1 → C2 → D0/D3) → Z0`，
+接力是 `E0`（队）+ `F0`（4 棒次 + 替补）。
+
+---
+
+## 2. 手上的样本（都在 `.tmp`）
+
+| 路径 | 是什么 | course | 项目行 | 年龄区间 | 接力 |
+|---|---|---|---|---|---|
+| `.tmp/meet-entry/27-41-events/` | 主办方 `.ev3`+`.hyv`，RMSC 12/10（PVI-27-41） | `YLS` | 152 | 0-10 / 11-12 / 13-14 / 15-109 / 0-12 / 0-109 | **32 行** |
+| `.tmp/meet-entry/27-29-events/` | PV November Open 11/13（PVS-27-29） | `YO` | 89 | 9-10 / 11-12 / 13-14 / 15-109 | 0 |
+| `.tmp/meet-entry/27-21-events/` | FXFX Loughmiller 11/6（PVI-27-21） | `YO` | 118 | **0-8** / 9-10 / 11-12 / **13-109** | 0 |
+| `.tmp/hytek-research/27-20-events.zip` | Marlins Invitational 11/6 | `Y` | — | — | — |
+| `.tmp/hytek-research/27-31-events.ev3` | Swim & Rock 11/20 | `YO` | — | — | — |
+| `.tmp/meet-entry/hytek-sample/` | **我们的导出件**：PV November Open 11/13（`.CL2`+`.HY3`） | `Y` |
+| `.tmp/meet-entry/hytek-relay-sample/` | **我们的导出件**：FXFX Summer Solstice LC Champs 6/26 | `L` |
+| `.tmp/meet-entry/nov open name entry.pdf` 等 3 份 | TM 打印的 "Individual Meet Entries Report" | — |
+
+四种 course（`Y`/`YO`/`YLS`/`L`）都覆盖了，导入器可以拿四种配置测试。
+
+### 2.1 样本规模
+
+| | 记录数 | 明细 |
+|---|---|---|
+| Nov Open `.CL2` | 177 | `A0`1 `B1`1 `C1`1 **`D0`145** `D3`28 `Z0`1 |
+| Nov Open `.HY3` | 179 | `A1/B1/B2/C1/C2/C3` 各 1，**`D1`28 `E1`145** |
+| LC Champs `.CL2` | 233 | `D0`193 `D3`36 |
+
+---
+
+## 3. 已完成的交叉校验
+
+### 3.1 官方 `.ev3` vs 库内 27-41 项目表 → **118/120 行逐字一致**
+
+用 `.ev3` 的 152 个项目行比对 `meets/vkDgi3WA3w8AgEbkq5Li.events`（我们由 PDF 解析出的 152 行）：
+
+```
+exact=118  differing=2  notFound=0  relaysSkipped=32
+```
+
+2 处差异（都是 12&U 500 自的 LCM 线，差 4 秒）：
+
+| 项目 | 我们（PDF 解析） | 官方 `.ev3` |
+|---|---|---|
+| #33 12&U 女 500 FR | LCM 5:25.99 | LCM **5:29.99** |
+| #44 12&U 男 500 FR | LCM 5:23.99 | LCM **5:27.99** |
+
+两行都在「合并单元格」区域（`docs/meet-entries.md` §1.1 警告过的坑）。
+**结论：赛程数据应改用 `.ev3` 导入，替掉 PDF 解析**——更权威，也少一类解析风险。
+
+### 3.2 PDF 报告 vs `.CL2` → 只能部分交叉
+
+`nov open name entry.pdf` 打印于 **10/25**，`.CL2` 导出于 **10/26 17:13**；
+PDF 解析出 26 人 / 134 条，`.CL2` 是 145 条 → 中间改过 11 条。**不能当逐条金标准**，
+只能验证「人 + 项目 + 成绩」的语义映射。
+
+### 3.3 我们导出的 145 条报名 vs 官方 27-29 项目表 → **145/145 全对**
+
+用 `27-29-events`（PV November Open 官方 `.ev3`，89 个项目行）校验我们自己的 `.CL2`：
+
+```
+matched = 145   unmatched = 0
+```
+
+包括年龄码的翻译都对得上：
+
+| `.CL2`（SDIF `EVENT AGE`） | `.ev3`（min-max） |
+|---|---|
+| `15OV` | 15-109 |
+| `1314` | 13-14 |
+
+**含义**：导出的报名与官方项目表在项目号、距离、泳姿、年龄组上完全一致——
+writer 的输入侧数据是可靠的，剩下要验证的只有「写出来的字节能不能被 MM 吃」。
+
+### 3.4 新发现：**年龄组结构是每个比赛自己定的**
+
+三个 Y 池比赛的年龄分区互不相同：
+
+| 比赛 | 年龄区间集合 |
+|---|---|
+| 27-41 RMSC | 0-10 / 11-12 / 13-14 / 15-109，外加合并组 0-12（12&U）与 0-109（Open） |
+| 27-29 PV Nov Open | **9-10** / 11-12 / 13-14 / 15-109（没有 Open、没有 0-8） |
+| 27-21 Loughmiller | **0-8** / 9-10 / 11-12 / **13-109**（13 岁及以上合并，没有 13-14/Open 之分） |
+
+而 `src/utils/meetEligibility.js` 目前把标签**写死**成 PVS-27-41 的那套
+（`ageGroupForMeetAge` → `'10&U' / '11-12' / '13-14' / 'Open'`，
+`enterableGroupsForAgeGroup` 只认这几个 + `'12&U'`）。
+换成 27-21 的 `0-8` / `13-109` 就会全部匹配不上——**报不了名，或报错项目**。
+
+另有一个已存在的坑：27-41 里 `15-109` 既对上 `13-14` 又对上 `Open`（1650/1000 自由泳共用项目号的合并行），
+说明**按标签匹配本身就不可靠**。
+
+---
+
+## 4. 数据库现状（2026-10-29 实测）
+
+```
+meets: 7 场，只有 Riley Eaton (vkDgi3WA3w8AgEbkq5Li) 有 events=152 / sessions=10
+       其余（含 Loughmiller 11/6、PV November Open 11/13）只有名字和日期，events=0
+entries: 全部 0        ← 报名功能已上线，但生产环境还没人报过
+registrations: 46 家 / 64 名泳手 / 32 人有 USA Swimming ID
+swimResults: 32 份，全部有 bestTimes   ← 正好对应那 32 个有 ID 的人
+usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线且鉴权生效）
+```
+
+**含义**：① 不能"用库里数据复现 11/13"（库里没有那场的报名）；② 实际可报人群是那 32 人，
+另外 32 人没有 USA ID；③ 成绩自动抓取的链路是活的，但用之前要教练贴一次 Data Hub cookie（8 小时寿命）。
+
+---
+
+## 5. 设计要点（评估过程中定下来的）
+
+1. **seed time 必须在导出时重算，不能用提交时的快照**。
+   现在 `entries.events[].seedTime` 是家长提交那一刻的值。11/6、11/13 两场之后成绩会刷新，
+   照快照导出 = 带旧成绩（排道次吃亏，达标/bonus 判定也会错）。
+   → 导出流程：先跑 Data Hub 增量 → 逐条重解析最新 PB → 显示"有 N 人成绩刷新"→ 再生成文件。
+   家长确认稿同样用重算后的成绩，避免确认与实际提交不一致。
+2. **达标 / bonus 也要在导出时重判**，不能沿用报名时的结论。
+3. **`Z0` 结束记录要填统计**（规范 `44/3` B 记录数、`50/4` C 记录数、`58/6` D 记录数、
+   `64/6` 不同泳手数等），导出的自校验可以拿它当断言。
+4. **只有 `confirmed` 的进导出**；缺 seed time 的、没有 ID 的整条列出来（`docs/meet-entries.md` §3.3）。
+5. **生成的文件仍要打包成 zip** 发给主办方（TM 导出的就是一个含 `.cl2`+`.hy3` 的 zip）。
+6. **年龄组改成"按数值区间匹配"，不再按标签匹配**（见 §3.4）。
+   现成的 `(min,max)` 就在 `.ev3` 每个项目行里；判据用 `min <= age <= max`，
+   标签只做显示。这样换任何一场比赛都不用改代码，也顺手解决 27-41 合并行的老问题。
+
+---
+
+## 6. 未决事项
+
+1. **接力今天到底怎么报的？** —— 我们两场历史导出件里**一条接力记录都没有**
+   （`.CL2` 无 `E0`/`F0`，`.HY3` 无接力记录段）。而 RMSC 那场有 32 行接力项目。
+   是另外发邮件 / 主办方系统里手工录 / 干脆没报？**这个答案决定接力那块是"复刻 TM"还是"从零设计"**。
+   补充（10/29）：手上 5 场赛事文件里只有 27-41 含接力（32 行），
+   27-21 / 27-29 / 27-20 / 27-31 全是 0 —— 接力样本只能从旧赛季或 RMSC 本身拿。
+2. 有没有别的场次（尤其带接力的）导出件可得？—— 教练暂时没有。
+3. 开工时间 —— 教练说"先别急"。
+
+---
+
+## 7. 分期与时间线（对着 RMSC 12/1 20:00 ET 截止倒推）
+
+| 阶段 | 内容 | 估计 |
+|---|---|---|
+| 一 | `.ev3` 导入器（替换 PDF 解析）+ 录入工作表 CSV + 家长确认稿打印页 | 1.5–2 天 |
+| 二 | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | 2–3 天 |
+| 三 | 接力 `E0`/`F0`（前提：§6.1 有答案） | 1 天 |
+
+| 时间 | 门 | 内容 |
+|---|---|---|
+| 11/10 前 | Gate A | 阶段一完成 |
+| 11/10 前 | Gate A2 | 阶段二完成，回归比对通过 |
+| 11/17 前 | Gate B | 用刷新后的成绩生成 RMSC 草稿 → 发主办方试导入 |
+| 11/25 前 | Gate C | 家长确认回收、教练最终确认、正式导出 |
+| 12/1 20:00 | Gate D | 提交截止 |
+
+**试导入邮件必须写明**「新流程生成的首份文件，请确认能否正常导入，最终版以 12/1 前提交为准」——
+否则容易被当正式报名，改起来还可能踩 RMSC「手动报名加收 $50」那条。
+
+---
+
+## 8. 相关代码位置
+
+| 内容 | 位置 |
+|---|---|
+| 报名数据处理（纯函数，445 行） | `src/utils/meetEligibility.js`（`buildBestTimesIndex` / `evaluateEvent` / `validateSelection`） |
+| 报名弹窗 | `src/components/meetEntries.js` |
+| 赛程 PDF 解析（拟被 `.ev3` 导入器取代） | `execution/meet-entry/parse_pvs_meet_pdf.py` |
+| 写 meet 到 Firestore | `execution/data-admin/add_meet.mjs --from-json` |
+| TM 报名报告 PDF 解析（已有，自带人数自校验） | `execution/meet-entry/extract_hytek_entries.py` |
+| CSV 工具 | `src/utils/csv.js` |
+| 推荐新增 | `src/utils/meetEntryExport.js`（组行/校验/CSV/SDIF 文本）、`src/pages/meet-print.html` + `.js`（独立 Vite entry） |
+
+### 8.1 本次评估用的临时脚本（在 `.tmp`，可删可重跑）
+
+```
+.tmp/meet-entry/db-audit.cjs                     # 只读盘点 meets/entries/swimResults
+.tmp/meet-entry/27-41-events/crosscheck3.cjs     # ev3 vs events.json 严格比对
+.tmp/meet-entry/hytek-sample/sdif-verify.cjs     # 按 SDIF 字段表解析 .CL2
+.tmp/meet-entry/hytek-relay-sample/analyze.cjs   # 记录类型统计 / 找接力记录
+```
+
+---
+
+## 9. 出处
+
+| 内容 | 链接 |
+|---|---|
+| SDIF v3 规范全文（1998-04-28） | https://www.usms.org/admin/sdifv3f.txt |
+| Hy-Tek：MM 导出赛事文件给 TM（`.ev3`/`.hyv`） | https://hytek.active.com/user_guides_html/swmm8/exporteventfortm.htm |
+| Hy-Tek：TM 导出报名（一个 zip 内含 `.cl2`+`.hy3`） | https://hytek.active.com/User_Guides_HTML/SwTM8/HTML/exportmeetentries.htm |
+| Hy-Tek：MM 支持的导入格式（含其他厂商的 SD3） | https://hytek.active.com/user_guides_html/swmm6/exportimport.htm |
+| PVS 赛事文件下载根 | https://www.files.pvswim.org/ |
+
+---
+
+## 10. 已落地（2026-10-29）
+
+阶段一 + 阶段二的口径改造完成。**没有动 `dashboard.js` / `meetEntries.js` 的界面逻辑**，
+线上行为由单测锁死。
+
+### 10.1 新增工具：`.ev3` 赛程导入器
+
+`execution/meet-entry/parse_hytek_events.py`
+
+```powershell
+python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.zip `
+    -o .tmp/meet-entry/27-41/events-ev3.json `
+    --sessions-from .tmp/meet-27-41/events.json `
+    --deadline "2026-12-01T20:00:00-05:00"
+```
+
+回归结果（对照 PDF 解析出来的线上数据）：
+
+```
+152 行 → 150 行完全一致,2 行差异正好是 §3.1 里那 2 行 LCM 错位
+场次 10 条逐字段一致(含决赛场次;.ev3 里没有决赛的场次号,已标 _noEntries)
+元数据:日期/地点/赛季/费用/限额/达标期/定龄日 全对
+```
+
+三场实测都能解析：27-41（152 行，有达标线）、27-29（89 行，整场无达标线 + 32 行混合项目）、
+27-21（118 行，整场无达标线 + `0-8`/`13-109` 分区）。
+
+**过程中踩到并写进代码的四个坑**（都在脚本注释里）：
+
+1. `.ev3` 的 `field[21]` 是**整场赛程里的场次序号**，不是"第几个预赛场次"——27-41 只有
+   1,2,3,5,6,8,9（缺的 4/7/10 是决赛）。按出现顺序重编号会让整个场次表错位。
+2. 性别码有三套：`W/M`、`G/B`，还有 `F` 和 `X`（混合项目）。漏掉 `X` 会静默丢掉 27-29 的
+   32 行混合项目。
+3. `openToAll` **不能只按数字推**：PVS 的 Open 组编码成 `15-109`（对任何年龄开放），
+   而 Loughmiller 的 `13-109` 真是"13 岁及以上"。判据是"下限 0 或 15 + 上限 ≥100"。
+4. 达标期起点 `01/01/1970` 是 Hy-Tek 的"没有达标期"哨兵值 → 归一成 `null`。
+
+### 10.2 改动：年龄组改数值匹配
+
+`src/utils/meetEligibility.js` 新增 `groupLabelForAge()` / `isEventEnterable()`：
+
+- 有 `ageMin`/`ageMax` → **数值区间判断**（`openToAll` 的行任何年龄都能报）
+- 没有（线上现有文档）→ 回退到旧的标签白名单 `enterableGroupsForAgeGroup()`
+- `gender:"X"` 的混合项目对男女都可见
+- `buildMeetOptions()` 的本组标签改为从**本场比赛自己的分区**取
+
+`execution/data-admin/add_meet.mjs` 的 gender 校验放开到 `F/M/X`。
+
+单测从 84 条扩到 **106 条**（`tests/unit/verify-meet-eligibility.mjs` 新增 §12/§13），
+其中一条是**等价性断言**：同一个人、同一批项目，走数值区间和走旧标签必须得到
+**完全相同的可选项目集合** —— 这条保证这次改造没有改变线上行为。
+
+### 10.3 年龄口径已从原始文件核实
+
+27-41 赛程单正文原文：
+
+> "Swimmers will compete at the age attained on the first day of the meet."
+
+`.ev3` 的 `field[4]` 就是这个定龄日（27-41 / 27-29 / 27-21 / 27-31 四场实测都等于起始日）。
+代码读该字段而非假定首日；`ageDeterminedOn` 与首日不同时会打印提示。
+
+### 10.4 已写入生产（2026-10-29）
+
+新增 `add_meet.mjs --events-only`（只写报名相关字段，不动 name/location/sourceUrl/status 等），
+然后对三场各做一次 `--events-only --update`：
+
+| docId | 比赛 | 写入结果 |
+|---|---|---|
+| `vkDgi3WA3w8AgEbkq5Li` | 27-41 Riley Eaton | events 152 行**全部带上 `ageMin/ageMax/openToAll`**；**修掉那 2 行 LCM 错位** |
+| `CxNNkcs5kVYJlDpGeqyN` | 27-21 Loughmiller | events 118 行 / sessions 6 条（日期空） |
+| `uFRYpTA9ujFT2DuslBYo` | 27-29 Nov Open | events 89 行 / sessions 7 条（日期空） |
+
+修复前后（27-41，12&U 500 自）：
+
+```
+#3 女  LCM 5:25.99 → 5:29.99      #4 男  LCM 5:23.99 → 5:27.99
+```
+
+**没动的**：name / location / sourceUrl / status / startDate / endDate / season。
+两场过期比赛的库内名字与场地比 `.ev3` 准确（27-21 有具体场馆楼栋、27-29 的 `.ev3` 是
+"add your facility" 占位符），所以只用 `--events-only` 补项目表，不覆盖元数据。
+
+**家长侧仍然是关闭的**：三场都没有 `entriesOpenToFamilies` 字段，
+`renderSwimMeets()` 的开关逻辑（`canEnter || m.entriesOpenToFamilies === true`）对家长恒为 false。
+27-21 / 27-29 的场次没有日期（`.ev3` 不含日历），它们的 `maxPerDay` 实际上无法校验 ——
+所以**这两场只能当回归夹具，不要开给家长**；它们本身也已过期（10/26、10/30 截止）。
+
+**端到端冒烟（只读，线上数据）**：拿 32 名有 USA ID 的泳手跑三场，
+
+```
+27-41   13 岁 → group=13-14, 本组 17 项 / Open 17 项 / 接力 10 项
+27-21   13 岁 → group=13&O , 本组 15 项 / Open  0 项          ← 与 PVS 的区别生效
+27-29   12 岁 → group=11-12, 本组 15 项 / Open 14 项（含混合项目）
+```
+
+### 10.5 还没做的
+
+- 阶段三（导出组行 / CSV / 确认稿 / SDIF writer）——按 §7 的顺序在 Gate A2 之后
+- 接力：仍卡在"今天怎么报的"这个信息上
+

@@ -91,9 +91,15 @@ export function ageOnDate(dob, onDate) {
 }
 
 /**
- * Age → the age group label used by PVS entry tables.
- * Returns 'Open' for 15+, which is how this meet's table is organised
- * (there is no 15-16 / 17-18 split).
+ * 本项目自己的年龄组标签约定(仅用于显示与老数据兜底)。
+ *
+ * 新数据(.ev3 导入)优先用 `groupLabelForAge()` 从**比赛自己的区间**取标签,
+ * 因为每场比赛的年龄分区都不一样:
+ *   27-41  RMSC        10&U / 11-12 / 12&U / 13-14 / Open(15-109 编码)
+ *   27-29  PV Nov Open 9-10 / 11-12 / 13-14 / Open
+ *   27-21  Loughmiller 8&U / 9-10 / 11-12 / 13&O(13-109,不分 13-14/Open)
+ * 把标签写死会让后两场比赛完全报不了名 —— 所以判断一律走数值区间
+ * (`isEventEnterable`),这个函数只在文档缺 `ageMin`/`ageMax` 时生效。
  */
 export function ageGroupForMeetAge(age) {
   if (age == null || !Number.isFinite(age)) return null;
@@ -104,11 +110,45 @@ export function ageGroupForMeetAge(age) {
 }
 
 /**
- * Which table age groups a swimmer may enter.
- * 10&U / 11-12 swimmers may also enter the combined "12&U" events, and every age
- * may enter "Open" events (the sanction says "own age group events or in open
- * events which are open to all ages"). Open rows are flagged `isOpenGroup` so the
- * UI can park them in a collapsed, never-preselected section (decision 2026-10-28).
+ * 该年龄在本场比赛里属于哪个组 → 用于显示的标签。
+ *
+ * 取**包含该年龄、最窄的那个非开放区间**的标签(例:27-41 的 10 岁同时落在
+ * 10&U(0-10) 与 12&U(0-12) 里,取更窄的 `10&U`)。没有任何区间命中时
+ * (例如 15+ 只对上 Open,而 Open 是 open-to-all、不算"本组")回退到旧约定。
+ */
+export function groupLabelForAge(age, events = []) {
+  if (age == null || !Number.isFinite(age)) return null;
+  const hits = [];
+  for (const e of events || []) {
+    if (!Number.isFinite(e?.ageMin) || !Number.isFinite(e?.ageMax)) continue;
+    if (e.openToAll === true) continue;
+    if (age < e.ageMin || age > e.ageMax) continue;
+    hits.push({ label: e.ageGroup, span: e.ageMax - e.ageMin, min: e.ageMin });
+  }
+  if (!hits.length) return ageGroupForMeetAge(age);
+  hits.sort((a, b) => a.span - b.span || b.min - a.min);
+  return hits[0].label;
+}
+
+/**
+ * 这个年龄能不能报这一行项目。
+ *
+ * 新数据(带 `ageMin`/`ageMax`,来自 `.ev3` 导入)→ **按数值区间判断**:
+ *   `ageMin <= age <= ageMax`,或该行标了 `openToAll`(赛程单原文
+ *   "open events which are open to all ages")。
+ * 老数据(没有区间,只有标签)→ 回退到原来的标签白名单,保证线上已有文档不变。
+ */
+export function isEventEnterable(event, { age, ageGroup } = {}) {
+  const hasRange = Number.isFinite(event?.ageMin) && Number.isFinite(event?.ageMax);
+  if (!hasRange) return enterableGroupsForAgeGroup(ageGroup).includes(event?.ageGroup);
+  if (event.openToAll === true) return true;
+  if (age == null || !Number.isFinite(age)) return false;
+  return age >= event.ageMin && age <= event.ageMax;
+}
+
+/**
+ * 旧标签白名单,**只在文档没有数值区间时使用**(以及单测里保留的约定)。
+ * 10&U / 11-12 可报合并的 12&U;任何年龄可报 Open。
  */
 export function enterableGroupsForAgeGroup(ageGroup) {
   if (!ageGroup) return [];
@@ -239,8 +279,11 @@ export function evaluateEvent(event, bestIndex) {
 export function buildMeetOptions({ meet, swimmer, bestTimes }) {
   const meetDate = meet?.ageDeterminedOn || meet?.startDate;
   const age = ageOnDate(swimmer?.dob, meetDate);
-  const ageGroup = ageGroupForMeetAge(age);
   const gender = genderKeyOf(swimmer?.gender);
+  const meetEvents = meet?.events || [];
+  // 标签优先取"本场比赛自己的分区"(见 groupLabelForAge),这三场比赛的
+  // 分区各不相同,不能用写死的那套。
+  const ageGroup = groupLabelForAge(age, meetEvents);
   const bestIndex = buildBestTimesIndex(bestTimes, { qualifyingPeriodStart: meet?.qualifyingPeriodStart });
   const sessions = new Map((meet?.sessions || []).map((s) => [s.id, s]));
 
@@ -251,9 +294,10 @@ export function buildMeetOptions({ meet, swimmer, bestTimes }) {
   if (age == null) blocked.push('no-dob');
   if (!gender) blocked.push('no-gender');
 
-  const groups = enterableGroupsForAgeGroup(ageGroup);
-  const rows = (meet?.events || [])
-    .filter((e) => e.gender === gender && groups.includes(e.ageGroup))
+  const rows = meetEvents
+    // 'X' = 混合项目(mixed):男女都能报(27-29 有 32 行这种)
+    .filter((e) => (e.gender === gender || e.gender === 'X')
+      && isEventEnterable(e, { age, ageGroup }))
     .map((e) => {
       const session = sessions.get(e.sessionId) || null;
       return {
@@ -268,7 +312,8 @@ export function buildMeetOptions({ meet, swimmer, bestTimes }) {
         sessionLabel: session ? `${session.day} ${session.start || ''}`.trim() : '',
         label: `${e.distance} ${STROKE_NAMES[e.stroke] || e.stroke}`,
         standards: e.standards || {},
-        isOpenGroup: e.ageGroup === 'Open',
+        // open-to-all 的组(赛程单原文)一律折进折叠区、永不预选
+        isOpenGroup: e.openToAll === true || e.ageGroup === 'Open',
         ...evaluateEvent(e, bestIndex),
       };
     });

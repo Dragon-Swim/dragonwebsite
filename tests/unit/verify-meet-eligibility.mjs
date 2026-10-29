@@ -13,6 +13,7 @@ import {
   ageGroupForMeetAge, enterableGroupsForAgeGroup, buildBestTimesIndex,
   genderKeyOf, evaluateEvent, buildMeetOptions, bonusAllowance,
   isPastDeadline, validateSelection, entryDocId, groupOptionsByDay,
+  groupLabelForAge, isEventEnterable,
 } from '../../src/utils/meetEligibility.js';
 
 let pass = 0;
@@ -227,5 +228,98 @@ check('keeps session buckets', days[0].sessions.size === 2, [...days[0].sessions
 check('afternoon bucket holds the four 11-12 rows', days[0].sessions.get('fri-pm')?.options.length === 4, days[0].sessions.get('fri-pm')?.options.length);
 check('morning bucket holds the Open row', days[0].sessions.get('fri-am')?.options.length === 1);
 
+// ── 12. 每场比赛自己的年龄分区(2026-10-29 起由 .ev3 导入) ────────────────
+// 三场比赛的分区互不相同,标签写死就会漏报/错报。数据取自真实的 .ev3:
+//   27-21 Loughmiller  0-8 / 9-10 / 11-12 / 13-109   ← 13 岁及以上合并,没有 Open
+//   27-29 PV Nov Open  9-10 / 11-12 / 13-14 / 15-109(Open)  + 混合项目(X)
+//   27-41 RMSC         0-10 / 0-12 / 11-12 / 13-14 / 15-109(Open)
+console.log('12. per-meet age ranges (.ev3 import)');
+
+// 造一行 .ev3 风格的项目(数值区间 + openToAll)
+const mkEvent = (o) => ({
+  relay: false, sessionId: 's1', standards: { SCY: null, LCM: null }, openToAll: false, ...o,
+});
+
+const LOUGHMILLER = {
+  name: 'FXFX Loughmiller', startDate: '2026-11-06', ageDeterminedOn: '2026-11-06',
+  limits: { maxEvents: 9, maxPerDay: 3 },
+  sessions: [{ id: 's1', date: '2026-11-06', day: 'Fri', start: '7:30 AM' }],
+  events: [
+    mkEvent({ eventNo: 1, gender: 'F', ageGroup: '8&U', ageMin: 0, ageMax: 8, distance: 100, stroke: 'FR' }),
+    mkEvent({ eventNo: 11, gender: 'F', ageGroup: '9-10', ageMin: 9, ageMax: 10, distance: 50, stroke: 'FR' }),
+    mkEvent({ eventNo: 21, gender: 'F', ageGroup: '11-12', ageMin: 11, ageMax: 12, distance: 50, stroke: 'FR' }),
+    mkEvent({ eventNo: 31, gender: 'F', ageGroup: '13&O', ageMin: 13, ageMax: 109, distance: 50, stroke: 'FR' }),
+    mkEvent({ eventNo: 41, gender: 'F', ageGroup: '13&O', ageMin: 13, ageMax: 109, distance: 100, stroke: 'BR' }),
+  ],
+};
+
+const kid8 = { dob: '2018-05-01', gender: 'female', usaSwimmingId: 'CCCC3333' };
+const ctx8 = buildMeetOptions({ meet: LOUGHMILLER, swimmer: kid8, bestTimes: [] });
+check('8 岁只看到 8&U(1 项)', ctx8.individual.length === 1 && ctx8.individual[0].ageGroup === '8&U',
+  ctx8.individual.map((o) => o.ageGroup));
+check('8 岁的本组标签是 8&U', ctx8.ageGroup === '8&U', ctx8.ageGroup);
+check('13&O 不是开放组 —— 8 岁看不到', !ctx8.individual.some((o) => o.ageGroup === '13&O'));
+
+const kid14 = { dob: '2012-05-01', gender: 'female', usaSwimmingId: 'DDDD4444' };
+const ctx14 = buildMeetOptions({ meet: LOUGHMILLER, swimmer: kid14, bestTimes: [] });
+check('14 岁的本组标签是 13&O', ctx14.ageGroup === '13&O', ctx14.ageGroup);
+check('14 岁看到 2 项 13&O', ctx14.individual.length === 2 && ctx14.individual.every((o) => o.ageGroup === '13&O'),
+  ctx14.individual.map((o) => o.ageGroup));
+check('14 岁看不到 8&U/9-10/11-12', !ctx14.individual.some((o) => ['8&U', '9-10', '11-12'].includes(o.ageGroup)));
+
+const NOV = {
+  name: 'PV November Open', startDate: '2026-11-13', ageDeterminedOn: '2026-11-13',
+  limits: { maxEvents: 8, maxPerDay: 3 },
+  sessions: [{ id: 's1', date: '2026-11-13', day: 'Fri', start: '6:00 PM' }],
+  events: [
+    mkEvent({ eventNo: 1, gender: 'F', ageGroup: '9-10', ageMin: 9, ageMax: 10, distance: 200, stroke: 'BR' }),
+    mkEvent({ eventNo: 1, gender: 'F', ageGroup: '11-12', ageMin: 11, ageMax: 12, distance: 200, stroke: 'BR' }),
+    mkEvent({ eventNo: 3, gender: 'X', ageGroup: '9-10', ageMin: 9, ageMax: 10, distance: 200, stroke: 'FR' }),
+    mkEvent({ eventNo: 30, gender: 'X', ageGroup: '11-12', ageMin: 11, ageMax: 12, distance: 100, stroke: 'BR' }),
+    mkEvent({ eventNo: 50, gender: 'X', ageGroup: 'Open', ageMin: 15, ageMax: 109, distance: 50, stroke: 'FR', openToAll: true }),
+  ],
+};
+const nov11 = { dob: '2015-03-01', gender: 'female', usaSwimmingId: 'EEEE5555' };
+const ctxNov = buildMeetOptions({ meet: NOV, swimmer: nov11, bestTimes: [] });
+check('11 岁在 Nov Open:本组 11-12', ctxNov.ageGroup === '11-12', ctxNov.ageGroup);
+check('混合项目(X)两个性别都能报', ctxNov.individual.some((o) => o.eventNo === 30 && o.ageGroup === '11-12'),
+  ctxNov.individual.map((o) => `${o.eventNo}|${o.ageGroup}`));
+check('9-10 的混合项目不会漏给 11 岁', !ctxNov.individual.some((o) => o.ageGroup === '9-10'),
+  ctxNov.individual.map((o) => o.ageGroup));
+check('Open(openToAll)对 11 岁开放但折叠', ctxNov.individual.some((o) => o.isOpenGroup === true));
+
+// 同一个人、同一批项目:数值区间版必须与旧的标签版给出**完全相同**的可选集合,
+// 否则这次改造就等于改了线上行为。
+const MEET_NUMERIC = {
+  ...MEET,
+  events: MEET.events.map((e) => {
+    const ranges = { '10&U': [0, 10], '12&U': [0, 12], '11-12': [11, 12], '13-14': [13, 14], Open: [15, 109] };
+    const [ageMin, ageMax] = ranges[e.ageGroup] || [0, 109];
+    return { ...e, ageMin, ageMax, openToAll: e.ageGroup === 'Open' };
+  }),
+};
+const numericCtx = buildMeetOptions({ meet: MEET_NUMERIC, swimmer: girl12, bestTimes: BEST_TIMES });
+const idsOf = (c) => c.individual.map((o) => o.eventNo).sort((a, b) => a - b).join(',');
+check('数值区间路径与标签路径的可选项目集合完全一致', idsOf(numericCtx) === idsOf(ctx), [idsOf(numericCtx), idsOf(ctx)]);
+check('数值区间路径的合格数也一致', numericCtx.qualifiedCount === ctx.qualifiedCount, [numericCtx.qualifiedCount, ctx.qualifiedCount]);
+check('数值区间路径仍然把 Open 折进折叠区', numericCtx.individual.filter((o) => o.isOpenGroup).map((o) => o.eventNo).join() === '21');
+
+// 老文档(没有 ageMin/ageMax)继续走标签白名单,不能被新逻辑弄坏
+check('老文档无区间时回退到标签判断', isEventEnterable({ ageGroup: '12&U' }, { age: 12, ageGroup: '11-12' }) === true);
+check('老文档无区间时该挡的照样挡', isEventEnterable({ ageGroup: '13-14' }, { age: 12, ageGroup: '11-12' }) === false);
+check('有区间时数值优先:16 岁进不了 13-14', isEventEnterable({ ageGroup: '13-14', ageMin: 13, ageMax: 14, openToAll: false }, { age: 16, ageGroup: 'Open' }) === false);
+check('openToAll 行任何年龄都能报', isEventEnterable({ ageMin: 15, ageMax: 109, openToAll: true }, { age: 9, ageGroup: '10&U' }) === true);
+
+// ── 13. 年龄按"比赛第一天"算(赛程单原文: age attained on the first day of the meet) ──
+console.log('13. age is taken on the first day of the meet');
+// 2014-12-15 出生:2026-12-10 首日还是 11 岁,12-20 之后才算 12 岁
+const lateBirthday = { dob: '2014-12-15', gender: 'female', usaSwimmingId: 'FFFF6666' };
+check('首日 12/10 -> 11 岁', ageOnDate(lateBirthday.dob, '2026-12-10') === 11);
+check('首日若在 12/15 之后 -> 12 岁', ageOnDate(lateBirthday.dob, '2026-12-20') === 12);
+check('分组按 11 岁拿 11-12', groupLabelForAge(11, MEET_NUMERIC.events) === '11-12', groupLabelForAge(11, MEET_NUMERIC.events));
+check('ageDeterminedOn 决定分组,不是"今天"', buildMeetOptions({ meet: { ...MEET_NUMERIC, ageDeterminedOn: '2026-12-10' }, swimmer: lateBirthday, bestTimes: [] }).ageGroup === '11-12');
+check('同一孩子换到 12/20 定龄就成了 12 岁 11-12 组', buildMeetOptions({ meet: { ...MEET_NUMERIC, ageDeterminedOn: '2026-12-20' }, swimmer: lateBirthday, bestTimes: [] }).age === 12);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
+
