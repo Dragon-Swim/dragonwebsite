@@ -5191,6 +5191,10 @@ function collectEntrySwimmers(meet) {
       familyId,
       usaId: String(s.usaSwimmingId || '').trim().toUpperCase(),
       name: [s.firstName, s.lastName].filter(Boolean).join(' ').trim(),
+      // Kept apart as well as joined: the SDIF relay records want "Last, First MI"
+      // and splitting the joined name back apart guesses at compound surnames.
+      firstName: s.firstName || '',
+      lastName: s.lastName || '',
       dob: s.dob || '',
       gender: s.gender || '',
       age,

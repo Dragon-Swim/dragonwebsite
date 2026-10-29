@@ -36,6 +36,7 @@ import {
   entryDocId, formatSwimSeconds, groupOptionsByDay,
 } from '../utils/meetEligibility.js';
 import { t } from '../utils/i18n.js';
+import { openRelayEntries } from './relayEntries.js';
 
 const STATUS_KEYS = {
   draft: 'meet_entries_status_draft',
@@ -523,7 +524,11 @@ function footerHtml() {
     // Two different deliverables: per-family confirmation sheets (one household
     // per page, with a signature block) and the whole-team report in the layout
     // families already know (FEMALE / MALE, surname order).
+    const relayBtn = isCoach()
+      ? `<button type="button" class="btn btn-outline btn-sm" data-action="relays">${esc(t('meet_entries_relays_btn'))}</button>`
+      : '';
     return `<span class="me-footer-note">${esc(t('meet_entries_footer_list'))}</span>`
+      + relayBtn
       + printLink('', t('meet_entries_print_all'))
       + printLink('&group=sex', t('meet_entries_print_team'));
   }
@@ -639,6 +644,17 @@ function onClick(e) {
   const action = btn.dataset.action;
 
   if (action === 'back') { state.view = 'list'; state.ctx = null; paint(); return; }
+  if (action === 'relays') {
+    // Relays are club data with their own collection, so they get their own
+    // component. Close this modal first: two stacked overlays would share the
+    // same backdrop and the second could never be closed by clicking outside.
+    const meet = state.meet;
+    const swimmers = state.swimmers;
+    const actorId = state.actorId;
+    closeMeetEntries();
+    openRelayEntries({ meet, swimmers, actorId });
+    return;
+  }
   if (action === 'edit') {
     const sw = state.swimmers.find((s) => s.usaId === btn.dataset.usa);
     if (sw) openSwimmer(sw);

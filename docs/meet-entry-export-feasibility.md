@@ -194,7 +194,7 @@ usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线�
 | **B 导出准备** | 组行 + **成绩重算** + 校验 + 工作表 CSV | ✅ 2026-10-29 完成（见 §10.5） |
 | **C 确认稿** | 给家长的打印页（独立 Vite entry + 浏览器打印） | ✅ 2026-10-29 完成（见 §10.6） |
 | **D 入队文件** | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | ✅ 2026-10-29 完成（见 §10.9；4602 字段仅 2 处非数据差异） |
-| **E 接力** | `E0`/`F0` | 🟡 格式/模型/导出完成（§10.11）；教练端选人界面待做 |
+| **E 接力** | `E0`/`F0` + 教练端点选 | ✅ 2026-10-29 完成（§10.11 格式/模型/导出，§10.12 界面） |
 
 | 时间 | 门 | 内容 |
 |---|---|---|
@@ -531,3 +531,23 @@ node execution/meet-entry/export_cl2.mjs --meet <docId>            # 写到 .tmp
 
 **还剩**：教练端选人界面（E2）。数据、校验、导出、单测（`verify-relay-entry.mjs` 40 条）都在了。
 单测总入口现为 10 个脚本全绿。
+
+### 10.12 阶段 E2：教练端选人界面
+
+`src/components/relayEntries.js`（body 级弹窗，理由同报名弹窗：`#app` 每次快照重建）。
+
+- 入口：Entries 弹窗名单视图底部 `🏊 Relays`（教练专属）
+- 只列接力项目，每项给 `relayLimitPerClub` 个队位（A/B/C…），已有队显示姓氏链 + Edit
+- 编辑：4 个下拉（按性别/年龄区间过滤候选）+ 接力成绩；**下拉位次 = 棒次**
+- 边选边校验（红字），4 棒不齐或有人重复 → 保存被拒，不写库
+- 家庭看不到（规则层也不给家长写 `relayEntries`）
+
+**规则变更**：`firestore.rules` 新增 `meets/{meetId}/relayEntries/{relayId}`：
+`read` 全员、`create/update/delete` 教练与管理员。删权限给教练（不像个人报名只给 admin）——
+接力队是教练的决定，教练必须能撤。
+
+**E2E**：`tests/relay-entries.spec.js` 3 个用例 —— 建队且**棒次顺序写入正确**（故意不按姓氏排）、
+3 棒/重复被拒且库里没有文档、家庭看不到入口。
+
+**顺手修的一个坑**：接力样式本该加进 `src/pages/dashboard.css`，我误建了 `src/styles/dashboard.css`
+（真文件是 `pages/`）。已挪正并删掉误建文件 —— 记一笔，别再被同名文件骗。

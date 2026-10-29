@@ -2380,3 +2380,155 @@ input[readonly].profile-edit-field {
 .me-open .me-row {
     margin-top: 0.35rem;
 }
+
+/* ── Relay line-ups (src/components/relayEntries.js) ──────────────────────
+   Reuses the meet-entries overlay/modal/header/body/footer classes so the two
+   coach panels look identical; only the relay-specific bits live here. */
+
+.mr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.mr-table th {
+  text-align: left;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light, #6b7280);
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.mr-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border-color, #f1f3f5);
+  vertical-align: top;
+}
+
+.mr-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.mr-event strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.mr-event .me-sub {
+  display: block;
+  margin-top: 2px;
+}
+
+.mr-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.mr-squad {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 999px;
+  background: var(--surface-2, #f8fafc);
+}
+
+.mr-squad-letter {
+  font-weight: 700;
+  font-size: 0.78rem;
+  width: 1.1rem;
+  text-align: center;
+  color: var(--accent, #1f6feb);
+}
+
+.mr-squad-names {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Editor */
+
+.mr-editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.mr-legs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.7rem;
+}
+
+.mr-leg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.mr-leg-no {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light, #6b7280);
+}
+
+.mr-leg select,
+.mr-seed input {
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+
+.mr-seed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.8rem;
+  max-width: 12rem;
+}
+
+.mr-seed span {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light, #6b7280);
+}
+
+.mr-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.9rem;
+}
+
+.mr-errors .me-error {
+  font-size: 0.85rem;
+  color: #b42318;
+}
+
+.mr-ok {
+  font-size: 0.85rem;
+  color: #15704a;
+}
+
+@media (max-width: 640px) {
+  .mr-squad-names {
+    max-width: 9rem;
+  }
+  .mr-slots {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+

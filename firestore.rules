@@ -162,6 +162,22 @@ service cloud.firestore {
 
         allow delete: if isAdmin();
       }
+
+      // ── relay line-ups — one doc per squad per relay event ─────
+      // docId = `${eventCode}__${letter}` (see src/utils/relayEntry.js).
+      //
+      // A relay belongs to the CLUB, not to a family, so there is deliberately no
+      // family-scoped write path here: a parent must not be able to put their own
+      // child on a relay. Coaches write; every signed-in user may read, because
+      // the team report that goes out to families lists the squads.
+      //
+      // Delete is open to coaches too (unlike individual entries, which are
+      // admin-only because they carry a family's own submission): a squad is a
+      // coaching decision, and the coach has to be able to withdraw one.
+      match /relayEntries/{relayId} {
+        allow read: if isAuth();
+        allow create, update, delete: if isCoachOrAdmin();
+      }
     }
 
     // ── sessionSlots — season practice slots (admin-managed, authenticated read) ─
