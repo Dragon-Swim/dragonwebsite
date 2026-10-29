@@ -520,8 +520,12 @@ function printLink(extra, label) {
 
 function footerHtml() {
   if (state.view === 'list') {
+    // Two different deliverables: per-family confirmation sheets (one household
+    // per page, with a signature block) and the whole-team report in the layout
+    // families already know (FEMALE / MALE, surname order).
     return `<span class="me-footer-note">${esc(t('meet_entries_footer_list'))}</span>`
-      + printLink('', t('meet_entries_print_all'));
+      + printLink('', t('meet_entries_print_all'))
+      + printLink('&group=sex', t('meet_entries_print_team'));
   }
   if (!state.ctx?.canEnter) {
     return `<button type="button" class="btn btn-outline btn-sm" data-action="back">${esc(t('meet_entries_back'))}</button>`;

@@ -34,7 +34,7 @@ import '../styles/meet-print.css';
 import {
   auth, db, onAuthStateChanged, doc, getDoc, getDocs, collection, query, where,
 } from '../utils/firebase.js';
-import { buildExportRows, summarizeExport, STATUS_LABELS } from '../utils/meetEntryExport.js';
+import { buildExportRows, summarizeExport, groupRowsBySwimmer, STATUS_LABELS } from '../utils/meetEntryExport.js';
 
 const root = document.getElementById('mp-root');
 
@@ -43,6 +43,11 @@ const MEET_ID = (params.get('meet') || '').trim();
 const FAMILY_PARAM = (params.get('family') || '').trim();
 const INCLUDE_ALL = params.get('status') === 'all';
 const AUTO_PRINT = params.get('print') === '1';
+// 'family' (default) = one confirmation sheet per household, with a signature block.
+// 'sex'              = the classic team-wide report: everyone under FEMALE / MALE,
+//                      each section sorted by surname. This is the file that goes
+//                      out to parents, because it is what they already know.
+const GROUP = params.get('group') === 'sex' ? 'sex' : 'family';
 const COACH_EMAIL = 'dragonswim@outlook.com';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => (
@@ -242,6 +247,95 @@ async function loadFamilyDocs(familyIds) {
   return map;
 }
 
+// ── team report (group=sex) ──────────────────────────────────────────────
+
+const COURSE_WORDS = { SCY: 'Yards', LCM: 'Long Course Meters', SCM: 'Short Course Meters' };
+
+/** A printed time: '36.60Y' / '1:11.03L', or 'NT' when there is nothing on file. */
+function timeText(row) {
+  if (row.state === 'missing' || !row.seedTimeText) return 'NT';
+  return `${row.seedTimeText}${row.courseLetter || ''}`;
+}
+
+/**
+ * One swimmer block, in the shape the families already recognise from Team
+ * Manager's report: "First Last (age)" followed by "#event / sex age distance
+ * stroke / time" lines.
+ */
+function reportSwimmer(swimmer) {
+  const lines = swimmer.events.map((row) => `<div class="mp-rep-event">
+        <span class="mp-rep-no">#${esc(row.eventNo)}</span>
+        <span class="mp-rep-label">${esc(row.eventSexLabel)} ${esc(row.ageGroup)} ${esc(row.eventLabel)}</span>
+        <span class="mp-rep-time">${esc(timeText(row))}</span>
+      </div>`).join('');
+  return `<div class="mp-rep-swimmer" data-swimmer="${esc(swimmer.usaSwimmingId || swimmer.swimmerName)}">
+    <div class="mp-rep-name">${esc(swimmer.swimmerName)}${swimmer.ageAtMeet != null ? ` (${esc(swimmer.ageAtMeet)})` : ''}</div>
+    ${lines}
+  </div>`;
+}
+
+function reportHead(meet) {
+  const courses = (meet.courses || []).map((c) => COURSE_WORDS[c] || c).join(' / ');
+  // HTML collapses runs of spaces, so the sanction/location separator has to be
+  // punctuation rather than padding (a double space silently disappears).
+  const bits = [
+    meet.sanction ? `Sanction: ${esc(meet.sanction)}` : '',
+    meet.location ? `Location: ${esc(meet.location)}` : '',
+  ].filter(Boolean).join(' &middot; ');
+  return `<header class="mp-head mp-head--report">
+    <div class="mp-brand">Dragon Swim Team</div>
+    <h1>Individual Meet Entries Report</h1>
+    <div class="mp-meet-name">${esc(meet.name || 'Meet')}
+      &nbsp;&nbsp;${esc(meetSpan(meet.startDate, meet.endDate))}${courses ? `&nbsp;&nbsp;${esc(courses)}` : ''}</div>
+    <div class="mp-meet-meta">
+      ${bits}${bits ? '<br />' : ''}Generated ${esc(stamp())}${meet.entryDeadline ? ` &middot; entries close ${esc(deadlineText(meet.entryDeadline))}` : ''}
+    </div>
+  </header>`;
+}
+
+/**
+ * The whole team, split FEMALE / MALE, each section by surname.
+ *
+ * Relays are deliberately absent: a relay entry belongs to the club, not to a
+ * swimmer, and we do not hold relay line-ups yet. Saying so out loud beats
+ * leaving parents to wonder why the 800 free relay is missing.
+ */
+function teamReportHtml(meet, rows) {
+  const individual = rows.filter((r) => !r.relay);
+  const relays = rows.filter((r) => r.relay);
+  const swimmers = groupRowsBySwimmer(individual); // already sorted by surname
+
+  const section = (title, list) => (list.length ? `<section class="mp-rep-section" data-section="${esc(title)}">
+      <h2 class="mp-rep-title">${esc(title)}</h2>
+      ${list.map(reportSwimmer).join('')}
+    </section>` : '');
+
+  const female = swimmers.filter((s) => s.gender === 'F');
+  const male = swimmers.filter((s) => s.gender === 'M');
+  const counts = (list) => list.reduce((n, s) => n + s.events.length, 0);
+
+  const empty = '<div class="mp-note">No entries to show for this meet yet.</div>';
+  const body = swimmers.length
+    ? `${section('FEMALE', female)}${section('MALE', male)}`
+    : empty;
+
+  const totals = swimmers.length ? `<div class="mp-rep-totals">
+      <div><span>Female IE's:</span><span>${counts(female)}</span></div>
+      <div><span>Male IE's:</span><span>${counts(male)}</span></div>
+      <div><span>Total IE's:</span><span>${counts(female) + counts(male)}</span></div>
+      <div><span>Total Athletes:</span><span>${swimmers.length}</span></div>
+    </div>` : '';
+
+  const relayNote = relays.length
+    ? '<div class="mp-note">Relay entries are arranged by the coach and are not listed per swimmer.</div>'
+    : '';
+
+  return `${body}${totals}${relayNote}
+    <div class="mp-report-note">
+      Sorted by surname within each section. Send any correction to the coach before the entry deadline.
+    </div>`;
+}
+
 // ── render ───────────────────────────────────────────────────────────────
 
 function statusCell(row) {
@@ -368,19 +462,26 @@ function meetHead(meet) {
 }
 
 function render({ meet, built, families, role }) {
-  const sheets = families.map((f) => familyBlock(f, meet)).join('');
-  const empty = '<div class="mp-note">No entries to show for this meet yet.</div>';
   const toolbar = `<div class="mp-toolbar">
       <button type="button" class="mp-print-btn">🖨 Print / Save as PDF</button>
-      <span class="mp-toolbar-note">Choose “Save as PDF” in the print dialog to email this to the family.</span>
+      <span class="mp-toolbar-note">Choose “Save as PDF” in the print dialog${GROUP === 'sex'
+        ? ' to email the team report to families.'
+        : ' to email this sheet to the family.'}</span>
     </div>`;
 
-  root.innerHTML = `${toolbar}
-    <div class="mp-sheet" data-meet="${esc(meet.id || MEET_ID)}">
-      ${meetHead(meet)}
-      ${role === 'coach' ? checkBox(built, meet, built.excluded) : ''}
-      ${families.length ? sheets : empty}
-    </div>`;
+  const body = GROUP === 'sex'
+    ? `<div class="mp-sheet mp-sheet--report" data-meet="${esc(meet.id || MEET_ID)}">
+        ${reportHead(meet)}
+        ${role === 'coach' ? checkBox(built, meet, built.excluded) : ''}
+        ${teamReportHtml(meet, built.rows)}
+      </div>`
+    : `<div class="mp-sheet" data-meet="${esc(meet.id || MEET_ID)}">
+        ${meetHead(meet)}
+        ${role === 'coach' ? checkBox(built, meet, built.excluded) : ''}
+        ${families.length ? families.map((f) => familyBlock(f, meet)).join('') : '<div class="mp-note">No entries to show for this meet yet.</div>'}
+      </div>`;
+
+  root.innerHTML = `${toolbar}${body}`;
 
   root.querySelector('.mp-print-btn')?.addEventListener('click', () => {
     try { window.print(); } catch { /* headless browsers have no print dialog */ }

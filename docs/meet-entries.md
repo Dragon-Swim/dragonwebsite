@@ -286,28 +286,67 @@ python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>
 16 列，每个单元格加引号，行尾 CRLF，文件带 UTF-8 BOM（否则 Excel 在中文 Windows 上会乱码）。
 其中 `Changed` 列专门放 `1:12.53 → 1:11.03` 这种前后对比，`Time source` 区分"我们的记录 / 手填"。
 
-### 6.5 家长确认稿（`meet-print.html`）
+### 6.5 打印/PDF：两种产物，一个页面（`meet-print.html`）
 
 独立 Vite 入口（`src/pages/meet-print.js` + `src/styles/meet-print.css` + 根目录 `meet-print.html`）。
-**不放进 dashboard**：`#app` 每次 Firestore 快照都会重建，确认稿在里面会被别的家庭一次保存冲掉——
+**不放进 dashboard**：`#app` 每次 Firestore 快照都会重建，稿件在里面会被别的家庭一次保存冲掉——
 和报名弹窗必须 body 级是同一个原因。
 
 ```text
-meet-print.html?meet=<id>                     教练:全队每家庭一页
+① 家庭确认稿（默认 group=family）
+meet-print.html?meet=<id>                     教练:全队每家庭一页(分页)
 meet-print.html?meet=<id>&family=<familyId>   教练:单个家庭
 meet-print.html?meet=<id>                     家长:只有自己家
 …&status=all                                   把 draft/submitted 也显示出来
-…&print=1                                      加载后自动弹打印框
+
+② 全队报名报告（group=sex）—— 发给家长的那一份
+meet-print.html?meet=<id>&group=sex           教练:女一区、男一区,各按姓氏排序
+…&print=1                                      加载后自动弹打印框(两种模式都支持)
 ```
+
+**① 家庭确认稿**（2026-10-29）
+
+- 每个家庭一页：孩子名字、年龄、项目、日期/场次、seed time + course、达标线、状态徽章、费用小计
+- 末尾签字栏（"I confirm these entries are correct…"）
+- **成绩刷新写在纸上**：导出时重算的 seed time 与提交时不同就出一行
+  「Times updated since you submitted: 50 Breast 38.50 → 36.60」
+
+**② 全队报名报告**（2026-10-30）
+
+照 Team Manager 那套版式做的，因为家长已经认这个形状：
+
+```
+Dragon Swim Team
+Individual Meet Entries Report
+Riley Eaton Holiday Invitational   10-Dec-26 to 13-Dec-26   Yards
+Sanction: PVI-27-41   Location: Germantown Indoor Swim Center
+FEMALE
+Alpha Chen (11)
+  #25   Female 11-12 50 Breast      36.60Y
+Zeta Chen (12) …
+MALE
+…
+Female IE's: 39   Male IE's: 95   Total IE's: 134   Total Athletes: 26
+```
+
+- **不分家庭**，按 `FEMALE` / `MALE` 两个区，区内按姓氏排序（`groupRowsBySwimmer` 已排好）
+- 每行是 `#项目号 | 事件的性别+年龄组+项目 | 成绩+course 字母`（`Y`/`L`/`S`）；没有成绩打 `NT`
+- 页脚给 `Female IE's / Male IE's / Total IE's / Total Athletes` 四个统计
+- **接力不出现在这里**：接力属于俱乐部不属于某个泳手，而我们还没有接力名单数据；
+  有接力行时会打一行说明，免得家长以为漏了
+- 混合项目（`gender:"X"`）在报告里标 `Mixed`（取自事件本身的性别，不是泳手的）
+
+**家长怎么自己看**：dashboard → Meets 的卡片上多一个 `🖨 My entry sheet`
+（只要有项目表就显示，**不依赖** `entriesOpenToFamilies`），点开就是自己家的确认稿。
+这是"两种模式并行"里网站那一侧：教练照旧发 PDF，家长也可以登录自己核对。
 
 三条设计约束：
 
 1. **家长的家庭 id 从登录身份推导，绝不信任 URL**。手工改 `&family=` 也只会看到自己家
    （Firestore 规则本来也会拦，但不该把唯一的墙交给规则）。
-2. **打印即成品**：`@media print` 去掉工具栏、按 letter 排版、`.mp-family` 之间强制分页，
-   所以"全队"模式一次就能导出多页 PDF。
-3. **成绩刷新要写在纸上**：如果导出时重算的 seed time 与家长提交时的不同，页面会出一行
-   「Times updated since you submitted: 100 Breast 38.50 → 36.60」。这是确认稿存在的理由。
+2. **打印即成品**：`@media print` 去掉工具栏、按 letter 排版；家庭稿在家庭之间强制分页，
+   报告稿只保证"一个泳手不跨页"（让 `FEMALE`/`MALE` 自然分页）。
+3. **成绩刷新要写在纸上**（家庭稿）：这是确认稿存在的理由 —— 家长确认的必须是他真会提交的那个数。
 
 教练视角在页顶多一个 pre-flight 框（几人/几项/达标数/未确认数/缺成绩数/截止时间），
 家长视角没有。入口：报名弹窗底部 `🖨 Confirmation sheet`（单家庭）与名单视图的

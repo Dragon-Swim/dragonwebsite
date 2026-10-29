@@ -376,7 +376,24 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 端到端测试 `tests/meet-print.spec.js`（3 个用例）：教练全队稿（含刷新提示、费用、切分、pre-flight）、
 家长隔离（伪造 `family=` 也只看自己家）、无报名时的空态。
 
-### 10.8 还没做的
+### 10.8 阶段 C 补充：全队报名报告（`group=sex`）
+
+家长已经认 Team Manager 那份版式，所以按它做了一版**全队报告**（同一个页面，`?group=sex`）：
+
+- **不分家庭**：`FEMALE` / `MALE` 两个区，区内按姓氏排序
+- 每行 `#项目号 · 事件的性别+年龄组+项目 · 成绩+course 字母`（`36.60Y`），没成绩打 `NT`
+- 页脚 `Female IE's / Male IE's / Total IE's / Total Athletes`
+- 接力不进报告（属俱乐部不属泳手，且我们还没有接力名单），有接力行时打一行说明
+- 混合项目标 `Mixed`（取事件本身的性别）
+
+线上 27-41 真实数据试渲染：女 6 人 16 项、男 8 人 22 项，两张区各自按姓氏排好，
+页脚 `Total IE's: 38 / Total Athletes: 14`。预览图 `.tmp/meet-entry/report-preview.png`。
+
+**两种模式并行**（用户 2026-10-30 的要求）：教练照旧把这份 PDF 发给家长；
+家长也可以登录网站自己看——dashboard 的 meet 卡片上多一个 `🖨 My entry sheet`，
+**不依赖** `entriesOpenToFamilies`（报名表关着也能自查）。
+
+### 10.9 还没做的
 
 - 阶段三（导出组行 / CSV / 确认稿 / SDIF writer）——按 §7 的顺序在 Gate A2 之后
 - 接力：仍卡在"今天怎么报的"这个信息上

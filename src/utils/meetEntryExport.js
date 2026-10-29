@@ -53,6 +53,12 @@ export const STATUS_LABELS = {
   declined: 'Not swimming',
 };
 
+/** Event sex labels, as the classic Hy-Tek report prints them. */
+export const EVENT_SEX_LABELS = { F: 'Female', M: 'Male', X: 'Mixed' };
+
+/** Course letters used by the printed report ('36.60Y', '1:11.03L'). */
+export const COURSE_LETTERS = { SCY: 'Y', LCM: 'L', SCM: 'S' };
+
 /** Statuses that are deliberately held back, with the reason shown to the coach. */
 export const HELD_BACK = {
   draft: 'not submitted yet',
@@ -122,6 +128,10 @@ export function resolveSeedTime({ entryEvent, entry, meet, bestTimes = [] }) {
   const base = {
     eventNo: entryEvent?.eventNo ?? null,
     ageGroup: entryEvent?.ageGroup ?? entry?.ageGroup ?? null,
+    // The event's own sex, which is not the swimmer's: 'X' events are open to
+    // both and the printed report labels them "Mixed".
+    eventSex: meetEvent?.gender || entry?.gender || null,
+    eventSexLabel: EVENT_SEX_LABELS[meetEvent?.gender] || EVENT_SEX_LABELS[entry?.gender] || '',
     distance,
     stroke,
     standards,
@@ -261,6 +271,8 @@ export function buildExportRows({ meet, entries = [], bestTimesById, statuses = 
         genderLabel: entry.gender === 'F' ? 'F' : entry.gender === 'M' ? 'M' : '',
         eventNo: resolved.eventNo,
         ageGroup: resolved.ageGroup,
+        eventSex: resolved.eventSex,
+        eventSexLabel: resolved.eventSexLabel,
         distance: resolved.distance,
         stroke: resolved.stroke,
         eventLabel: `${resolved.distance ?? '?'} ${STROKE_NAMES[resolved.stroke] || resolved.stroke || '?'}`,
@@ -272,6 +284,8 @@ export function buildExportRows({ meet, entries = [], bestTimesById, statuses = 
         seconds: resolved.seconds,
         seedTimeText: resolved.seconds == null ? '' : formatSwimSeconds(resolved.seconds),
         course: resolved.course || '',
+        /** 'Y' / 'L' / 'S' — how the printed report suffixes a time. */
+        courseLetter: COURSE_LETTERS[resolved.course] || '',
         source: resolved.source,
         sourceLabel: resolved.source === 'db' ? 'our records' : resolved.source === 'manual' ? 'typed' : '',
         proofDate: resolved.date || '',

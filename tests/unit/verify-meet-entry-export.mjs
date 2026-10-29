@@ -155,6 +155,15 @@ check('row has a readable change note', rowA.changedText === '1:03.00 → 1:01.0
 check('row carries a display time string', rowA.seedTimeText === '1:01.00', rowA.seedTimeText);
 check('row exposes the cut-off as text', rowA.standardText === '1:03.09', rowA.standardText);
 check('relay flag is carried through', rowA.relay === false);
+// The printed team report labels each line with the *event's* sex, which is not
+// the swimmer's sex for a mixed (X) event.
+check('row knows the event sex, not just the swimmer sex', rowA.eventSex === 'F' && rowA.eventSexLabel === 'Female', [rowA.eventSex, rowA.eventSexLabel]);
+check('time carries the course letter the report suffixes', rowA.courseLetter === 'Y', rowA.courseLetter);
+const mixedResolved = resolveSeedTime({
+  entryEvent: { eventNo: 21, ageGroup: 'Open', distance: 100, stroke: 'BR', sessionId: 'sat-pm', seedTime: '1:20.00', seedSeconds: 80 },
+  entry: { gender: 'F', ageGroup: 'Open' }, meet: MEET, bestTimes: [],
+});
+check('a mixed event is labelled Mixed', mixedResolved.eventSexLabel === 'Mixed', mixedResolved.eventSexLabel);
 
 // The confirmation sheet also runs *before* the coach confirms, so the caller can
 // widen the statuses — but that must never change the default: an entry file may

@@ -311,6 +311,96 @@ table.mp-events th {
   color: var(--mp-warn);
 }
 
+/* ── team report (group=sex) ───────────────────────────────────────────── */
+/*
+ * The classic report families already receive: everyone under FEMALE / MALE,
+ * each section sorted by surname. It has to survive a plain A4/letter print, so
+ * a swimmer block never splits across pages and the sections break naturally.
+ */
+
+.mp-sheet--report .mp-head {
+  border-bottom-width: 1px;
+  margin-bottom: 16px;
+}
+
+.mp-rep-section {
+  margin-top: 22px;
+}
+
+.mp-rep-title {
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+  padding-bottom: 4px;
+  border-bottom: 1.5px solid var(--mp-ink);
+}
+
+.mp-rep-swimmer {
+  margin: 0 0 12px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.mp-rep-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.mp-rep-event {
+  display: grid;
+  grid-template-columns: 3.6em 1fr auto;
+  gap: 10px;
+  font-size: 13px;
+  padding: 1px 0 1px 14px;
+}
+
+.mp-rep-no {
+  color: var(--mp-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-rep-label {
+  min-width: 0;
+}
+
+.mp-rep-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mp-rep-totals {
+  margin-top: 24px;
+  padding-top: 10px;
+  border-top: 1.5px solid var(--mp-ink);
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  justify-content: start;
+  gap: 6px 30px;
+  font-size: 13px;
+}
+
+.mp-rep-totals div {
+  display: flex;
+  gap: 8px;
+}
+
+.mp-rep-totals span:first-child {
+  color: var(--mp-muted);
+}
+
+.mp-rep-totals span:last-child {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-report-note {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--mp-muted);
+}
+
 /* ── states (loading / error / empty) ──────────────────────────────────── */
 
 .mp-state {

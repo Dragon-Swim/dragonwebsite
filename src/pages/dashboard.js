@@ -4311,6 +4311,11 @@ function renderSwimMeets() {
     const needsTimes = hasEvents && m.events.some(
       (e) => !e.relay && (e.standards?.SCY != null || e.standards?.LCM != null));
     const showEntries = hasEvents && (canEnter || m.entriesOpenToFamilies === true);
+    // Families get a read-only path to their own sheet even when the entry form
+    // stays closed (`entriesOpenToFamilies` is a per-meet coach decision). This is
+    // the "log in and check it yourself" half of the email-the-PDF flow: the same
+    // data, no waiting for the coach to send the file.
+    const showSheet = hasEvents && !canEnter;
     return `
         <div class="dash-card"${dimStyle}>
           <div class="dash-card-header">
@@ -4326,6 +4331,7 @@ function renderSwimMeets() {
             ${needsTimes ? `<div class="meet-qual-line">⏱ ${t('meet_entries_requires_times')}</div>` : ''}
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
               ${showEntries ? `<button class="btn btn-outline btn-sm meet-entries-btn" data-id="${m.id}">🎽 ${t('meet_entries_open_btn')}</button>` : ''}
+              ${showSheet ? `<a class="btn btn-outline btn-sm meet-sheet-link" href="${import.meta.env.BASE_URL}meet-print.html?meet=${encodeURIComponent(m.id)}" target="_blank" rel="noopener">🖨 ${t('meet_sheet_open_btn')}</a>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm meet-fee-btn" data-id="${m.id}" data-name="${escapeHtml(m.name || '')}">${t('dash_meets_fee')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm edit-meet" data-id="${m.id}" data-name="${escapeHtml(m.name || '')}" data-start="${m.startDate || m.date || ''}" data-end="${m.endDate || m.date || ''}" data-location="${escapeHtml(m.location || '')}" data-season="${m.season || currentSeason}" data-source="${escapeHtml(m.sourceUrl || '')}">${t('dash_meets_edit')}</button>` : ''}
               ${canEdit ? `<button class="btn btn-outline btn-sm delete-meet" data-id="${m.id}" style="color: var(--color-accent); border-color: var(--color-accent);">${t('dash_meets_delete')}</button>` : ''}

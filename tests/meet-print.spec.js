@@ -249,3 +249,116 @@ test("a meet with no entries says so instead of showing an empty table", async (
   await expect(page.locator(".mp-sheet")).toContainText("No entries to show for this meet yet.");
   await expect(page.locator(".mp-family")).toHaveCount(0);
 });
+
+// ── the classic team report (group=sex) ──────────────────────────────────
+//
+// This is the file the coach emails to parents, so its shape is a promise:
+// one FEMALE section, one MALE section, surname order inside each, and the same
+// "#event / sex age distance stroke / time" lines families saw from Team Manager.
+// Getting the ordering wrong is the kind of thing nobody notices until a parent
+// cannot find their child in the list.
+
+/** A meet with one girls event and one boys event. */
+async function seedReportMeet(name) {
+  const meetId = uniqueId("r");
+  const start = dateInCurrentSeason(30);
+  await seedDocument("meets", meetId, {
+    name,
+    startDate: isoDate(start),
+    endDate: isoDate(start),
+    location: "Germantown Indoor Swim Center",
+    season: currentSeason(),
+    status: "Open",
+    createdAt: new Date(),
+    ageDeterminedOn: isoDate(start),
+    qualifyingPeriodStart: "2024-10-01",
+    entryDeadline: new Date(Date.now() + 20 * 86_400_000).toISOString(),
+    sanction: "PVI-TEST-1",
+    courses: ["SCY"],
+    limits: { maxEvents: 6, maxPerDay: 3 },
+    sessions: [{ id: "sat-pm", date: isoDate(start), day: "Sat", start: "1:35 PM" }],
+    events: [
+      { eventNo: 25, gender: "F", ageGroup: "11-12", distance: 50, stroke: "BR", relay: false, sessionId: "sat-pm", standards: { SCY: 37.79, LCM: null } },
+      { eventNo: 26, gender: "M", ageGroup: "11-12", distance: 50, stroke: "BR", relay: false, sessionId: "sat-pm", standards: { SCY: 35.0, LCM: null } },
+    ],
+  });
+  return { meetId };
+}
+
+/** A confirmed entry for one existing swimmer (typed seed time, no records). */
+async function seedTypedEntry({ meetId, familyId, usaId, swimmerName, gender, age, eventNo, seedTime }) {
+  await seedDocument(`meets/${meetId}/entries`, `${familyId}__${usaId}`, {
+    meetId,
+    familyId,
+    usaSwimmingId: usaId,
+    swimmerName,
+    ageAtMeet: age,
+    ageGroup: "11-12",
+    gender,
+    status: "confirmed",
+    events: [{
+      eventNo, ageGroup: "11-12", distance: 50, stroke: "BR", sessionId: "sat-pm",
+      course: "SCY", seedTime, seedSeconds: null, source: "manual",
+    }],
+    confirmedAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
+
+test("the team report splits FEMALE / MALE and sorts each by surname", async ({ page }) => {
+  const { meetId } = await seedReportMeet("Print Team Report Invitational");
+  const tag = rand().slice(0, 4);
+
+  // Deliberately out of alphabetical order, and out of section order, so a
+  // regression in either grouping or sorting cannot accidentally pass.
+  const zeta = { familyId: uniqueId("f"), usaId: newUsaId(), name: `Zeta ${tag}`, gender: "F", age: 12, time: "38.10" };
+  const alpha = { familyId: uniqueId("f"), usaId: newUsaId(), name: `Alpha ${tag}`, gender: "F", age: 11, time: "36.60" };
+  const bravo = { familyId: uniqueId("f"), usaId: newUsaId(), name: `Bravo ${tag}`, gender: "M", age: 12, time: "34.20" };
+
+  await seedTypedEntry({ meetId, familyId: zeta.familyId, usaId: zeta.usaId, swimmerName: zeta.name, gender: "F", age: zeta.age, eventNo: 25, seedTime: zeta.time });
+  await seedTypedEntry({ meetId, familyId: alpha.familyId, usaId: alpha.usaId, swimmerName: alpha.name, gender: "F", age: alpha.age, eventNo: 25, seedTime: alpha.time });
+  await seedTypedEntry({ meetId, familyId: bravo.familyId, usaId: bravo.usaId, swimmerName: bravo.name, gender: "M", age: bravo.age, eventNo: 26, seedTime: bravo.time });
+
+  const coachEmail = unique("coach");
+  await seedStaffUser(coachEmail, PASSWORD, "coach");
+  await signIn(page, coachEmail);
+
+  await page.goto(`/meet-print.html?meet=${meetId}&group=sex`);
+
+  const sheet = page.locator(".mp-sheet--report");
+  await expect(sheet).toBeVisible({ timeout: 15000 });
+  await expect(sheet.locator("h1")).toHaveText("Individual Meet Entries Report");
+
+  // Not grouped by household: this is one team list, not one block per family.
+  await expect(sheet.locator(".mp-family")).toHaveCount(0);
+  await expect(sheet.locator(".mp-sign")).toHaveCount(0);
+
+  // FEMALE comes first and holds both girls, sorted by surname.
+  const sections = sheet.locator(".mp-rep-section");
+  await expect(sections).toHaveCount(2);
+  const female = sheet.locator('.mp-rep-section[data-section="FEMALE"]');
+  const male = sheet.locator('.mp-rep-section[data-section="MALE"]');
+  await expect(female.locator(".mp-rep-title")).toHaveText("FEMALE");
+  await expect(male.locator(".mp-rep-title")).toHaveText("MALE");
+  await expect(female.locator(".mp-rep-name")).toHaveText([
+    `Alpha ${tag} (11)`,
+    `Zeta ${tag} (12)`,
+  ]);
+  await expect(male.locator(".mp-rep-name")).toHaveText([`Bravo ${tag} (12)`]);
+
+  // The event line keeps the classic shape: #number, sex + age group + event, time with course letter.
+  const line = female.locator('.mp-rep-swimmer').nth(1).locator(".mp-rep-event").first();
+  await expect(line.locator(".mp-rep-no")).toHaveText("#25");
+  await expect(line.locator(".mp-rep-label")).toHaveText("Female 11-12 50 Breast");
+  await expect(line.locator(".mp-rep-time")).toHaveText("38.10Y");
+
+  // Footer counts, the part parents use to sanity-check "did everyone get in".
+  const totals = sheet.locator(".mp-rep-totals");
+  await expect(totals).toContainText("Female IE's");
+  await expect(totals.locator("div").nth(0).locator("span").nth(1)).toHaveText("2");
+  await expect(totals.locator("div").nth(1).locator("span").nth(1)).toHaveText("1");
+  await expect(totals.locator("div").nth(2).locator("span").nth(1)).toHaveText("3");
+  await expect(totals.locator("div").nth(3).locator("span").nth(1)).toHaveText("3");
+
+  await expect(sheet.locator(".mp-report-note")).toContainText("Sorted by surname");
+});
