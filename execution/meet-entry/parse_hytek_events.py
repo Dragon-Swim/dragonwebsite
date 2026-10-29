@@ -45,8 +45,8 @@
 用法
 ----
     # 最省事:直接从官网下的 zip 读
-    python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.zip \
-        -o .tmp/meet-entry/27-41/events.json \
+    python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/samples/events/27-41-events.zip \
+        -o .tmp/meet-entry/imports/27-41.json \
         --source-url "https://www.files.pvswim.org/2627meet/27-41-events.zip"
 
     # 同一场已经有 PDF 解析结果时,借它的场次日期/类型

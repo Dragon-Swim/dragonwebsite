@@ -56,14 +56,14 @@ D01PV      Chen, Haoran E      8B1279F2394C USA0309201115MM 500 1 2F 15OV  5:10.
 
 | 路径 | 是什么 | course | 项目行 | 年龄区间 | 接力 |
 |---|---|---|---|---|---|
-| `.tmp/meet-entry/27-41-events/` | 主办方 `.ev3`+`.hyv`，RMSC 12/10（PVI-27-41） | `YLS` | 152 | 0-10 / 11-12 / 13-14 / 15-109 / 0-12 / 0-109 | **32 行** |
-| `.tmp/meet-entry/27-29-events/` | PV November Open 11/13（PVS-27-29） | `YO` | 89 | 9-10 / 11-12 / 13-14 / 15-109 | 0 |
-| `.tmp/meet-entry/27-21-events/` | FXFX Loughmiller 11/6（PVI-27-21） | `YO` | 118 | **0-8** / 9-10 / 11-12 / **13-109** | 0 |
+| `.tmp/meet-entry/samples/events/27-41/` | 主办方 `.ev3`+`.hyv`，RMSC 12/10（PVI-27-41） | `YLS` | 152 | 0-10 / 11-12 / 13-14 / 15-109 / 0-12 / 0-109 | **32 行** |
+| `.tmp/meet-entry/samples/events/27-29/` | PV November Open 11/13（PVS-27-29） | `YO` | 89 | 9-10 / 11-12 / 13-14 / 15-109 | 0 |
+| `.tmp/meet-entry/samples/events/27-21/` | FXFX Loughmiller 11/6（PVI-27-21） | `YO` | 118 | **0-8** / 9-10 / 11-12 / **13-109** | 0 |
 | `.tmp/hytek-research/27-20-events.zip` | Marlins Invitational 11/6 | `Y` | — | — | — |
 | `.tmp/hytek-research/27-31-events.ev3` | Swim & Rock 11/20 | `YO` | — | — | — |
-| `.tmp/meet-entry/hytek-sample/` | **我们的导出件**：PV November Open 11/13（`.CL2`+`.HY3`） | `Y` |
-| `.tmp/meet-entry/hytek-relay-sample/` | **我们的导出件**：FXFX Summer Solstice LC Champs 6/26 | `L` |
-| `.tmp/meet-entry/nov open name entry.pdf` 等 3 份 | TM 打印的 "Individual Meet Entries Report" | — |
+| `.tmp/meet-entry/samples/exports/pv-nov-2026/` | **我们的导出件**：PV November Open 11/13（`.CL2`+`.HY3`） | `Y` |
+| `.tmp/meet-entry/samples/exports/lc-champs-2026/` | **我们的导出件**：FXFX Summer Solstice LC Champs 6/26 | `L` |
+| `.tmp/meet-entry/samples/reports/nov open name entry.pdf` 等 3 份 | TM 打印的 "Individual Meet Entries Report" | — |
 
 四种 course（`Y`/`YO`/`YLS`/`L`）都覆盖了，导入器可以拿四种配置测试。
 
@@ -221,14 +221,20 @@ usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线�
 | CSV 工具 | `src/utils/csv.js` |
 | 推荐新增 | `src/utils/meetEntryExport.js`（组行/校验/CSV/SDIF 文本）、`src/pages/meet-print.html` + `.js`（独立 Vite entry） |
 
-### 8.1 本次评估用的临时脚本（在 `.tmp`，可删可重跑）
+### 8.1 验证脚本（2026-10-29 整理后的位置）
+
+一次性的探针（`db-audit.cjs` / `crosscheck*.cjs` / `sdif-verify.cjs` / `analyze.cjs` 等 40 多个文件）
+已经删掉 —— 它们的作用被单测（`tests/unit/verify-sdif.mjs` 等）和本文档的结论取代。
+留下的是**证据生成器**，在 `.tmp/meet-entry/tools/`：
 
 ```
-.tmp/meet-entry/db-audit.cjs                     # 只读盘点 meets/entries/swimResults
-.tmp/meet-entry/27-41-events/crosscheck3.cjs     # ev3 vs events.json 严格比对
-.tmp/meet-entry/hytek-sample/sdif-verify.cjs     # 按 SDIF 字段表解析 .CL2
-.tmp/meet-entry/hytek-relay-sample/analyze.cjs   # 记录类型统计 / 找接力记录
+.tmp/meet-entry/tools/sdif-roundtrip.mjs           # 个人项目:4,602 字段回归(2 处已知差异)
+.tmp/meet-entry/tools/sdif-relay-roundtrip.mjs     # 接力:3,484 字段回归(零意外差异)
+.tmp/meet-entry/tools/verify-live-eligibility.mjs  # 线上真实数据冒烟(只读)
+.tmp/meet-entry/tools/build-report-preview.mjs     # 重出全队报告版式截图
 ```
+
+样本目录的导航见 `.tmp/meet-entry/README.md`（含"⛔ 别删"清单与常用命令）。
 
 ---
 
@@ -254,8 +260,8 @@ usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线�
 `execution/meet-entry/parse_hytek_events.py`
 
 ```powershell
-python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.zip `
-    -o .tmp/meet-entry/27-41/events-ev3.json `
+python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/samples/events/27-41-events.zip `
+    -o .tmp/meet-entry/imports/27-41.json `
     --sessions-from .tmp/meet-27-41/events.json `
     --deadline "2026-12-01T20:00:00-05:00"
 ```
@@ -386,7 +392,7 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 - 混合项目标 `Mixed`（取事件本身的性别）
 
 线上 27-41 真实数据试渲染：女 6 人 16 项、男 8 人 22 项，两张区各自按姓氏排好，
-页脚 `Total IE's: 38 / Total Athletes: 14`。预览图 `.tmp/meet-entry/report-preview.png`。
+页脚 `Total IE's: 38 / Total Athletes: 14`。预览图 `.tmp/meet-entry/preview/report-preview.png`。
 
 **两种模式并行**（用户 2026-10-30 的要求）：教练照旧把这份 PDF 发给家长；
 家长也可以登录网站自己看——dashboard 的 meet 卡片上多一个 `🖨 My entry sheet`，
@@ -409,8 +415,8 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 
 | 文件 | 地址 |
 |---|---|
-| 我们的报名件 | `.tmp/meet-entry/DRAG-PV-Entries-2025 Riley Eaton...-11Dec2025-001.ZIP` |
-| 解包（`.CL2` 24,948 B / `.HY3` 17,820 B） | `.tmp/meet-entry/hytek-relay-2025/` |
+| 我们的报名件 | `.tmp/meet-entry/samples/exports/rmsc-2025/DRAG-PV-Entries-2025 Riley Eaton...-11Dec2025-001.ZIP` |
+| 解包（`.CL2` 24,948 B / `.HY3` 17,820 B） | `.tmp/meet-entry/samples/exports/rmsc-2025/` |
 | **赛事文件（还在！）** | `https://www.files.pvswim.org/2526meet/26-45-events.zip` → `.ev3` 12,509 B / `.hyv` 6,982 B |
 | 赛程单 PDF | `https://www.files.pvswim.org/2526meet/26-45-ma.pdf`（634 KB） |
 | 成绩 PDF | `https://www.files.pvswim.org/2526meet/26-45-results.pdf`（1.1 MB） |

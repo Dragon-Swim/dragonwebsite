@@ -2,8 +2,8 @@
 """抽 HY-TEK / Crystal Reports 的「Individual Meet Entries Report」→ JSON。
 
 用法:
-    python execution/meet-entry/extract_hytek_entries.py ".tmp/meet-entry/dragon name entry.pdf"
-    python execution/meet-entry/extract_hytek_entries.py entry.pdf -o .tmp/meet-entry/pv-oct.json --txt .tmp/meet-entry/pv-oct.txt
+    python execution/meet-entry/extract_hytek_entries.py ".tmp/meet-entry/samples/reports/dragon name entry.pdf"
+    python execution/meet-entry/extract_hytek_entries.py entry.pdf -o .tmp/meet-entry/legacy/pv-oct.json --txt .tmp/meet-entry/legacy/pv-oct.txt
     python execution/meet-entry/extract_hytek_entries.py entry.pdf --json     # 只把 JSON 打到 stdout
 
 产出 JSON 结构:

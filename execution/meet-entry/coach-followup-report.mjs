@@ -3,8 +3,8 @@
 /**
  * 教练跟进名单生成器 —— 一次跑出「该给谁发什么信」的全套清单。
  *
- *   node execution/meet-entry/coach-followup-report.mjs .tmp/meet-entry/pv-oct-entries.json \
- *        -o .tmp/meet-entry/coach-followup-2026-10-03.md
+ *   node execution/meet-entry/coach-followup-report.mjs .tmp/meet-entry/legacy/pv-oct-entries.json \
+ *        -o .tmp/meet-entry/legacy/coach-followup-2026-10-03.md
  *
  * 产出（按「教练能直接发信」组织，每组一个名单 + 一封英文模板）：
  *
@@ -448,7 +448,7 @@ const MEET = dbMeet?.name || meetMeta.name || '(meet)';
 const MEET_DATE = meetMeta.startDate || dbMeet?.startDate || '';
 const MEET_END = meetMeta.endDate || dbMeet?.endDate || '';
 const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-const OUT_PATH = flag('-o', `.tmp/meet-entry/coach-followup-${new Date().toISOString().slice(0, 10)}.md`);
+const OUT_PATH = flag('-o', `.tmp/meet-entry/legacy/coach-followup-${new Date().toISOString().slice(0, 10)}.md`);
 
 // ── 邮件模板 ────────────────────────────────────────────────────────────────
 const prevSeason = SEASON.replace(/^(\d{4})-(\d{4})$/, (_, a, b) => `${Number(a) - 1}-${a}`);
@@ -934,10 +934,10 @@ ${checks.map(([label, ok]) => `- ${ok ? '✅' : '❌'} ${label}`).join('\n')}
 
 \`\`\`bash
 # 报名报告 PDF → JSON（自带 Total Athletes 自校验）
-python execution/meet-entry/extract_hytek_entries.py ".tmp/coach-in/dragon name entry.pdf" -o .tmp/meet-entry/pv-oct-entries.json
+python execution/meet-entry/extract_hytek_entries.py ".tmp/coach-in/dragon name entry.pdf" -o .tmp/meet-entry/legacy/pv-oct-entries.json
 
 # JSON + 线上数据 → 本文件
-node execution/meet-entry/coach-followup-report.mjs .tmp/meet-entry/pv-oct-entries.json \\
+node execution/meet-entry/coach-followup-report.mjs .tmp/meet-entry/legacy/pv-oct-entries.json \\
      -o ${OUT_PATH} --season ${SEASON}
 \`\`\`
 

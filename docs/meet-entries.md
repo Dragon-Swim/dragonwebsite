@@ -218,7 +218,7 @@ events or in open events which are open to all ages"),所以 `enterableGroupsFor
 ```powershell
 # ① 解析赛程包（.ev3 / .hyv / 含两者的 zip）。同一场已经有 PDF 解析结果时，
 #    用 --sessions-from 把场次的日期/类型借过来（.ev3 本身不含场次日历）
-python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/<N>-events.zip `
+python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/samples/events/<N>-events.zip `
     -o .tmp/<meet>/events.json `
     --sessions-from .tmp/<meet>/pdf-events.json `
     --deadline "2026-12-01T20:00:00-05:00" `   # .ev3 只有日期，具体时刻要照赛程单补
