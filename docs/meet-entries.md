@@ -340,6 +340,8 @@ Female IE's: 39   Male IE's: 95   Total IE's: 134   Total Athletes: 26
 （只要有项目表就显示，**不依赖** `entriesOpenToFamilies`），点开就是自己家的确认稿。
 这是"两种模式并行"里网站那一侧：教练照旧发 PDF，家长也可以登录自己核对。
 
+上线流程见 `docs/deploy-gh-pages.md`（含 `robocopy /MIR` 会删 `.git` 的坑）。
+
 三条设计约束：
 
 1. **家长的家庭 id 从登录身份推导，绝不信任 URL**。手工改 `&family=` 也只会看到自己家
