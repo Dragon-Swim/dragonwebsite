@@ -264,7 +264,7 @@ export function parseSdif(text) {
  * Individual events only for now: relays need `E0`/`F0` and a line-up the site
  * does not store yet (see docs/meet-entry-export-feasibility.md §11).
  */
-export function buildEntrySdif({ file = {}, meet = {}, club = {}, entries = [], today = new Date() } = {}) {
+export function buildEntrySdif({ file = {}, meet = {}, club = {}, entries = [], relays = [], today = new Date() } = {}) {
   const records = [];
 
   const courseLetters = sdifCourseList(meet.courses);
@@ -370,6 +370,57 @@ export function buildEntrySdif({ file = {}, meet = {}, club = {}, entries = [], 
   }
 
   const course = courseLetters[0] || 'Y';
+  // ── 接力：E0(每个接力队一条) + F0(每棒一条) ───────────────────────────
+  // 顺序按规范的 meet pyramid：C1/C2 → D0/D3 → E0/F0 → Z0。
+  let eCount = 0;
+  let fCount = 0;
+  for (const relay of relays) {
+    const legs = (relay.legs || []).slice(0, 4);
+    if (!legs.length) continue;
+    records.push(writeRecord('E0', {
+      org: '1',
+      relayLetter: (relay.letter || 'A').slice(0, 1),
+      teamCode: (club.teamCode || '').slice(0, 6),
+      // Team Manager leaves this blank; the document asks for it and Meet Manager
+      // uses it to know how many F0 records belong to this squad, so write it.
+      f0Count: legs.length,
+      eventSex: relay.eventSex || '',
+      distance: relay.distance != null ? relay.distance : '',
+      stroke: relayStrokeCode(relay),
+      eventNo: sdifEventNo(relay.eventCode),
+      eventAge: relay.eventAge || sdifEventAge(relay.ageMin, relay.ageMax),
+      // Unlike D0, Team Manager does fill the relay's date of swim — match it.
+      swimDate: sdifDate(relay.swimDate || meet.startDate),
+      seedTime: relay.seconds == null ? 'NT'.padStart(7, ' ') + ' ' : sdifTime(relay.seconds),
+      seedCourse: relay.courseLetter || course,
+    }));
+    eCount += 1;
+
+    legs.forEach((leg, i) => {
+      records.push(writeRecord('F0', {
+        org: '1',
+        teamCode: (club.teamCode || '').slice(0, 6),
+        relayLetter: (relay.letter || 'A').slice(0, 1),
+        name: sdifName({ last: leg.lastName, first: leg.firstName, mi: leg.middleInitial }),
+        uss: sdifUss12(leg.usaSwimmingId),
+        citizen: leg.citizen || '',
+        dob: sdifDate(leg.dob),
+        age: leg.ageAtMeet != null ? leg.ageAtMeet : '',
+        sex: leg.gender || relay.eventSex || '',
+        // Leg order: 1..4 per ORDER Code 024. Team Manager writes 0 in all three
+        // order fields, which the code table defines as "not on the team for this
+        // swim" — writing the real order is what the document asks for, and is the
+        // only way Meet Manager can know the running order from a CL2.
+        prelimLeg: i + 1,
+        swimOffLeg: '0',
+        finalsLeg: '0',
+        legTime: leg.seconds == null ? '' : sdifTime(leg.seconds),
+        legCourse: leg.seconds == null ? '' : (leg.courseLetter || course),
+      }));
+      fCount += 1;
+    });
+  }
+
   records.push(writeRecord('Z0', {
     org: '1',
     fileCode: '02',                            // 02 = meet results per the code table…
@@ -380,8 +431,8 @@ export function buildEntrySdif({ file = {}, meet = {}, club = {}, entries = [], 
     teamCount: 1,
     dCount,
     swimmerCount,
-    eCount: 0,
-    fCount: 0,
+    eCount,
+    fCount,
     gCount: 0,
     batchNumber: 1,
   }));
@@ -392,6 +443,20 @@ export function buildEntrySdif({ file = {}, meet = {}, club = {}, entries = [], 
 function strokeCodeOf(row) {
   const key = row.relay ? (row.stroke === 'MED' ? 'MED_RELAY' : 'FR_RELAY') : row.stroke;
   return SDIF_STROKE[key] || '';
+}
+
+/**
+ * Relay stroke code. Accepts an SDIF code already (`'6'`/`'7'`) or the site's
+ * stroke name (`'FR'`/`'MED'`), because the two callers differ: the export script
+ * carries names from Firestore, while the regression harness reads codes back out
+ * of a real file.
+ */
+function relayStrokeCode(relay) {
+  const raw = String(relay.strokeCode ?? relay.stroke ?? '').trim().toUpperCase();
+  if (raw === '6' || raw === '7') return raw;
+  if (raw === 'MED' || raw === 'MEDLEY' || raw === 'MED_RELAY') return SDIF_STROKE.MED_RELAY;
+  if (raw === 'FR' || raw === 'FREE' || raw === 'FR_RELAY') return SDIF_STROKE.FR_RELAY;
+  return '';
 }
 
 function sdifCourseList(courses) {

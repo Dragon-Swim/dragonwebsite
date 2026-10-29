@@ -35,6 +35,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 import { buildExportRows, validateExport, summarizeExport } from '../../src/utils/meetEntryExport.js';
 import { buildEntrySdif, parseSdif } from '../../src/utils/sdif.js';
+import { validateSquad, squadToSdifRelay, describeSquad, relayEventsOf } from '../../src/utils/relayEntry.js';
 
 const argv = process.argv.slice(2);
 const flag = (name, def = null) => {
@@ -100,6 +101,10 @@ for (const doc of regsSnap.docs) {
   }
 }
 
+// 接力名单：单独一个子集合，按 (事件码, 队字母) 存放（见 src/utils/relayEntry.js）
+const relaySnap = await db.collection('meets').doc(MEET_ID).collection('relayEntries').get();
+const relayDocs = relaySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
 const bestTimesById = {};
 await Promise.all([...new Set(rawEntries.map((e) => String(e.usaSwimmingId || '').trim()))].filter(Boolean).map(async (id) => {
   const snap = await db.collection('swimResults').doc(id).get();
@@ -151,6 +156,47 @@ if (validation.warnings.length) {
 const noDob = enriched.filter((r) => !r.dob);
 if (noDob.length) console.log(`\n⚠ ${new Set(noDob.map((r) => r.usaSwimmingId)).size} 人的生日缺失，D0 的生日字段会留空`);
 
+// ── 接力 ─────────────────────────────────────────────────────────────────
+// 接力是俱乐部的（不是某个家庭的），单独存在 meets/{id}/relayEntries 里。
+// 任何一棒不合格，整个接力队就作废，所以这里的校验当阻断处理。
+const relayEvents = relayEventsOf(meet);
+const relayByCode = new Map(relayEvents.map((e) => [e.eventCode, e]));
+const squadsPerEvent = {};
+for (const doc of relayDocs) squadsPerEvent[doc.eventCode] = (squadsPerEvent[doc.eventCode] || 0) + 1;
+
+const relaysForFile = [];
+const relayProblems = [];
+for (const doc of relayDocs) {
+  const event = relayByCode.get(doc.eventCode);
+  if (!event) {
+    relayProblems.push(`${doc.id}: 项目码 ${doc.eventCode} 不在这场比赛的接力项目里`);
+    continue;
+  }
+  // 补上登记表里的生日/姓名（D0/F0 需要生日）
+  const legs = (doc.legs || []).map((leg) => {
+    const reg = byUsaId.get(String(leg.usaSwimmingId || '').trim().toUpperCase()) || {};
+    return { ...reg, ...leg, gender: leg.gender || reg.gender || event.gender };
+  });
+  const check = validateSquad({ meet, event, legs, squadsInEvent: squadsPerEvent[doc.eventCode] || 1 });
+  if (!check.ok) {
+    relayProblems.push(`${doc.id}: ${check.errors.map((e) => e.code).join(', ')}`);
+    continue;
+  }
+  relaysForFile.push({ event, squad: { ...doc, legs } });
+}
+
+if (relayEvents.length) {
+  console.log(`\n接力: 比赛有 ${relayEvents.length} 个接力项目, 库里 ${relayDocs.length} 个队`);
+  for (const r of relaysForFile) console.log('   ✓ ' + describeSquad(r));
+  if (relayProblems.length) {
+    console.error('\n❌ 接力名单有问题，未生成文件：');
+    for (const p of relayProblems) console.error('   - ' + p);
+    process.exit(1);
+  }
+} else if (relayDocs.length) {
+  console.log(`\n⚠ 库里存了 ${relayDocs.length} 个接力队，但这场比赛没有接力项目`);
+}
+
 // ── 生成 ─────────────────────────────────────────────────────────────────
 /**
  * `meets.location` is one free-text line ("Venue, 123 Main St, Boyds, MD 20841").
@@ -183,6 +229,7 @@ const text = buildEntrySdif({
   },
   club: CLUB,
   entries: enriched,
+  relays: relaysForFile.map(({ event, squad }) => squadToSdifRelay({ meet, event, squad })),
 });
 
 const records = parseSdif(text);
