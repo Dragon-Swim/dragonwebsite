@@ -2,7 +2,16 @@
 
 > 站点 `dragonswim.org` 由 **GitHub Pages** 提供，前面挂 **Cloudflare 橙云代理 + SSL `Full`**。
 > Cloudflare Pages 迁移**尚未实施**（见 `docs/cloudflare-pages-migration.md`），所以现在只有这一条路。
-> 最近一次实测：**2026-10-29**（部署「确认稿 + 全队报告」）。
+> 最近一次实测：**2026-10-29 下午**（部署「教练端接力选人」，同时 release 了新增的
+> `relayEntries` 规则）。当天更早还部署过「确认稿 + 全队报告」。
+
+## 部署记录（回滚时用得上）
+
+| 时间 | 内容 | 规则 | gh-pages | main |
+|---|---|---|---|---|
+| 10-29 下午 | 教练端接力选人 | ✅ 新增 `relayEntries` | `8ebf014` | `4c4d8b2` |
+| 10-29 中午 | 确认稿 + 全队报告 | 无变更 | `9e95b5c` | `18f8142` |
+
 
 ## 三段流程
 
@@ -70,6 +79,31 @@ GitHub Pages 构建约 30–60 秒。验证这三样，别只看首页 200：
 
 想确认某个功能真的进去了，直接抓线上的 bundle grep 关键字（例如
 `dashboard-DijkgkAC.js` 里搜 `meet-print.html`，应该出现 2 次：卡片入口 + 报名弹窗入口）。
+
+### ⚠️ 验证新哈希资源时必须加 cache-buster
+
+2026-10-29 实测踩到：部署后直接请求新哈希的资源 `…/assets/dashboard-gljH0kOE.js` 返回 **404**，
+看着像"推送没生效"，其实 GitHub Pages 早就有了 —— 是 **Cloudflare 对那个路径做了负缓存**
+（404 被记住），换个 URL 就 200。
+
+所以判断"新资源到底有没有上线"，**永远加一个随机查询串**：
+
+```powershell
+$cb = [guid]::NewGuid().ToString('N')
+(Invoke-WebRequest "https://dragonswim.org/assets/dashboard-gljH0kOE.js?cb=$cb" -UseBasicParsing).Content.Length
+```
+
+三条判据，按顺序用，别单看一条：
+
+| 现象 | 含义 |
+|---|---|
+| `dashboard.html` 引用了新哈希 | **最可靠的信号** —— HTML 是 `DYNAMIC`，不缓存 |
+| 新哈希资源带 `?cb=` 得 200 | 文件在 Pages 上，边缘只是记了个旧的 404 |
+| 裸 URL 404、带 `?cb=` 200 | 就是负缓存，**不是部署失败**；等 TTL 或忽略 |
+
+`dashboard.html` 的 `cf-cache-status` 应为 `DYNAMIC`、`x-cache: MISS`；如果哪天变成 `HIT`，
+说明 HTML 本身被缓存了，那时才需要**真的**去 Cloudflare 清缓存。
+
 
 ## 回滚
 
