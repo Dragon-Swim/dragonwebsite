@@ -354,7 +354,37 @@ Female IE's: 39   Male IE's: 95   Total IE's: 134   Total Athletes: 26
 家长视角没有。入口：报名弹窗底部 `🖨 Confirmation sheet`（单家庭）与名单视图的
 `🖨 Confirmation sheets`（全队）。
 
-### 6.6 还没做
+### 6.6 入队文件：SDIF v3 `.cl2`
+
+```powershell
+node execution/meet-entry/export_cl2.mjs --meet <docId> [--dry-run] [--out <path>]
+```
+
+读 `meets/{id}` + `meets/{id}/entries/*` + `registrations/*`（生日）+ `swimResults/*`（成绩重算），
+产出主办方 Meet Manager 认的 **SDIF v3 `.cl2`**（`src/utils/sdif.js` 负责编解码）。
+
+为什么是它：`.cl2` 不是 Hy-Tek 私有格式，而是美国泳协 1998 年公布的 **SDIF v3**，
+Meet Manager 官方承认能导"其他厂商生成的 meet entry SD3"。评估与证据见
+`docs/meet-entry-export-feasibility.md`。
+
+几条踩过的字节级规矩（都写在 `src/utils/sdif.js` 的注释里）：
+
+| 规矩 | 说明 |
+|---|---|
+| 记录 160 字节 + CRLF | 177 条样本 = 28,674 字节，分毫不差 |
+| **没有校验码** | v3 修订记录把 checksum 字段删了；Hy-Tek 自己塞的 `N##` 我们留空 |
+| ALPHA 左对齐 / 数字右对齐 | 唯一例外：`AGE` 是左对齐（`"9 "`） |
+| `eventNo` = 事件码 | 写成"数字右对齐占 3 位 + 年龄组字母"：`"  2F"` / `" 25B"` / `" 11 "` |
+| 无成绩 = `NT` 令牌 | 格式 `"     NT "`，不是留空 |
+| `D0` 存 ID 前 12 位、`D3` 存全 14 位 | 只写一个都会丢 ID |
+| `D3` 紧跟该泳手的**第一条** `D0` | 不是最后一条 |
+
+**回归证据**：拿 2026-11-13 那份真实 TM 导出件（177 条）读成模型再用我们的 writer 重写，
+逐字段比对 **4,602 个字段只有 2 处不同**，都在 `Z0` 尾部、都是我方自己的元数据（备注文字、批次号）。
+
+**还没做**：接力（`E0`/`F0`）。样本已解码（备忘 §11），但站点还没有接力名单的数据模型。
+
+### 6.7 还没做
 
 SDIF v3 `.cl2` writer 还没做 —— 它建立在这一层的输出之上
 （见 `docs/meet-entry-export-feasibility.md` §7）。

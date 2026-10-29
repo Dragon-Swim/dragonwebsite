@@ -192,8 +192,8 @@ usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线�
 |---|---|---|
 | **A 赛程入库** | `.ev3` 导入器（替掉 PDF 解析）+ 年龄组数值匹配 | ✅ 2026-10-29 完成（`d468df0` / `d3e2a4f`，三场已写入生产） |
 | **B 导出准备** | 组行 + **成绩重算** + 校验 + 工作表 CSV | ✅ 2026-10-29 完成（见 §10.5） |
-| **C 确认稿** | 给家长的打印页（独立 Vite entry + 浏览器打印） | ✅ 2026-10-29 完成（见 §10.7） |
-| **D 入队文件** | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | 待做，2–3 天 |
+| **C 确认稿** | 给家长的打印页（独立 Vite entry + 浏览器打印） | ✅ 2026-10-29 完成（见 §10.6） |
+| **D 入队文件** | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | ✅ 2026-10-29 完成（见 §10.9；4602 字段仅 2 处非数据差异） |
 | **E 接力** | `E0`/`F0` | 阻塞：§6.1 还没有答案 |
 
 | 时间 | 门 | 内容 |
@@ -361,7 +361,7 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 工作表 CSV 1646 字符，BOM + CRLF + 10 行
 ```
 
-### 10.7 阶段 C 已落地：家长确认稿
+### 10.6 阶段 C 已落地：家长确认稿
 
 `meet-print.html` + `src/pages/meet-print.js` + `src/styles/meet-print.css`，独立 Vite 入口。
 
@@ -375,7 +375,7 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 端到端测试 `tests/meet-print.spec.js`（3 个用例）：教练全队稿（含刷新提示、费用、切分、pre-flight）、
 家长隔离（伪造 `family=` 也只看自己家）、无报名时的空态。
 
-### 10.8 阶段 C 补充：全队报名报告（`group=sex`）
+### 10.7 阶段 C 补充：全队报名报告（`group=sex`）
 
 家长已经认 Team Manager 那份版式，所以按它做了一版**全队报告**（同一个页面，`?group=sex`）：
 
@@ -392,7 +392,7 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 家长也可以登录网站自己看——dashboard 的 meet 卡片上多一个 `🖨 My entry sheet`，
 **不依赖** `entriesOpenToFamilies`（报名表关着也能自查）。
 
-### 10.9 还没做的
+### 10.8 阶段 A/B/C 之后仍遗留的
 
 - 阶段三（导出组行 / CSV / 确认稿 / SDIF writer）——按 §7 的顺序在 Gate A2 之后
 - 接力：仍卡在"今天怎么报的"这个信息上
@@ -462,3 +462,41 @@ F3M  139Chen F1M  199Ye   F2M  177MouraF3M  155Pan  F4               51
 **结论：棒次只有 `.hy3` 带（`.cl2` 的结构里有字段但 TM 没填）。**
 这改变了 §1 里"`.cl2` 优先"的判断 —— 如果我们要完整表达接力棒次，两个格式都得写，
 或者接受 `.cl2` 里棒次由主办方手工补。
+
+### 10.9 阶段 D 已落地：SDIF v3 `.cl2` writer
+
+`src/utils/sdif.js`（reader + writer，规范字段表做单一真相）+ `execution/meet-entry/export_cl2.mjs`（CLI）。
+
+**回归证据（这是 D 的核心）**：把 2026-11-13 那份真实 Team Manager 导出件（177 条记录）
+读成模型 → 用我们的 writer 重新写出 → 逐字段比对：
+
+```
+记录构成一致: {A0:1, B1:1, C1:1, D0:145, D3:28, Z0:1}  →  177 条
+比较 4,602 个字段 → 只有 2 处不同(Z0 的备注文字与批次号,都是我方元数据)
+每行 160 字节, CRLF, 无空尾行
+```
+
+**逐字节核对出来的 6 条规矩**（初版全都写错了，是回归把它们逼出来的）：
+
+1. 日期是 `MMDDYYYY` —— 我第一版写成了 `MMYYYYDD`
+2. `distance` 是空格右对齐（`" 500"`），不是补零（`"0500"`）
+3. `AGE` 是**左**对齐（`"9 "`），不是右对齐
+4. `eventNo` 是"数字右对齐占 3 位 + 年龄组字母"：`"  2F"` / `" 25B"` / `" 11 "`，
+   而且这个字段装的是 **ev3 的事件码**，不是纯数字 —— 为此给 `events[]` 回填了 `eventCode`
+5. 无成绩写 `NT` 令牌，格式 `"     NT "`，不是留空
+6. `D3` 紧跟泳手第一条 `D0`；`.CL2` 里 `CITIZEN` 常为空、`ATTACH` 空、`swimDate` 空 ——
+   我们不知道的字段就留空，不编造
+
+**命令**：
+
+```powershell
+node execution/meet-entry/export_cl2.mjs --meet <docId> --dry-run   # 先看摘要
+node execution/meet-entry/export_cl2.mjs --meet <docId>            # 写到 .tmp/meet-entry/export/
+```
+
+阻断项（缺成绩 / 缺 USA ID / 超限额）沿用 `validateExport()`，不会产出半成品文件。
+
+单测：`tests/unit/verify-sdif.mjs`（67 条，含"字段不重叠/不越界"的结构自检）。
+单测总入口现为 9 个脚本全绿。
+
+**仍然只做个人项目**：接力需要 `E0`/`F0` 与棒次名单，而站点没有接力数据模型（§11 有格式）。

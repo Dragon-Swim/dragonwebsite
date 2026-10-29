@@ -127,11 +127,17 @@ export function resolveSeedTime({ entryEvent, entry, meet, bestTimes = [] }) {
   const stored = toSeconds(entryEvent?.seedSeconds ?? entryEvent?.seedTime);
   const base = {
     eventNo: entryEvent?.eventNo ?? null,
+    // The meet's own event code ('1A' / '2F'), which is what SDIF's "Event Number"
+    // field wants: the bare number cannot distinguish two age groups of one event.
+    eventCode: meetEvent?.eventCode || null,
     ageGroup: entryEvent?.ageGroup ?? entry?.ageGroup ?? null,
     // The event's own sex, which is not the swimmer's: 'X' events are open to
     // both and the printed report labels them "Mixed".
     eventSex: meetEvent?.gender || entry?.gender || null,
     eventSexLabel: EVENT_SEX_LABELS[meetEvent?.gender] || EVENT_SEX_LABELS[entry?.gender] || '',
+    // Needed by the SDIF writer for the EVENT AGE code (`1314`, `15OV`, `0910`).
+    ageMin: meetEvent?.ageMin ?? null,
+    ageMax: meetEvent?.ageMax ?? null,
     distance,
     stroke,
     standards,
@@ -270,11 +276,15 @@ export function buildExportRows({ meet, entries = [], bestTimesById, statuses = 
         gender: entry.gender ?? null,
         genderLabel: entry.gender === 'F' ? 'F' : entry.gender === 'M' ? 'M' : '',
         eventNo: resolved.eventNo,
+        eventCode: resolved.eventCode,
         ageGroup: resolved.ageGroup,
         eventSex: resolved.eventSex,
         eventSexLabel: resolved.eventSexLabel,
         distance: resolved.distance,
         stroke: resolved.stroke,
+        // EVENT AGE inputs, carried through for the SDIF writer.
+        ageMin: resolved.ageMin,
+        ageMax: resolved.ageMax,
         eventLabel: `${resolved.distance ?? '?'} ${STROKE_NAMES[resolved.stroke] || resolved.stroke || '?'}`,
         relay: Boolean(entryEvent?.relay),
         sessionId: entryEvent?.sessionId || null,

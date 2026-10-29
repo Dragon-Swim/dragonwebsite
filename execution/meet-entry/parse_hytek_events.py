@@ -240,7 +240,11 @@ def build_events(rows, open_min_age, warn):
             "relay": relay,
             "sessionId": f"s{int(r[ROW_SESSION])}" if r[ROW_SESSION].strip().isdigit() else "",
             "standards": {"SCY": scy, "LCM": lcm},
-            # 原始编码,便于回查(不进 Firestore:add_meet.mjs 只取白名单字段)
+            # 项目码（"1A" / "2F" / "51B"）：SDIF 的 D0 27/4 "Event Number" 存的就是这个，
+            # 不是纯数字 —— 同一个号码下不同年龄组靠后缀区分。不带它，写出来的
+            # .cl2 会让 Meet Manager 找不到项目。
+            "eventCode": code,
+            # 原始编码，便于回查(不进 Firestore:strip_private 会去掉 _ 开头的键)
             "_code": code,
             "_order": int(r[ROW_ORDER]) if r[ROW_ORDER].strip().isdigit() else None,
             "_start": r[ROW_START].strip(),
