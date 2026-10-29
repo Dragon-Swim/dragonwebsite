@@ -42,6 +42,17 @@ import {
 /** Entry statuses that are allowed into an entry file. */
 export const EXPORTED_STATUS = 'confirmed';
 
+/** Every status an entry can carry, in the order a coach thinks about them. */
+export const ENTRY_STATUSES = ['confirmed', 'submitted', 'draft', 'declined'];
+
+/** Human labels for the sheet. A family must never see a bare 'submitted'. */
+export const STATUS_LABELS = {
+  confirmed: 'Confirmed',
+  submitted: 'Waiting for coach',
+  draft: 'Draft',
+  declined: 'Not swimming',
+};
+
 /** Statuses that are deliberately held back, with the reason shown to the coach. */
 export const HELD_BACK = {
   draft: 'not submitted yet',
@@ -194,8 +205,12 @@ function nameParts(entry) {
  * the coach must see before the file is sent — silently exporting 26 of 33
  * swimmers is how a kid gets left out of a meet.
  */
-export function buildExportRows({ meet, entries = [], bestTimesById } = {}) {
+export function buildExportRows({ meet, entries = [], bestTimesById, statuses = [EXPORTED_STATUS] } = {}) {
   const sessions = new Map((meet?.sessions || []).map((s) => [s.id, s]));
+  // The entry file may only carry confirmed rows. The confirmation sheet,
+  // however, is also useful *before* the coach confirms (the family wants to see
+  // what it submitted), so the caller can widen this — see meet-print.js.
+  const allowed = new Set(statuses);
   const getBestTimes = (id) => {
     if (!bestTimesById) return [];
     if (typeof bestTimesById.get === 'function') return bestTimesById.get(id) || [];
@@ -211,7 +226,7 @@ export function buildExportRows({ meet, entries = [], bestTimesById } = {}) {
     const usaId = String(entry?.usaSwimmingId || '').trim();
     const name = String(entry?.swimmerName || '').trim() || '(unnamed)';
 
-    if (status !== EXPORTED_STATUS) {
+    if (!allowed.has(status)) {
       excluded.push({
         usaSwimmingId: usaId,
         swimmerName: name,
@@ -236,6 +251,7 @@ export function buildExportRows({ meet, entries = [], bestTimesById } = {}) {
         entryDocId: entry.id || entry.docId || null,
         familyId: entry.familyId || null,
         status,
+        statusLabel: STATUS_LABELS[status] || status,
         usaSwimmingId: usaId,
         swimmerName: name,
         lastName: last,

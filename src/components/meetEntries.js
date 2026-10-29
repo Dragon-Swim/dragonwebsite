@@ -504,15 +504,36 @@ function describeTime(o) {
 
 // ── footer ───────────────────────────────────────────────────────────────
 
+/**
+ * Link to the printable confirmation sheet (`meet-print.html`).
+ *
+ * It is a plain <a download-less href>, not a click handler, because the sheet
+ * is its own page: the dashboard rebuilds `#app` on every snapshot, so a sheet
+ * rendered inside this modal would be wiped by any other family saving an entry
+ * — the same reason the modal itself is body-level.
+ */
+function printLink(extra, label) {
+  const meetId = encodeURIComponent(state.meet?.id || '');
+  const href = `${import.meta.env.BASE_URL}meet-print.html?meet=${meetId}${extra}`;
+  return `<a class="btn btn-outline btn-sm me-print" href="${href}" target="_blank" rel="noopener">${esc(label)}</a>`;
+}
+
 function footerHtml() {
   if (state.view === 'list') {
-    return `<span class="me-footer-note">${esc(t('meet_entries_footer_list'))}</span>`;
+    return `<span class="me-footer-note">${esc(t('meet_entries_footer_list'))}</span>`
+      + printLink('', t('meet_entries_print_all'));
   }
   if (!state.ctx?.canEnter) {
     return `<button type="button" class="btn btn-outline btn-sm" data-action="back">${esc(t('meet_entries_back'))}</button>`;
   }
   const isLocked = locked();
   const disabled = state.saving || isLocked ? 'disabled' : '';
+  // A family prints its own sheet; the family id itself is re-derived from the
+  // sign-in on that page, so passing it here is only a convenience for coaches.
+  const sheetLink = printLink(
+    isCoach() ? `&family=${encodeURIComponent(state.familyId || '')}` : '&status=all',
+    t('meet_entries_print_sheet'),
+  );
 
   if (isCoach()) {
     return `
@@ -521,12 +542,14 @@ function footerHtml() {
       <button type="button" class="btn btn-outline btn-sm me-danger" data-action="decline" ${disabled}>${esc(t('meet_entries_decline'))}</button>
       ${state.status === 'confirmed' || state.status === 'declined'
         ? `<button type="button" class="btn btn-outline btn-sm" data-action="reopen" ${disabled}>${esc(t('meet_entries_reopen'))}</button>` : ''}
+      ${sheetLink}
       <span class="me-footer-note me-save-note"></span>
     `;
   }
   return `
     <button type="button" class="btn btn-primary btn-sm" data-action="submit" ${disabled}>${esc(t('meet_entries_submit'))}</button>
     <button type="button" class="btn btn-outline btn-sm" data-action="draft" ${disabled}>${esc(t('meet_entries_save_draft'))}</button>
+    ${sheetLink}
     <span class="me-footer-note me-save-note">${esc(state.saving ? t('meet_entries_saving') : (state.error || ''))}</span>
   `;
 }

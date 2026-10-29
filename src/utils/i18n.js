@@ -483,6 +483,8 @@ const translations = {
         meet_entries_events_chosen: 'events chosen',
         meet_entries_day_unknown: 'Date to be announced',
         meet_entries_footer_list: 'Families can update their own entry until the deadline. Coaches can edit any entry at any time.',
+        meet_entries_print_all: '🖨 Confirmation sheets',
+        meet_entries_print_sheet: '🖨 Confirmation sheet',
         meet_entries_err_too_many: 'That is {count} events; the meet allows at most {max}.',
         meet_entries_err_per_day: '{day}: {count} events, but at most {max} per day.',
         meet_entries_err_relay: 'Relay entries are set by the coach.',

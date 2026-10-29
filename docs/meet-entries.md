@@ -286,9 +286,36 @@ python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>
 16 列，每个单元格加引号，行尾 CRLF，文件带 UTF-8 BOM（否则 Excel 在中文 Windows 上会乱码）。
 其中 `Changed` 列专门放 `1:12.53 → 1:11.03` 这种前后对比，`Time source` 区分"我们的记录 / 手填"。
 
-### 6.5 还没做
+### 6.5 家长确认稿（`meet-print.html`）
 
-给家长的确认稿（打印页）和 SDIF v3 `.cl2` writer 都还没做 —— 两者都建立在这一层的输出之上
+独立 Vite 入口（`src/pages/meet-print.js` + `src/styles/meet-print.css` + 根目录 `meet-print.html`）。
+**不放进 dashboard**：`#app` 每次 Firestore 快照都会重建，确认稿在里面会被别的家庭一次保存冲掉——
+和报名弹窗必须 body 级是同一个原因。
+
+```text
+meet-print.html?meet=<id>                     教练:全队每家庭一页
+meet-print.html?meet=<id>&family=<familyId>   教练:单个家庭
+meet-print.html?meet=<id>                     家长:只有自己家
+…&status=all                                   把 draft/submitted 也显示出来
+…&print=1                                      加载后自动弹打印框
+```
+
+三条设计约束：
+
+1. **家长的家庭 id 从登录身份推导，绝不信任 URL**。手工改 `&family=` 也只会看到自己家
+   （Firestore 规则本来也会拦，但不该把唯一的墙交给规则）。
+2. **打印即成品**：`@media print` 去掉工具栏、按 letter 排版、`.mp-family` 之间强制分页，
+   所以"全队"模式一次就能导出多页 PDF。
+3. **成绩刷新要写在纸上**：如果导出时重算的 seed time 与家长提交时的不同，页面会出一行
+   「Times updated since you submitted: 100 Breast 38.50 → 36.60」。这是确认稿存在的理由。
+
+教练视角在页顶多一个 pre-flight 框（几人/几项/达标数/未确认数/缺成绩数/截止时间），
+家长视角没有。入口：报名弹窗底部 `🖨 Confirmation sheet`（单家庭）与名单视图的
+`🖨 Confirmation sheets`（全队）。
+
+### 6.6 还没做
+
+SDIF v3 `.cl2` writer 还没做 —— 它建立在这一层的输出之上
 （见 `docs/meet-entry-export-feasibility.md` §7）。
 
 ## 7. 未做 / 下一步

@@ -156,6 +156,19 @@ check('row carries a display time string', rowA.seedTimeText === '1:01.00', rowA
 check('row exposes the cut-off as text', rowA.standardText === '1:03.09', rowA.standardText);
 check('relay flag is carried through', rowA.relay === false);
 
+// The confirmation sheet also runs *before* the coach confirms, so the caller can
+// widen the statuses — but that must never change the default: an entry file may
+// only ever carry confirmed rows.
+const preview = buildExportRows({
+  meet: MEET, entries: ENTRIES, bestTimesById: BEST_TIMES,
+  statuses: ['confirmed', 'submitted', 'draft', 'declined'],
+});
+check('a caller may widen which statuses become rows', preview.rows.length === 4, preview.rows.length);
+check('…and then nothing is held back', preview.excluded.length === 0, preview.excluded.map((e) => e.status));
+check('…but an entry with no USA Swimming ID stays separated', preview.noId.length === 1, preview.noId);
+check('…rows carry a human status label for the sheet', preview.rows.every((r) => r.statusLabel), preview.rows.map((r) => r.statusLabel));
+check('the default still exports confirmed only', built.rows.every((r) => r.status === 'confirmed'));
+
 console.log('4. validation');
 const validation = validateExport({ rows: built.rows, meet: MEET, excluded: built.excluded, noId: built.noId });
 check('missing seed time is an error (the meet refuses NT)', validation.errors.some((e) => e.code === 'missing-seed-time'), validation.errors.map((e) => e.code));

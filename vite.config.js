@@ -20,6 +20,8 @@ export default defineConfig({
                 terms: resolve(__dirname, 'terms.html'),
                 safesport: resolve(__dirname, 'safesport.html'),
                 admin: resolve(__dirname, 'admin.html'),
+                // 家长确认稿:独立入口,不进 dashboard 的 DOM(#app 每次快照都会重建)
+                'meet-print': resolve(__dirname, 'meet-print.html'),
             },
         },
     },

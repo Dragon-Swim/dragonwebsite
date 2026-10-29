@@ -1,0 +1,376 @@
+/**
+ * Styles for the meet entry confirmation sheet (meet-print.html).
+ *
+ * This page exists to be printed or saved as a PDF, so the screen styles are
+ * only a preview of the paper: same widths, same type, same line breaks. The
+ * `@media print` block removes every bit of chrome the browser would otherwise
+ * draw (toolbar, links) and pins the page size, because the confirmation sheet
+ * gets emailed to families and filed with the entry.
+ *
+ * Deliberately NOT sharing the site stylesheet: a nav bar or a footer here would
+ * either print (wasteful) or need hiding (fragile), and the sheet has to look the
+ * same in the browser and on paper.
+ */
+
+:root {
+  --mp-ink: #111;
+  --mp-muted: #5b6470;
+  --mp-line: #c8cdd4;
+  --mp-soft: #f4f6f8;
+  --mp-ok: #15704a;
+  --mp-warn: #9a5b00;
+  --mp-bad: #a11616;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #eef1f4;
+  color: var(--mp-ink);
+  font: 15px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.mp-root {
+  padding: 24px 16px 64px;
+}
+
+/* ── the sheet ─────────────────────────────────────────────────────────── */
+
+.mp-sheet {
+  max-width: 8.5in;
+  margin: 0 auto;
+  background: #fff;
+  padding: 40px 44px 48px;
+  box-shadow: 0 2px 18px rgba(15, 23, 42, 0.12);
+}
+
+.mp-toolbar {
+  max-width: 8.5in;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mp-print-btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 18px;
+  border: 1px solid #1f6feb;
+  border-radius: 8px;
+  background: #1f6feb;
+  color: #fff;
+  cursor: pointer;
+}
+
+.mp-print-btn:hover {
+  background: #1a5fd0;
+}
+
+.mp-toolbar-note {
+  color: var(--mp-muted);
+  font-size: 13px;
+}
+
+/* ── header ────────────────────────────────────────────────────────────── */
+
+.mp-head {
+  border-bottom: 2px solid var(--mp-ink);
+  padding-bottom: 14px;
+  margin-bottom: 22px;
+}
+
+.mp-brand {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mp-muted);
+}
+
+.mp-head h1 {
+  font-size: 24px;
+  margin: 6px 0 8px;
+}
+
+.mp-meet-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.mp-meet-meta {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--mp-muted);
+}
+
+/* ── one family ────────────────────────────────────────────────────────── */
+
+.mp-family {
+  margin-top: 26px;
+  break-inside: avoid;
+}
+
+.mp-family + .mp-family {
+  border-top: 1px dashed var(--mp-line);
+  padding-top: 22px;
+}
+
+.mp-family-head h2 {
+  font-size: 17px;
+  margin: 0 0 2px;
+}
+
+.mp-family-meta {
+  font-size: 12.5px;
+  color: var(--mp-muted);
+}
+
+/* ── one swimmer ───────────────────────────────────────────────────────── */
+
+.mp-swimmer {
+  margin-top: 18px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.mp-swimmer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mp-swimmer-head h3 {
+  font-size: 15.5px;
+  margin: 0;
+}
+
+.mp-swimmer-sub {
+  font-size: 12.5px;
+  color: var(--mp-muted);
+}
+
+table.mp-events {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 13.5px;
+}
+
+table.mp-events th,
+table.mp-events td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mp-line);
+  vertical-align: top;
+}
+
+table.mp-events th {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mp-muted);
+  border-bottom: 1.5px solid var(--mp-ink);
+}
+
+.mp-event-name {
+  font-weight: 600;
+}
+
+.mp-group {
+  color: var(--mp-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.mp-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mp-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.mp-badge--ok {
+  color: var(--mp-ok);
+}
+
+.mp-badge--warn {
+  color: var(--mp-warn);
+}
+
+.mp-badge--bad {
+  color: var(--mp-bad);
+}
+
+.mp-badge--muted {
+  color: var(--mp-muted);
+}
+
+/* ── notes under a swimmer ─────────────────────────────────────────────── */
+
+.mp-note {
+  margin-top: 8px;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--mp-line);
+  background: var(--mp-soft);
+}
+
+.mp-note--update {
+  border-left-color: var(--mp-warn);
+}
+
+.mp-note--bad {
+  border-left-color: var(--mp-bad);
+  color: var(--mp-bad);
+}
+
+.mp-fees {
+  margin-top: 8px;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--mp-line);
+  padding-top: 6px;
+}
+
+.mp-fees-total {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── confirmation block ────────────────────────────────────────────────── */
+
+.mp-sign {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mp-ink);
+  font-size: 13px;
+  break-inside: avoid;
+}
+
+.mp-sign-line {
+  display: flex;
+  gap: 28px;
+  margin-top: 20px;
+  color: var(--mp-muted);
+  font-size: 12.5px;
+}
+
+.mp-sign-line span {
+  flex: 1;
+  border-top: 1px solid var(--mp-ink);
+  padding-top: 4px;
+}
+
+/* ── coach-only summary ────────────────────────────────────────────────── */
+
+.mp-check {
+  margin: 0 0 18px;
+  border: 1px solid var(--mp-line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  background: var(--mp-soft);
+  break-inside: avoid;
+}
+
+.mp-check h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mp-muted);
+  margin: 0 0 8px;
+}
+
+.mp-check ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.mp-check-error {
+  color: var(--mp-bad);
+  font-weight: 600;
+}
+
+.mp-check-warn {
+  color: var(--mp-warn);
+}
+
+/* ── states (loading / error / empty) ──────────────────────────────────── */
+
+.mp-state {
+  max-width: 8.5in;
+  margin: 0 auto;
+  background: #fff;
+  padding: 32px;
+  text-align: center;
+  color: var(--mp-muted);
+  box-shadow: 0 2px 18px rgba(15, 23, 42, 0.12);
+}
+
+.mp-state--error {
+  color: var(--mp-bad);
+}
+
+.mp-state a {
+  color: #1f6feb;
+}
+
+/* ── paper ─────────────────────────────────────────────────────────────── */
+
+@page {
+  size: letter;
+  margin: 0.5in;
+}
+
+@media print {
+  body {
+    background: #fff;
+    font-size: 10.5pt;
+  }
+
+  .mp-root {
+    padding: 0;
+  }
+
+  .mp-toolbar {
+    display: none;
+  }
+
+  .mp-sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  /* One family per page when the coach prints the whole team. */
+  .mp-family {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .mp-family:first-of-type {
+    break-before: auto;
+    page-break-before: auto;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}

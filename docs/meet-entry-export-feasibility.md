@@ -193,7 +193,7 @@ usas Worker: https://dragonswim.org/api/usas/session → 401（路由已上线�
 |---|---|---|
 | **A 赛程入库** | `.ev3` 导入器（替掉 PDF 解析）+ 年龄组数值匹配 | ✅ 2026-10-29 完成（`d468df0` / `d3e2a4f`，三场已写入生产） |
 | **B 导出准备** | 组行 + **成绩重算** + 校验 + 工作表 CSV | ✅ 2026-10-29 完成（见 §10.5） |
-| **C 确认稿** | 给家长的打印页（独立 Vite entry + 浏览器打印） | 待做，约 1 天 |
+| **C 确认稿** | 给家长的打印页（独立 Vite entry + 浏览器打印） | ✅ 2026-10-29 完成（见 §10.7） |
 | **D 入队文件** | **SDIF v3 writer**（产出 `.cl2`），拿 11/13 那份做回归比对 | 待做，2–3 天 |
 | **E 接力** | `E0`/`F0` | 阻塞：§6.1 还没有答案 |
 
@@ -362,7 +362,21 @@ python execution/meet-entry/parse_hytek_events.py .tmp/meet-entry/27-41-events.z
 工作表 CSV 1646 字符，BOM + CRLF + 10 行
 ```
 
-### 10.6 还没做的
+### 10.7 阶段 C 已落地：家长确认稿
+
+`meet-print.html` + `src/pages/meet-print.js` + `src/styles/meet-print.css`，独立 Vite 入口。
+
+- **不进 dashboard**：`#app` 每次快照重建，确认稿在里面会被别的家庭的保存冲掉
+- **家长的家庭归属从登录身份推导**，忽略 URL 里的 `family=`（不把公平性交给 Firestore 规则做唯一防线）
+- **打印即成品**：`@media print` 去掉工具栏、letter 排版、家庭之间强制分页 → "全队"模式一次导出一份多页 PDF
+- **成绩刷新写在纸上**：`Times updated since you submitted: 38.50 → 36.60`，家长确认的是他真正会提交的东西
+- 教练视角多一个 pre-flight 框（人数/项数/达标/未确认/缺成绩/截止），家长视角没有
+- 入口：报名弹窗底部 `🖨 Confirmation sheet`（单家庭）/ 名单视图 `🖨 Confirmation sheets`（全队）
+
+端到端测试 `tests/meet-print.spec.js`（3 个用例）：教练全队稿（含刷新提示、费用、切分、pre-flight）、
+家长隔离（伪造 `family=` 也只看自己家）、无报名时的空态。
+
+### 10.8 还没做的
 
 - 阶段三（导出组行 / CSV / 确认稿 / SDIF writer）——按 §7 的顺序在 Gate A2 之后
 - 接力：仍卡在"今天怎么报的"这个信息上
