@@ -370,12 +370,76 @@ table.mp-events th {
   white-space: nowrap;
 }
 
+/* A relay line on a swimmer's list: the third column carries their role
+   ("Back" for a medley leg, "3" for a free relay) instead of a time, which is
+   what Team Manager prints and what a parent looks for. */
+.mp-rep-event--relay .mp-rep-label {
+  font-style: italic;
+}
+
+.mp-rep-role {
+  font-family: inherit;
+  font-weight: 700;
+  font-variant-numeric: normal;
+  color: var(--mp-ink);
+}
+
+/* RELAYS section — one block per squad, kept whole across a page break. */
+.mp-relay {
+  margin: 0 0 10px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.mp-relay-head {
+  display: grid;
+  grid-template-columns: 3.6em 1fr auto;
+  gap: 10px;
+  font-size: 13px;
+  padding-bottom: 2px;
+  border-bottom: 0.5px dotted var(--mp-rule, #ccc);
+}
+
+.mp-relay-no {
+  color: var(--mp-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-relay-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mp-relay-legs {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0 0 0 14px;
+  font-size: 13px;
+}
+
+.mp-relay-legs li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 1px 0;
+}
+
+.mp-relay-role {
+  color: var(--mp-muted);
+  font-size: 12px;
+}
+
+.mp-note--relay {
+  font-weight: 600;
+}
+
 .mp-rep-totals {
   margin-top: 24px;
   padding-top: 10px;
   border-top: 1.5px solid var(--mp-ink);
   display: grid;
-  grid-template-columns: repeat(4, auto);
+  grid-template-columns: repeat(5, auto);
   justify-content: start;
   gap: 6px 30px;
   font-size: 13px;

@@ -503,9 +503,14 @@ meets/{meetId}/relayEntries/{eventCode}__{letter}      例：9A__B
 | 项 | 说明 |
 |---|---|
 | **接力成绩校验** | 见 §6.7.1，等教练确认是否需要 |
-| **全队报告里的接力** | `group=sex` 的报告目前只列个人项目，接力队还没渲染进去（目标版式见 §6.9） |
 | **`.hy3` writer** | 不做（无公开规范 + 有校验码）；`.cl2` 已够用 |
 | **真实导入验证** | 生成的 `.cl2` 还没被主办方的 Meet Manager 导入过 —— 这是唯一没验证的环节 |
+
+> **全队报告里的接力：2026-10-30 已做**（版式见 §6.9）。`group=sex` 的报告现在：
+> 每个泳手名下多一条接力行（混合泳印泳姿、自由泳印第几棒），末尾多一个 **RELAYS** 区块
+> （每个队位：队字母 + 接力成绩 + 四棒姓名）。**只游接力的孩子**也会出现——他们没有 entry
+> 文档，是从 `relayEntries` 反查出来的，否则主办方按 by-name 报告核对时会发现名单少人。
+> 逻辑在 `src/utils/reportRelays.js`（纯函数，30 项单测），页面只负责渲染。
 
 ### 6.9 主办方收到的报告长什么样（2025 RMSC 实物，2026-10-30 归档）
 
@@ -558,7 +563,9 @@ Location: GISC
   → 试点前先问 Meet Director。
 - **接力成绩校验**:数据齐全、算法已写(§6.7.1),"做/不做"等教练一句话。⚠ 不做的话，
   与 TM 的那份对比里接力 seed time **一定不同**（TM 按四棒最快之和算）。
-- **全队报告里的接力**:`group=sex` 目前只列个人项目(§6.8)。
+- **by-event 视图**:现在只有 `group=family`（每家一份）与 `group=sex`（全队）；
+  §6.9 的 by-event 报告**没有独立视图**，接力信息放在 `group=sex` 末尾的 RELAYS 区块里。
+  27-41 只要 by-name，够用；哪场赛会明确要 by-event 再单独做。
 - **提醒**:没有邮件/站内通知,教练需要自己看 `Submitted` 筛选;meet 卡片上也没有"已提交 N 人"。
 - **`swimmerId` 迁移**:用 USA ID 当键的代价见 §1.2;要根治还是得给每个 swimmer 一个
   稳定 id(`registrations.swimmers[].swimmerId`),那要同时改注册表单和迁移脚本。
@@ -566,14 +573,16 @@ Location: GISC
 
 > 已经做完、别再来一遍:组行/成绩重算/工作表 CSV(§6)、`validateExport` 五条校验(§6.3)、
 > 家长确认稿 + 全队报告(`meet-print.html`)、SDIF v3 `.cl2` writer 与导出按钮(§6.6)、
-> 接力排棒界面(§6.7)。
+> 接力排棒界面(§6.7)、**全队报告里的接力(§6.8,含只游接力的孩子)**。
 
 ## 8. 测试约定
 
 ```powershell
 npm run test:unit   # verify-meet-eligibility.mjs(106 项,真实 27-41 数据)
                     # + verify-meet-entry-export.mjs(79 项:成绩重算/挡下原因/bonus 名额/CSV)
+                    # + verify-report-relays.mjs(30 项:混合泳/自由泳的棒次标注、只游接力的人)
 npm test            # 含 meet-entries.spec.js(家庭提交 / 手填成绩 / 无 ID / 截止 / 教练确认)
+                    # 与 meet-print.spec.js(确认稿 / 全队报告 / 接力行与 RELAYS 区块)
 ```
 
 E2E 的两个坑(都已踩过):

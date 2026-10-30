@@ -35,6 +35,8 @@ import {
   auth, db, onAuthStateChanged, doc, getDoc, getDocs, collection, query, where,
 } from '../utils/firebase.js';
 import { buildExportRows, summarizeExport, groupRowsBySwimmer, STATUS_LABELS } from '../utils/meetEntryExport.js';
+import { buildRelayReport } from '../utils/reportRelays.js';
+import { formatSwimSeconds } from '../utils/meetEligibility.js';
 
 const root = document.getElementById('mp-root');
 
@@ -184,8 +186,24 @@ async function loadEntries({ role, meetId, familyId, swimmers }) {
   return out;
 }
 
-async function loadBestTimes(entries) {
-  const ids = [...new Set(entries.map((e) => String(e.usaSwimmingId || '').trim()).filter(Boolean))];
+/**
+ * Relay squads for this meet.
+ *
+ * A squad belongs to the club, not to an entry, so it is a separate collection
+ * and readable by any signed-in user (see firestore.rules). Failing to read it
+ * must not take the whole sheet down: the report simply renders without relays.
+ */
+async function loadRelaySquads(meetId) {
+  try {
+    const snap = await getDocs(collection(db, 'meets', meetId, 'relayEntries'));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.warn('meet-print: relay squads not readable', e?.message);
+    return [];
+  }
+}
+
+async function loadBestTimes(entries) {  const ids = [...new Set(entries.map((e) => String(e.usaSwimmingId || '').trim()).filter(Boolean))];
   const map = {};
   await Promise.all(ids.map(async (id) => {
     try {
@@ -260,14 +278,25 @@ function timeText(row) {
 /**
  * One swimmer block, in the shape the families already recognise from Team
  * Manager's report: "First Last (age)" followed by "#event / sex age distance
- * stroke / time" lines.
+ * stroke / time" lines — and, for a relay swimmer, one more line naming the
+ * relay and which leg is theirs (TM prints the stroke for a medley relay and the
+ * leg number for a free relay).
  */
-function reportSwimmer(swimmer) {
-  const lines = swimmer.events.map((row) => `<div class="mp-rep-event">
+function reportSwimmer(swimmer, relayLines = []) {
+  const items = [
+    ...swimmer.events.map((row) => ({ eventNo: row.eventNo, html: `<div class="mp-rep-event">
         <span class="mp-rep-no">#${esc(row.eventNo)}</span>
         <span class="mp-rep-label">${esc(row.eventSexLabel)} ${esc(row.ageGroup)} ${esc(row.eventLabel)}</span>
         <span class="mp-rep-time">${esc(timeText(row))}</span>
-      </div>`).join('');
+      </div>` })),
+    ...relayLines.map((line) => ({ eventNo: line.eventNo, html: `<div class="mp-rep-event mp-rep-event--relay">
+        <span class="mp-rep-no">#${esc(line.eventNo)}</span>
+        <span class="mp-rep-label">${esc(line.label)}</span>
+        <span class="mp-rep-time mp-rep-role">${esc(line.role)}</span>
+      </div>` })),
+  ].sort((a, b) => Number(a.eventNo ?? 0) - Number(b.eventNo ?? 0));
+
+  const lines = items.map((i) => i.html).join('');
   return `<div class="mp-rep-swimmer" data-swimmer="${esc(swimmer.usaSwimmingId || swimmer.swimmerName)}">
     <div class="mp-rep-name">${esc(swimmer.swimmerName)}${swimmer.ageAtMeet != null ? ` (${esc(swimmer.ageAtMeet)})` : ''}</div>
     ${lines}
@@ -296,43 +325,80 @@ function reportHead(meet) {
 /**
  * The whole team, split FEMALE / MALE, each section by surname.
  *
- * Relays are deliberately absent: a relay entry belongs to the club, not to a
- * swimmer, and we do not hold relay line-ups yet. Saying so out loud beats
- * leaving parents to wonder why the 800 free relay is missing.
+ * Relays appear twice, on purpose: once as a line under each swimmer (which leg
+ * is theirs) and once as a RELAYS section with the letter, the relay time and
+ * four ordered names. That is what Team Manager prints across its two reports,
+ * and the host asked for both a "report by name" and, for some meets, a "report
+ * by event"; doing both here means one PDF answers either request.
  */
-function teamReportHtml(meet, rows) {
+function teamReportHtml(meet, rows, relayReport = null) {
   const individual = rows.filter((r) => !r.relay);
-  const relays = rows.filter((r) => r.relay);
   const swimmers = groupRowsBySwimmer(individual); // already sorted by surname
+  const relayBySwimmer = relayReport?.bySwimmer || new Map();
+
+  // A swimmer who only swims relays has no entry document, so nothing above
+  // would list them — but the host's by-name report must contain every entered
+  // athlete. Their block comes from the line-up, with no individual lines.
+  const listed = new Set(swimmers.map((s) => String(s.usaSwimmingId || '').toUpperCase()));
+  for (const [usaId, who] of relayReport?.swimmers || new Map()) {
+    if (listed.has(usaId)) continue;
+    const parts = String(who.swimmerName || '').trim().split(/\s+/).filter(Boolean);
+    swimmers.push({
+      usaSwimmingId: usaId,
+      swimmerName: who.swimmerName,
+      lastName: parts.length > 1 ? parts[parts.length - 1] : (parts[0] || ''),
+      firstName: parts.length > 1 ? parts.slice(0, -1).join(' ') : '',
+      ageAtMeet: who.ageAtMeet,
+      gender: String(who.gender || '').toUpperCase().startsWith('F') ? 'F' : 'M',
+      events: [],
+      relayOnly: true,
+    });
+  }
+  swimmers.sort((a, b) => String(a.lastName || a.swimmerName).localeCompare(String(b.lastName || b.swimmerName))
+    || String(a.firstName || '').localeCompare(String(b.firstName || '')));
 
   const section = (title, list) => (list.length ? `<section class="mp-rep-section" data-section="${esc(title)}">
       <h2 class="mp-rep-title">${esc(title)}</h2>
-      ${list.map(reportSwimmer).join('')}
+      ${list.map((s) => reportSwimmer(s, relayBySwimmer.get(String(s.usaSwimmingId || '').toUpperCase()) || [])).join('')}
     </section>` : '');
 
   const female = swimmers.filter((s) => s.gender === 'F');
   const male = swimmers.filter((s) => s.gender === 'M');
   const counts = (list) => list.reduce((n, s) => n + s.events.length, 0);
+  const squads = relayReport?.squads || [];
 
   const empty = '<div class="mp-note">No entries to show for this meet yet.</div>';
   const body = swimmers.length
     ? `${section('FEMALE', female)}${section('MALE', male)}`
     : empty;
 
-  const totals = swimmers.length ? `<div class="mp-rep-totals">
-      <div><span>Female IE's:</span><span>${counts(female)}</span></div>
-      <div><span>Male IE's:</span><span>${counts(male)}</span></div>
-      <div><span>Total IE's:</span><span>${counts(female) + counts(male)}</span></div>
-      <div><span>Total Athletes:</span><span>${swimmers.length}</span></div>
+  const totals = swimmers.length || squads.length ? `<div class="mp-rep-totals">
+      <div data-metric="female-ies"><span>Female IE's:</span><span>${counts(female)}</span></div>
+      <div data-metric="male-ies"><span>Male IE's:</span><span>${counts(male)}</span></div>
+      <div data-metric="total-ies"><span>Total IE's:</span><span>${counts(female) + counts(male)}</span></div>
+      <div data-metric="relay-entries"><span>Relay entries:</span><span>${squads.length}</span></div>
+      <div data-metric="athletes"><span>Total Athletes:</span><span>${swimmers.length}</span></div>
     </div>` : '';
 
-  const relayNote = relays.length
-    ? '<div class="mp-note">Relay entries are arranged by the coach and are not listed per swimmer.</div>'
+  const relaySection = squads.length
+    ? `<section class="mp-rep-section mp-rep-relays" data-section="RELAYS">
+        <h2 class="mp-rep-title">RELAYS</h2>
+        ${squads.map((s) => `<div class="mp-relay" data-relay="${esc(s.eventCode)}-${esc(s.letter)}">
+          <div class="mp-relay-head">
+            <span class="mp-relay-no">#${esc(s.eventNo)}</span>
+            <span class="mp-relay-label">${esc(s.label)}</span>
+            <span class="mp-relay-time">${s.seconds == null ? 'NT' : `${esc(formatSwimSeconds(s.seconds))}${esc(s.courseLetter)}`}</span>
+          </div>
+          <ol class="mp-relay-legs">${s.legs.map((leg) => `<li>${esc(leg.name)}${leg.age != null ? ` (${esc(leg.age)})` : ''}
+            <span class="mp-relay-role">${esc(leg.role)}</span></li>`).join('')}</ol>
+        </div>`).join('')}
+      </section>`
     : '';
 
-  return `${body}${totals}${relayNote}
+  return `${body}${relaySection}${totals}
     <div class="mp-report-note">
-      Sorted by surname within each section. Send any correction to the coach before the entry deadline.
+      Sorted by surname within each section. Relay times are entered by the coach.
+      Send any correction to the coach before the entry deadline.
     </div>`;
 }
 
@@ -360,7 +426,7 @@ function eventRows(rows) {
         </tr>`).join('');
 }
 
-function swimmerBlock(swimmer, meet) {
+function swimmerBlock(swimmer, meet, relayLines = []) {
   const rows = swimmer.rows;
   const refreshed = rows.filter((r) => r.changed);
   const fee = Number(meet?.entryFeePerEvent);
@@ -393,10 +459,19 @@ function swimmerBlock(swimmer, meet) {
     swimmer.usaSwimmingId ? `USA-S ${swimmer.usaSwimmingId}` : 'no USA Swimming ID',
   ].filter(Boolean).join(' · ');
 
+  // A relay is arranged by the coach, not chosen by the family, so it is stated
+  // rather than listed as one of "their" events — but it still has to be visible
+  // before anyone signs the sheet.
+  const relayNote = relayLines.length
+    ? `<div class="mp-note mp-note--relay">Relay: ${relayLines
+      .map((l) => `${esc(l.label)} — ${esc(l.role)}`).join('; ')}</div>`
+    : '';
+
   if (!rows.length) {
     return `<article class="mp-swimmer" data-swimmer="${esc(swimmer.usaSwimmingId || swimmer.swimmerName)}">
       <div class="mp-swimmer-head"><h3>${esc(swimmer.swimmerName)}</h3><span class="mp-swimmer-sub">${esc(sub)}</span></div>
       <div class="mp-note">No events entered.</div>
+      ${relayNote}
     </article>`;
   }
 
@@ -408,11 +483,11 @@ function swimmerBlock(swimmer, meet) {
       </thead>
       <tbody>${eventRows(rows)}</tbody>
     </table>
-    ${pendingNote}${refreshNote}${missingNote}${feeLine}
+    ${relayNote}${pendingNote}${refreshNote}${missingNote}${feeLine}
   </article>`;
 }
 
-function familyBlock(family, meet) {
+function familyBlock(family, meet, relayBySwimmer = new Map()) {
   const swimmers = [...family.swimmers.values()];
   const title = family.parentName ? `${family.parentName}` : 'Family';
   const meta = [family.email].filter(Boolean).join(' · ');
@@ -421,7 +496,7 @@ function familyBlock(family, meet) {
       <h2>${esc(title)}</h2>
       <div class="mp-family-meta">${esc(meta)}</div>
     </div>
-    ${swimmers.map((s) => swimmerBlock(s, meet)).join('')}
+    ${swimmers.map((s) => swimmerBlock(s, meet, relayBySwimmer.get(String(s.usaSwimmingId || '').toUpperCase()) || [])).join('')}
     <div class="mp-sign">
       <label><input type="checkbox" /> I confirm these entries are correct, and that any change must be
         reported before the entry deadline.</label>
@@ -461,7 +536,7 @@ function meetHead(meet) {
   </header>`;
 }
 
-function render({ meet, built, families, role }) {
+function render({ meet, built, families, role, relayReport = null }) {
   const toolbar = `<div class="mp-toolbar">
       <button type="button" class="mp-print-btn">🖨 Print / Save as PDF</button>
       <span class="mp-toolbar-note">Choose “Save as PDF” in the print dialog${GROUP === 'sex'
@@ -473,12 +548,12 @@ function render({ meet, built, families, role }) {
     ? `<div class="mp-sheet mp-sheet--report" data-meet="${esc(meet.id || MEET_ID)}">
         ${reportHead(meet)}
         ${role === 'coach' ? checkBox(built, meet, built.excluded) : ''}
-        ${teamReportHtml(meet, built.rows)}
+        ${teamReportHtml(meet, built.rows, relayReport)}
       </div>`
     : `<div class="mp-sheet" data-meet="${esc(meet.id || MEET_ID)}">
         ${meetHead(meet)}
         ${role === 'coach' ? checkBox(built, meet, built.excluded) : ''}
-        ${families.length ? families.map((f) => familyBlock(f, meet)).join('') : '<div class="mp-note">No entries to show for this meet yet.</div>'}
+        ${families.length ? families.map((f) => familyBlock(f, meet, relayReport?.bySwimmer)).join('') : '<div class="mp-note">No entries to show for this meet yet.</div>'}
       </div>`;
 
   root.innerHTML = `${toolbar}${body}`;
@@ -552,13 +627,16 @@ async function boot(user) {
   }
 
   const families = groupByFamily(built, familyDocs);
+  // Relay squads are separate documents; a read failure only costs the relay
+  // lines, never the sheet.
+  const relayReport = buildRelayReport(await loadRelaySquads(MEET_ID));
 
   // A family with nothing confirmed yet still deserves an explanation.
   if (!families.length) {
-    render({ meet, built, families: [], role });
+    render({ meet, built, families: [], role, relayReport });
     return;
   }
-  render({ meet, built, families, role });
+  render({ meet, built, families, role, relayReport });
 }
 
 loadingScreen();
