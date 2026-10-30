@@ -510,16 +510,19 @@ meets/{meetId}/relayEntries/{eventCode}__{letter}      例：9A__B
 ## 7. 未做 / 下一步
 
 - **真实导入验证**（唯一没验证的环节）：我们的 `.cl2` 还没被主办方的 Meet Manager 导入过。
-  办法是拿同一批报名，让 TM 也导一份，用 `execution/meet-entry/compare_cl2.mjs`（**还没写**）
-  按 (event code, USA-S ID) 逐条比。计划见 `docs/meet-entry-export-feasibility.md` §7。
+  办法是**同一批报名两边各报一次**——站内报（个人 + 接力）→ TM 用同样的项目报一遍 →
+  两份 `.cl2` 交给 `execution/meet-entry/compare_cl2.mjs`（**2026-10-30 已写好，自带 `--self-test`**）
+  按 `(项目码, USA-S ID)` 逐条比，直到只剩预期差异。TM 只当参照，不参与提交。
 - **bonus 在文件里无法表达**（2026-10-30 查实，见 §6.3.1）：`.cl2` 没有 bonus 字段。
   导出前的名额校验已经做了，但"哪几项是 bonus"只能靠随邮件附的 by-name 报告或主办方那边补。
   → 试点前先问 Meet Director。
-- **接力成绩校验**:数据齐全、算法已写(§6.7.1),"做/不做"等教练一句话。
+- **接力成绩校验**:数据齐全、算法已写(§6.7.1),"做/不做"等教练一句话。⚠ 不做的话，
+  与 TM 的那份对比里接力 seed time **一定不同**（TM 按四棒最快之和算）。
 - **全队报告里的接力**:`group=sex` 目前只列个人项目(§6.8)。
 - **提醒**:没有邮件/站内通知,教练需要自己看 `Submitted` 筛选;meet 卡片上也没有"已提交 N 人"。
 - **`swimmerId` 迁移**:用 USA ID 当键的代价见 §1.2;要根治还是得给每个 swimmer 一个
   稳定 id(`registrations.swimmers[].swimmerId`),那要同时改注册表单和迁移脚本。
+
 
 > 已经做完、别再来一遍:组行/成绩重算/工作表 CSV(§6)、`validateExport` 五条校验(§6.3)、
 > 家长确认稿 + 全队报告(`meet-print.html`)、SDIF v3 `.cl2` writer 与导出按钮(§6.6)、

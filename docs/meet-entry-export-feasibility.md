@@ -587,6 +587,22 @@ node execution/meet-entry/export_cl2.mjs --meet <docId>            # 写到 .tmp
 工具位置：**不做进网页**（这是一次性验证，不是产品功能）。落在
 `execution/meet-entry/compare_cl2.mjs`（命令行，带自测）。
 
+**2026-10-30 已实现**：`--self-test` 五项自证（同文件 0 差异 / 改 seed time 抓到 /
+删 D0 抓到 / 只改对齐归 padding / 少一条 F0 抓到）；正式比对用法：
+
+```powershell
+Expand-Archive 'DRAG-PV-Entries-....ZIP' -DestinationPath .tmp/meet-entry
+node execution/meet-entry/compare_cl2.mjs --tm .tmp/meet-entry/<TM>.CL2 --ours <ours>.CL2 `
+     --json .tmp/meet-entry/compare-report.json
+```
+
+差异分三类输出：**实质差异**（退出码 1）、**预期差异**（列出但不算错）、**只有对齐不同**（忽略）。
+接力按 `(项目码, 队字母)` 对齐、棒次按 E0 后面 F0 的出现顺序。
+
+⚠ 两个已知会"必现"的差异，比对前先说明：**接力 seed time**（TM 按四棒最快之和，我们手填，
+见 `docs/meet-entries.md` §6.7.1）与 **bonus 标记**（`.cl2` 里根本没有这个字段，见 §6.3.1）。
+
+
 ### 10.15 「导出报名文件」改成了网页按钮（2026-10-29 晚）
 
 用户的原话："教练不会起命令行，如果一个按钮能生成文件，就可以了，跟 tm 一样。"
