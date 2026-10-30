@@ -31,6 +31,7 @@ import {
     limit,
     getDocs,
     writeBatch,
+    deleteField,
     serverTimestamp
 } from "firebase/firestore";
 
@@ -134,5 +135,6 @@ export {
     limit,
     getDocs,
     writeBatch,
+    deleteField,
     serverTimestamp,
 };

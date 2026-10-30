@@ -15,6 +15,7 @@ import { ageOnDate, ageGroupForMeetAge } from '../utils/meetEligibility.js';
 import { getCurrentPeriodId } from '../data/seasonSchedule.data.js';
 import { auditRegistration, sortByAttentionSeverity, partitionAttention, attentionCounts } from '../utils/registrationCompleteness.js';
 import { isUnreadableResponse, BLOCKED_RUN_ABORT_AFTER, nextBlockedRunState } from '../utils/fetchHealth.js';
+import { resolveMeetKey, mergeSwimLists } from '../utils/meetKey.js';
 import { sortSwimmersByLastName, buildNamePartsIndex, compareSwimmerNamesByLastName } from '../utils/swimmerSort.js';
 import {
   parseCarryOverRows,
@@ -40,7 +41,7 @@ import {
 import { renderFamilySchedule, renderCoachSchedule, wireScheduleTabEvents } from './schedule-registration.js';
 import { renderAnnouncementAdmin, initAnnouncementAdmin } from '../components/announcementAdmin.js';
 import { t } from '../utils/i18n.js';
-import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs } from '../utils/firebase.js';
+import { auth, db, doc, setDoc, getDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, where, orderBy, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, writeBatch, getDocs, deleteField } from '../utils/firebase.js';
 import * as XLSX from 'xlsx';
 window.XLSX = XLSX;
 
@@ -1338,18 +1339,37 @@ async function loadAthleteDataStatus() {
 // 每场 meet 抓完立即写入 → 中断后重跑只补失败/缺失的(断点续传)
 // ⚠ 必须用 updateDoc:setDoc 的 {merge:true} 会把带点号的键(meets.12345)
 // 当成字面字段名存储(2026-08-01 踩坑,见 migrateSwimResultDocument)
-async function saveMeetResult(memberId, meet, swims, status, errorInfo = null) {
+//
+// 2026-10-30:写之前先问 meetKey.js —— 这场会不会其实是库里已有的另一场
+// (PVS 导入的 `pvs-27-27`)。会的话合并进这一条、并删掉旧键,否则家长端会看到
+// 两遍同一场比赛;USAS 从不返回 DQ,所以 `source: 'pvs'` 的行必须留着。
+async function saveMeetResult(memberId, meet, swims, status, errorInfo = null, existingMeets = null) {
+  const { existing, dropKey } = resolveMeetKey(meet, existingMeets);
+  const merged = existing ? mergeSwimLists(swims, existing.swims) : swims;
+  // 一次网络失败不能把已有的好数据降级成 failed
+  const keepGood = Boolean(existing && existing.status === "ok" && merged.length);
+  const finalStatus = keepGood || (status === "empty" && merged.length) ? "ok" : status;
+
   const result = {
-    meetName: meet.meetName, meetDates: meet.meetDates, meetType: meet.meetType,
-    courseCode: meet.courseCode, season: meet.season, seasonYear: meet.seasonYear,
-    fetchedAt: new Date().toISOString(), status, swims,
+    ...(existing || {}),
+    meetName: meet.meetName || existing?.meetName,
+    meetDates: meet.meetDates || existing?.meetDates,
+    meetType: meet.meetType || existing?.meetType,
+    courseCode: meet.courseCode || existing?.courseCode,
+    season: meet.season || existing?.season,
+    seasonYear: meet.seasonYear || existing?.seasonYear,
+    fetchedAt: new Date().toISOString(),
+    status: finalStatus,
+    swims: merged,
   };
-  if (errorInfo) result.error = errorInfo;
+  if (errorInfo && !keepGood) result.error = errorInfo;
+  else delete result.error;
 
   if (MOCK_MODE) {
     mockSeed(memberId);
     const store = mockStore.get(memberId);
     store.meets[meet.meetId] = result;
+    if (dropKey) delete store.meets[dropKey];
     if (errorInfo) store.lastFetchError = errorInfo;
     return;
   }
@@ -1357,8 +1377,13 @@ async function saveMeetResult(memberId, meet, swims, status, errorInfo = null) {
     [`meets.${meet.meetId}`]: result,
     lastUpdated: new Date().toISOString(),
   };
+  if (dropKey) update[`meets.${dropKey}`] = deleteField();
   if (errorInfo) update.lastFetchError = errorInfo;
   await updateDoc(doc(db, "swimResults", memberId), update);
+  if (existingMeets) {
+    if (dropKey) delete existingMeets[dropKey];
+    existingMeets[meet.meetId] = result;
+  }
 }
 
 // 抓取单个运动员:限速 + 重试 + 熔断 + 断点续传。
@@ -1433,7 +1458,7 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
       // 空数组可能是"真的没成绩",也可能是 API 软降级(200+空)。
       // 标记 empty 而非 ok,下次增量会重试;连续空则触发软降级暂停。
       const status = swims.length === 0 ? "empty" : "ok";
-      await saveMeetResult(memberId, meet, swims, status);
+      await saveMeetResult(memberId, meet, swims, status, null, existingMeets);
       fetched++;
       consecutiveFailures = 0;
       if (swims.length === 0) {
@@ -1448,7 +1473,7 @@ async function fetchSwimmerData(creds, memberId, swimmerName, opts = {}) {
       }
     } catch (err) {
       const errorInfo = describeFetchError(err, `${USAS_BASE}/GetSwimmerMeetTimes/${memberId}/${meet.meetId}`);
-      await saveMeetResult(memberId, meet, [], "failed", errorInfo);
+      await saveMeetResult(memberId, meet, [], "failed", errorInfo, existingMeets);
       failed++;
       errors.push(`${meet.meetName || meet.meetId}: ${err.message}`);
       if (err.retryable) {
