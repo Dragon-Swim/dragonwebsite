@@ -48,7 +48,7 @@ Directory structure:
 
 .tmp/ - All intermediate files. **Use subdirectories, never the root** (see below). Never commit, always regenerated.
 execution/ - Deterministic Python/Node scripts, **one subfolder per job** (see execution/README.md):
-             fees/, meet-entry/, standards/, data-admin/
+             fees/, meet-entry/, standards/, data-admin/, swim-results/
 directives/ - SOPs in Markdown (the instruction set)
 docs/ - Site documentation (app behaviors & workflows; see docs/swim-results-fetch.md for the swim-results fetch pipeline)
 .env - Environment variables and API keys
@@ -69,6 +69,7 @@ Key principle: Local files are only for processing. Deliverables live in cloud s
 | `.tmp/cf526/` | Cloudflare custom-domain + GitHub Support ticket material |
 | `.tmp/pw-tmp/` | Playwright profile temp dir — created and wiped by scripts/run-playwright.mjs |
 | `.tmp/usas-api-audit/` | Full JSON samples of the new Data Hub `/api/times/swims` responses (`local-tools/probe-usas-cookie.mjs --dump`), for checking field-name drift |
+| `.tmp/swim-results/` | PVS 官方成绩包解析产物：`pvs/meets/*.json`（每场一份，只含本队）、`pvs/manifest.json`（zip 的 mtime/size/sha256）、`zips/`（下载缓存）、`verify-report.json`（与 USAS 的对账报告） |
 
 Rules: put new work in the matching bucket (create a clearly-named one if none fits);
 tool defaults in `execution/` point at these paths, so update a tool's defaults when you

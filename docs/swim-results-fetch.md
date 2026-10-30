@@ -1,8 +1,11 @@
 # 游泳成绩抓取(USA Swimming Data Hub)工作流说明
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
-> 最后更新:2026-10-28(新增 §12.8/§12.9:界面改成「Data Hub Session」面板;
-> Worker 已写好并有 33 项本机测试,待部署。此前 2026-10-27 新增第 12 节:Data Hub 改版,旧 `times-api` host 整站 403,
+> 最后更新:2026-10-30(新增 §13.7:PVS 成绩**写库**落地 —— `import_pvs_results.mjs` 默认
+> dry-run,写库键永远是注册 ID;第一次实写只净增 1 条 DQ,44 条成绩仍在等家长补 ID)。
+> 此前 2026-10-29 新增 §13:PVS 官方成绩包路线,只读解析 + 与 USAS 逐条对账 193/193 一致。
+> 此前 2026-10-28 新增 §12.8/§12.9:界面改成
+> 「Data Hub Session」面板;Worker 已写好并有 33 项本机测试,待部署。此前 2026-10-27 新增第 12 节:Data Hub 改版,旧 `times-api` host 整站 403,
 > 前端改走 `data.usaswimming.org/api/*` + SSO cookie 且拒绝 dragonswim.org 来源 ——
 > 浏览器直连路线结束,必须服务端代理。此前 2026-09-21 新增第 10 节:两个 USAS 端点返回无 CORS 头的 406,会导致每个队员在
 > 第一个请求就失败;第 5 节新增 `responseUnreadable` 字段与「连续 3 个队员首个请求失败即中止
@@ -429,3 +432,209 @@ swimResults/4F957CD1DCDD4B   Fargoer Zhou
 
 **未完成 / 需要现场做的**:`wrangler login` → 建 KV → `deploy` → 绑定路由,
 都依赖 Cloudflare 账号,这一步只能在用户机器上做。步骤见 `worker/README.md`。
+
+## 13. 2026-10-29:PVS 官方成绩包(绕开 Data Hub 的一条路)
+
+**动机**:全队抓一场比赛的增量,现在是「32 个有 USA ID 的队员 × 3 分钟冷却 ≈ 96 分钟」,
+还受 8 小时 cookie 和限流退避约束。而 Potomac Valley Swimming 会把每场比赛的
+**Meet Manager 原始导出包**直接挂在官网上。
+
+### 13.1 资源在哪
+
+| 资源 | URL / 说明 |
+|---|---|
+| 当前赛季成绩页 | `https://www.pvswim.org/results-2627`(Wix 渲染,不必爬) |
+| **目录索引(推荐)** | `https://www.files.pvswim.org/<season>tm/` —— Apache 索引,一次请求拿到全部 zip 的文件名 + mtime + 大小 |
+| 成绩包 | `MeetResults<season>-<n>.zip`,内含 `.hy3`(Hy-Tek 原生)+ `.cl2`(SDIF v3) |
+| 成绩 PDF | `<season>meet/<n>-results.pdf`,与 zip 同一批上传(实测同为 10-26 12:40) |
+| 历史赛季 | `pvs_results_<yyyy-yyyy>.html`;⚠ **历史赛季只有 PDF,没有 `tm/` 目录**(2425/2324/2223/2122 实测全 404) |
+
+一场比赛可能拆成多份:`27-07`(October Open)按三个泳池拆成 `-claude`/`-fairland`/`-franconia` 三个包。
+目录里还出现过 `MeetResults27-9.zip` 与 `27-09.zip` 重复上传,工具按编号归一化去重。
+
+### 13.2 `.hy3` 是什么
+
+定长 130 字符/行 = 128 数据 + 2 位行校验(CP-1252)。层级:
+`A1` 文件头 → `B1` 赛事 → `B2` 主办 → 每队(`C1` 队伍 → 每个运动员 `D1` → 每项 `E1` 报名
+→ `E2` 成绩 → `G1` 分段 → `H1` 犯规原因)。
+
+关键点,都是实测确认过的:
+
+- **队伍归属靠 `C1` 区块的先后顺序**;`D1` 记录本身不带队名。
+- `E1`/`E2` 用冠军号(第 4–8 位)回指 `D1`;22 个文件、0 条错位。
+- **USA-S ID 在 `D1` 第 70–83 位**,14 位 SWIMS ID 就是 `swimResults` 的文档 ID
+  (实测 `4F957CD1DCDD4B` = Fargoer Zhou,与库内一致)。
+- 行校验 `(2*偶数位和 + 奇数位和)//21 + 205`,末两位倒序;实测 12606/12606 通过 → 可当完整性闸门。
+- 犯规(`E2` 状态位 `Q`)**保留成绩时间**;弃赛/退赛(`F`/`R`)时间为空。
+
+字段映射:`eventCode` ← 距离+泳姿+场地码;`swimTime` ← `E2` 5–11;
+`finishPosition` ← `E2` 31–33;`timeDrop` ← `E2` 成绩 − `E1` 报名成绩;
+`sessionName` ← `E2` round(`F`→Final)。**`timeStandard` 没有**,要用
+`src/data/timeStandards.data.js` 本地算。
+
+### 13.3 已经验证到什么程度(2026-10-29,只读)
+
+工具:`execution/swim-results/sync_pvs_results.py` → `.tmp/swim-results/pvs/`,
+再用 `execution/swim-results/verify_pvs_vs_usas.mjs` 与 Firestore 里的 USAS 数据对账。
+
+| 项目 | 结果 |
+|---|---|
+| 本赛季覆盖 | 22/22 场都有 zip,全部解析成功 |
+| **与 USAS 逐条对账** | 两场(10/09–11、10/24–25)共 **193 条 ok 成绩,时间 0 差异、名次 0 差异** |
+| PVS 独有 | 3 条(DQ 1、弃赛 2)—— USAS 的 `GetSwimmerMeetTimes` **根本不返回**这类记录 |
+| USAS 独有 | 0 条 |
+| 抓取成本 | 全季 4.8 MB / 5.4 秒;单场约 0.5 MB |
+| 上线延迟 | zip mtime − 比赛结束日:**多数 35–68 小时,中位约 62 小时**(批量上传) |
+
+⚠ **"PVS 比 USAS 快"这一点没有被证实。** PVS 自己也要 1.5–3 天,而且是批量上传。
+确定拿到的是**吞吐量**和**不依赖 cookie/Worker**,不是"更早看到成绩"。
+
+### 13.4 名册对不上的三种情况(必须先解决才能写库)
+
+> 这三种情况的一页清单由 `execution/swim-results/attention_list.mjs` 生成(只读),
+> 输出到 `.tmp/deliverables/dragon-needs-attention-<日期>.md`,带英文催信模板。
+> 它和 `coach-followup-report.mjs` 分工不同:后者是**围绕某一场比赛**的催信包(需要一份
+> Hy-Tek 报名报告),前者回答的是「**成绩已经能抓到了,谁的身份对不上、写不进去**」,与比赛无关;
+> 费用/押金仍归后者。
+
+对 2026-27 赛季出现过的 35 个 ID:
+
+| 情况 | 数量 | 例子 | 处理 |
+|---|---|---|---|
+| 能对上已填 USA ID 的注册 | 24 | — | 直接写 `swimResults/{id}` |
+| 注册了但没填 USA ID | 6 | Narra 兄弟、Norcross 兄弟、Priya Patel、Liam Toner | 姓名+年龄对上后**建议**回填,由家长/教练确认,不自动写 |
+| **PVS 的 ID 与注册的 ID 不同** | 3 | Anthony Wang、Jonathan Wu(两边都是 14 位 SWIMS ID);Isabella Ye(PVS 用老格式 `101416ISAMYE**`) | **已确认是同一人**(见 §13.6):按姓名+比赛日年龄兜底匹配,**写到注册 ID 下**,不找家长 |
+| 名下没有这个队员 | 2 | Rishik Dandu、Gabriel Martin del Campo | 可能是已退队/漏注册,不要写 |
+
+**2026-10-30 用 `local-tools/check-athlete-id.mjs` 实测了 14 个 ID**(其余 21 个没抽查):
+
+| 抽查对象 | 数量 | 结果 |
+|---|---|---|
+| 3 个孩子的**注册** ID | 3 | 全部 200,历史完整(15/18/23 条,含 2026 年 10 月那两场) |
+| 同一批孩子的**文件** ID | 3 | **全部 404** —— USA-S 库里没有(详见 §13.6) |
+| §1.1「缺 USA ID」孩子的 PVS ID | 6 | **全部 200**(1–58 场历史)→ 给家长确认的 ID 是可靠的 |
+| §3「名下无此人」的 PVS ID | 2 | **全部 200**(Rishik 只有 1 场 = 新人;Gabriel 有 36 场 = 老队员,只是没注册) |
+
+附带印证: Priya Patel(`8F6CC940510C42`)在 USA-S 的最新一场是 2026-06,**没有 10 月那两场** ——
+和 `.hy3` 里她三条全是 NS(报名未游)完全吻合。USAS 确实不给"报了名没下水"的场次。
+
+### 13.5 待决问题(2026-10-30 已定 4 条,剩余 3 条见 §13.7 末尾)
+
+1. **meetId 冲突**:同一场比赛,USAS 侧是 `289349`,PVS 侧是 `27-07-claude`。
+   → **已定**:按「开始日期 + 赛事名有共同词」找库里已有的键并复用;找不到才用 `pvs-<key>`。
+   详见 §13.7。
+2. **DQ / 弃赛怎么写**:USAS 侧不存在,写进去是净增内容;但 `NS`(报名未游)建议不入,
+   否则会出现一场「0 条有效成绩」的空 meet。
+   → **已定**:DQ 入(`swimTime: null` + `status: 'dq'` + `dqCode`),弃赛 / NS 不入。
+3. **`bestTimes` 与 `timeStandard`**:前者可以从入库成绩里取最小值算,后者用本地标准表算。
+   → **部分已定**:`timeStandard` 只给**新写入**的成绩本地算;`bestTimes` 这一版**不动**
+   (库里还有 PVS 覆盖不到的历史场次,重算会丢),见 §13.7 末尾。
+4. **CORS**:`files.pvswim.org` 不返回任何 `Access-Control-Allow-Origin`(HEAD/OPTIONS 都试过),
+   浏览器读不到 zip。所以这条路只能是本机脚本或 Worker 代理,不能在前端 `fetch`。
+   → **接受**:保持本机脚本。
+5. **PVS 一旦不再提供 zip**(像历史赛季那样),回退到 USAS 或 PDF 解析。
+   → 仍是回退路径,未变。
+
+### 13.6 「ID 不一致」的真相(2026-10-30 查清)
+
+一开始怀疑是重名:"不同的人不可能 ID 不同、成绩却一样"。查下来结论相反:**就是同一个人**,
+而且 `.hy3` 的那个字段本来就不该当主键。
+
+验证方法(可复现):拿**注册 ID** 去 USAS 查**同一场比赛**,逐条比对时间与名次 ——
+
+| 孩子 | 场次 | USAS(注册 ID) | PVS(文件 ID) | 结果 |
+|---|---|---|---|---|
+| Anthony Wang | 2026 PV October Open | 5 条 | 5 条 | 时间+名次全同 |
+| Jonathan Wu | 2026 PV MAKO Pink Ribbon | 6 条 | 6 条 | 时间+名次全同 |
+| Isabella Ye | 2026 PV October Open | 5 条 | 5 条 | 时间+名次全同 |
+
+**为什么会有两个 ID**:`.hy3` 第 70–83 位那串来自主办方 Meet Manager 里的运动员记录,而那条记录是从
+**俱乐部 Team Manager 名册**带进去的。名册没跟着会员续期更新,里面就还是旧 ID;Isabella Ye 那个
+`101416ISAMYE**` 甚至是 TM 在运动员没有 SWIMS ID 时用「生日(101416 = 2016-10-14)+ 姓名缩写」现拼的。
+**USA Swimming 自己的库是按人认的**,所以 Data Hub 把这场记在注册 ID 下。
+
+**直接问 USA Swimming(2026-10-30,`local-tools/check-athlete-id.mjs`)**:那三个文件里的 ID
+**在 Data Hub 里根本查不到**,而三个注册 ID 都有完整历史 ——
+
+| ID | `GetBestTimesForMember` | `GetSwimmerMeets` |
+|---|---|---|
+| `87F144F4069347` Anthony 注册 | 200 · 15 条 | 200 · 6 场(含 2026 Oct Open) |
+| `3425692B39D441` 文件里 | **404** No records | **404** |
+| `317F9B76548D4A` Jonathan 注册 | 200 · 18 条 | 200 · 15 场(含 Pink Ribbon) |
+| `7F8E4EEAA684FD` 文件里 | **404** | **404** |
+| `FA3077BC0AB54C` Isabella 注册 | 200 · 23 条 | 200 · 22 场(含 2026 Oct Open) |
+| `101416ISAMYE**` 文件里 | **404** | **404** |
+
+所以不是"一个人有两个都有效的 ID",而是**文件里那串压根不是有效会员号**(拼错 / 名册残留 /
+已作废的旧号)。USA-S 收到成绩时按姓名+生日归到人身上,才没有丢。
+
+对写库的意义:
+
+1. 注册 ID 是**唯一有效的那个**,写到它下面。
+2. 匹配顺序:ID →(兜底)**姓名 + 比赛日年龄 + 性别**,且要求唯一命中。
+3. 兜底命中时**必须再用同场成绩验证一次**(条数 + 每条 时间/名次 全同)才写,否则进人工队列。
+4. 文件里的 ID 存进 `sourceId` 备查;这类孩子以后每场都会走兜底,属于正常现象。
+5. 想让文件变干净,让教练更新 Team Manager 名册里的 ID 即可,不影响网站和成绩。
+6. ⚠ **兜底不是可选项**:只按 ID 匹配的话,这三个孩子从今往后的成绩一条都进不来。
+
+这条验证已经写进 `execution/swim-results/attention_list.mjs`(每次跑都重新比对一遍,
+不再是"我以为"),失败的孩子会在清单 §2 里标 ⚠。
+
+### 13.7 2026-10-30:写入 `swimResults`(第一次真的写)
+
+工具:`execution/swim-results/import_pvs_results.mjs` —— 这条链路上**唯一会写 Firestore 的脚本**。
+
+```powershell
+node execution/swim-results/import_pvs_results.mjs            # dry-run,打印计划写入什么
+node execution/swim-results/import_pvs_results.mjs --only 27-26
+node execution/swim-results/import_pvs_results.mjs --splits    # 顺带把分段补进已有成绩(默认关)
+node execution/swim-results/import_pvs_results.mjs --commit    # 先备份,再写
+```
+
+**写哪个键 —— 永远是注册表里的 `usaSwimmingId`。** 这条决定了「谁能被写进去」:
+
+| 匹配结果 | 判据 | 行为 |
+|---|---|---|
+| `reg` | PVS 文件里的 ID == 注册 ID | 写 |
+| `mapped` | 文件里的 ID 不是有效会员号(TM 名册残留),但姓名唯一命中一个已填 ID 的注册,**且**性别一致、比赛日年龄差 ≤1、同场成绩与 USAS 逐条全同 | 写到**注册 ID** 下,文件里的原值存 `sourceId` |
+| `no-id` | 姓名命中一个注册,但 `usaSwimmingId` 为空 | **不写**,等家长补(补完重跑即可) |
+| `unknown` | 名册里没有这个人 | 不写 |
+| `ambiguous` | 同名多人 / 性别或年龄对不上 / 同场验不过 | 不写,进人工队列 |
+
+脚本**只写 `swimResults`,从不回写 `registrations`** —— 猜错的 ID 不会变成"注册信息"。
+
+**写什么**:
+
+- 只有 `status: ok` 的成绩会新增;弃赛 / `NS`(报名未游)**不入**(否则会出现 0 条有效成绩的空 meet)。
+- **DQ 入**:`{ swimTime: null, status: 'dq', dqCode, dqReason }`。USAS 的 `GetSwimmerMeetTimes`
+  从不返回 DQ,所以这是净增内容。界面在 Results 表里显示成红色 `DQ <code>` 徽章
+  (2026-10-30 起;此前会渲染成「—」)。
+- 已有的 ok 成绩**不覆盖**。`--splits` 只补缺失的分段(默认关:界面还不显示分段,没必要动 141 条)。
+- `timeStandard` 用 `src/data/timeStandards.data.js` 给**新写入**的成绩算(比赛日年龄 + 注册性别);
+  比 B 档还慢的记 `Slower Than B`,与 USAS 的写法一致。
+
+**meet 的键**:库里若已有一场「同开始日期 + 赛事名有共同词」的场次,复用它原来的键
+(`289349` / `288848`),家长端不会出现两遍;没有才用 `pvs-<PVS key>`。新建的键会带
+`source: 'pvs'` 和 `fetchedAt`。
+
+**安全**:默认 dry-run;`--commit` 前把受影响的整份文档备份到
+`.tmp/backups/swimResults-<时间>.json`;脚本幂等(第二次跑认得出已写过的成绩 —— 实测 0 新增)。
+报告落在 `.tmp/swim-results/import-report.json`。
+
+**第一次实写的结果(2026-10-30)**:2 场 / 53 人次,39 人次直接 ID、3 人次姓名映射
+(Anthony Wang、Isabella Ye、Jonathan Wu,分别 5/5、5/5、6/6 条与 USAS 全同),
+11 人次跳过(9 人次缺 ID + 2 人名册里没有)。**净增只有 1 条**:Ada Gai 在 Pink Ribbon
+的 `200 BK` DQ 2C —— 因为这两场的 193 条 ok 成绩 10-28 已经由 USAS 抓进库里了。
+
+⚠ **真正的增量还在等 ID**:上表那 9 人次里有 5 个孩子共 **44 条**成绩
+(Narra 兄弟 6/6/3、Norcross 兄弟 6/6 与 6/6、Liam Toner 5)。家长补好 `usaSwimmingId`
+后重跑同一条命令就会自动写入,不需要改代码。
+
+**这一版还没做(有意留的)**:
+
+1. **USAS 重复场次没有守卫**。今天不触发:两场都复用已有的数字键。等第一次导入一场
+   USAS 里没有的 PVS 场次(`pvs-27-27`)之后,如果又对同一场跑 `Fetch All`,USAS 会拿它自己的
+   meetId 再建一场 → 家长端出现两遍。届时要在 `saveMeetResult` 里加「同日期 + 同名已存在就
+   合并」的闸(或规定 PVS 场次不再跑 USAS 抓取)。
+2. **`bestTimes` 不动**。PVS 新场次不会进 Best Times 表;要做得先解决"重算会把 PVS
+   覆盖不到的历史场次弄丢"这个问题,建议改成"只在更快时替换"而不是整体重算。
