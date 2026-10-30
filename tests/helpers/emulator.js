@@ -201,7 +201,11 @@ export async function deleteDocument(collection, id) {
 
 /**
  * Create an email/password account in the Auth emulator.
- * @returns {Promise<string>} the new uid
+ *
+ * Idempotent: if the address already exists (two fixtures colliding on a
+ * `Date.now()`-based email under parallel workers — seen 2026-10-30), sign in
+ * and return that uid instead of failing the whole spec.
+ * @returns {Promise<string>} the uid
  */
 export async function seedAuthUser(email, password) {
   const res = await fetch(`${AUTH_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`, {
@@ -210,10 +214,22 @@ export async function seedAuthUser(email, password) {
     body: JSON.stringify({ email, password, returnSecureToken: true }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  if (res.ok) return body.localId;
+
+  const exists = JSON.stringify(body).includes("EMAIL_EXISTS");
+  if (!exists) {
     throw new Error(`seedAuthUser(${email}) failed: HTTP ${res.status} ${JSON.stringify(body)}`);
   }
-  return body.localId;
+  const signIn = await fetch(`${AUTH_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  const signed = await signIn.json().catch(() => ({}));
+  if (!signIn.ok) {
+    throw new Error(`seedAuthUser(${email}) exists but sign-in failed: HTTP ${signIn.status} ${JSON.stringify(signed)}`);
+  }
+  return signed.localId;
 }
 
 /**
