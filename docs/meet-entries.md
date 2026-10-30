@@ -503,9 +503,49 @@ meets/{meetId}/relayEntries/{eventCode}__{letter}      例：9A__B
 | 项 | 说明 |
 |---|---|
 | **接力成绩校验** | 见 §6.7.1，等教练确认是否需要 |
-| **全队报告里的接力** | `group=sex` 的报告目前只列个人项目，接力队还没渲染进去 |
+| **全队报告里的接力** | `group=sex` 的报告目前只列个人项目，接力队还没渲染进去（目标版式见 §6.9） |
 | **`.hy3` writer** | 不做（无公开规范 + 有校验码）；`.cl2` 已够用 |
 | **真实导入验证** | 生成的 `.cl2` 还没被主办方的 Meet Manager 导入过 —— 这是唯一没验证的环节 |
+
+### 6.9 主办方收到的报告长什么样（2025 RMSC 实物，2026-10-30 归档）
+
+去年 12 月那封邮件里的三份附件已归档：`.tmp/meet-entry/samples/reports/rmsc-2025/`
+（两份 PDF + 一份 README）与 `samples/exports/rmsc-2025/`（zip / `.CL2` / `.HY3`）。
+两份 PDF 都是 TM 的 `Individual Meet Entries Report`，页头：
+
+```
+Licensed To: Aquatic Beyond Club HY-TEK's TEAM MANAGER 7.0   12/1/2025  Page 1
+Individual  Meet  Entries  Report
+2025 Riley Eaton Holiday Invitational  11-Dec-25 Yards
+Location: GISC
+```
+
+**by name**（主办方要求的那份）：`FEMALE` / `MALE` 分段 → `姓名 (年龄)` → 个人项目一行
+`# 31 Female 10 & Under 100 Free  1:06.60Y`；**接力不另起段落**，挂在该泳手名下多一行：
+
+```
+# 10 Male 13-14 200 Medley Relay A Back     ← 混合泳：这一棒游什么
+# 56 Male 13-14 200 Free Relay A 3          ← 自由泳：第几棒
+```
+
+**by event**：按项目号排序；个人项目 `# 18 Male 12 & Under 200 Back` + 每人一行
+`Leo Wu (12)  2:19.03Y`；接力是**带成绩的表头 + 四行棒次**：
+
+```
+#  10  Male 13-14  200 Medley Relay A DRAG  1:47.25Y
+1 Haoran Chen (14)
+2 William Ye (13)
+3 Suleiman Mourad (14)
+4 Aiden Pan (13)
+```
+
+三条结论：
+
+1. 「report by name」不是纯个人项目 —— **接力参与行必须在里面**，否则报告不完整。
+2. 接力成绩**只在 by-event 里出现**；by name 只标泳姿/棒次。
+3. 两份 PDF 都**没有**成绩日期/来源列。所以主办方说的 "proof of time" 在 TM 这里就是
+   "把时间印出来"。我们要加日期和比赛名是加强，不是跑偏。
+
 
 ## 7. 未做 / 下一步
 
