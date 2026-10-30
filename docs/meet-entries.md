@@ -503,6 +503,16 @@ meets/{meetId}/relayEntries/{eventCode}__{letter}      例：9A__B
 **还没做的**：与达标线比较（`event.standards[course]`）。现在只算"四棒之和"，不判断够不够；
 要做的话按 §2 的原则来：没有成绩 ≠ 慢，缺一棒只说"无法计算"。
 
+**另一个待核实的点（"relay only"）**：SDIF v3 规范里 D0 有一条**条件必填（#）**——
+> Event age code 025, event sex code 011, event distance, stroke code 012 and seed time
+> are **not mandatory (M1)** for relay only swimmers.
+
+也就是说，只游接力的运动员可以有一条**只有身份**（姓名 / USS# / 生日 / 性别）的 `D0`，
+不带项目字段。我们现在的 writer 对这类孩子只写 `E0`/`F0`，**不写 D0**。
+Meet Manager 是否要求"每个上场运动员都有一条 D0"还没验证 —— 等拿到去年那份带这类孩子的
+`.cl2` 再对照（用户记得见过 `relay only` 标注）。报告侧已经处理了（§6.8：只游接力的孩子
+也会出现在 by-name 报告里），这里说的是**文件侧**。
+
 
 ### 6.8 还没做 / 待确认
 
