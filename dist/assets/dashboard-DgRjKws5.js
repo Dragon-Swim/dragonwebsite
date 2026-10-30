@@ -800,7 +800,7 @@ A second paragraph appears only in the News card.`,level:e.level,pinned:!0,date:
                         ${d.swims.map(c=>`
                           <tr style="border-bottom:1px solid var(--border-color);">
                             <td style="padding:0.3rem 0.5rem;">${c.eventCode||`${c.distance||""} ${c.strokeAbbreviation||""}`}</td>
-                            <td style="padding:0.3rem 0.5rem;font-family:monospace;font-weight:500;">${zt(c.swimTime)}</td>
+                            <td style="padding:0.3rem 0.5rem;font-family:monospace;font-weight:500;">${c.status==="dq"?`<span class="ts-badge ts-dq" title="${b(c.dqReason||"Disqualified")}">DQ${c.dqCode?` ${b(c.dqCode)}`:""}</span>`:zt(c.swimTime)}</td>
                             <td style="padding:0.3rem 0.5rem;">${c.sessionName||"—"}</td>
                             <td style="padding:0.3rem 0.5rem;">${c.finishPosition!=null?c.finishPosition:"—"}</td>
                             <td style="padding:0.3rem 0.5rem;">
