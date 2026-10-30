@@ -2336,7 +2336,9 @@ function renderMeetHistory(meets, emptyText = 'No meet history recorded.') {
                         ${meet.swims.map(sw => `
                           <tr style="border-bottom:1px solid var(--border-color);">
                             <td style="padding:0.3rem 0.5rem;">${sw.eventCode || `${sw.distance || ''} ${sw.strokeAbbreviation || ''}`}</td>
-                            <td style="padding:0.3rem 0.5rem;font-family:monospace;font-weight:500;">${formatSwimTime(sw.swimTime)}</td>
+                            <td style="padding:0.3rem 0.5rem;font-family:monospace;font-weight:500;">${sw.status === 'dq'
+                              ? `<span class="ts-badge ts-dq" title="${escapeHtml(sw.dqReason || 'Disqualified')}">DQ${sw.dqCode ? ` ${escapeHtml(sw.dqCode)}` : ''}</span>`
+                              : formatSwimTime(sw.swimTime)}</td>
                             <td style="padding:0.3rem 0.5rem;">${sw.sessionName || '—'}</td>
                             <td style="padding:0.3rem 0.5rem;">${sw.finishPosition != null ? sw.finishPosition : '—'}</td>
                             <td style="padding:0.3rem 0.5rem;">

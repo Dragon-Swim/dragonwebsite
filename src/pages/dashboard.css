@@ -1720,6 +1720,8 @@ input[readonly].profile-edit-field {
 .ts-aa { background: #FEF3C7; color: #D97706; }
 .ts-aaa { background: #FEE2E2; color: #DC2626; }
 .ts-aaaa { background: #FEF3C7; color: #B45309; border: 1px solid #F59E0B; }
+/* DQ(PVS 官方成绩包独有,USAS 从不返回):实心红底,与 ts-aaa 的浅红区分 */
+.ts-dq { background: #B91C1C; color: #fff; }
 
 /* ── Trend Chart(成绩历史曲线图)──
    点色复用 .ts-* 六色;深色模式各加亮一档(浅色系在深色底可读性差,
