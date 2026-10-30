@@ -82,8 +82,15 @@ export async function exportEntryFileZip({ meet, swimmers = [], onProgress = () 
     });
 
     if (!pkg.ok) {
-      const details = pkg.errors.map((e) => e.code).join(', ');
-      return { ok: false, message: `Nothing exported — ${pkg.errors.length} problem(s): ${details}`, summary: pkg.summary };
+      // A bare code list ("bonus-exceeded, missing-seed-time") tells the coach
+      // nothing actionable, and these are the errors that block the whole file.
+      const describe = (e) => {
+        if (e.code === 'bonus-exceeded') return `${e.swimmer || e.usaSwimmingId}: ${e.detail}`;
+        return e.detail ? `${e.code} (${e.detail})` : e.code;
+      };
+      const shown = pkg.errors.slice(0, 4).map(describe).join('; ');
+      const more = pkg.errors.length > 4 ? ` (+${pkg.errors.length - 4} more)` : '';
+      return { ok: false, message: `Nothing exported — ${pkg.errors.length} problem(s): ${shown}${more}`, summary: pkg.summary };
     }
 
     onProgress('Zipping…');

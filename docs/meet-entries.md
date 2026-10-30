@@ -277,9 +277,32 @@ python execution/meet-entry/parse_pvs_meet_pdf.py <赛程单.pdf> -o .tmp/<meet>
 | **error** | 没有 seed time（meet 不收 NT） |
 | **error** | 没有 USA Swimming ID（入队文件靠它认人） |
 | **error** | 超过 `limits.maxEvents` / `limits.maxPerDay` —— **导出时重算**，不信报名时那次 |
+| **error** | **bonus 用超了**（见 §6.3.1） |
 | warning | 有未确认的报名 |
 | warning | 有成绩被刷新（附前后对比） |
-| warning | 有只能算 bonus 的行（比达标线慢） |
+| warning | 有只能算 bonus 的行（比达标线慢，但没超名额） |
+
+#### 6.3.1 bonus 名额（2026-10-30 补上）
+
+PVS 的规则（27-41 赛程单 p.3）：**1–2 个达标 → 2 个 bonus 项目；3–5 个 → 1 个；6 个 → 0 个**。
+`bonusAllowance()` 早就实现了，但此前只拿它做「还能用 N 个」的提示，**不校验实际用了几项** ——
+而主办方是会退回的（"Make sure to check the bonus event box for all bonus swims"）。
+
+现在导出时按泳手重算：
+
+- 达标数从**整个项目表**数（`countQualifiedEvents()`，与家庭端选项共用 `enterableMeetEvents` +
+  `evaluateEvent`），不是数「他报了几项达标」—— 有 2 个达标时间就是 2 个 bonus，哪怕只报了 1 个达标项。
+- 比达标线慢的行 = bonus 行。`count > allowance` → **error `bonus-exceeded`**，
+  带泳手名、条数、允许数、达标数、具体是哪几个项目；文件不生成。
+- 没超标时仍走原来的 `bonus-rows` warning（同一泳手不会既报错又告警）。
+
+**⚠ 但 `.cl2` 里没有 bonus 字段。** 2026-10-30 查了 SDIF v3 规范原文
+（`https://www.usms.org/admin/sdifv3f.txt`，1998-04-28）：D0（个人项目记录）30 个字段里
+**没有任何 "bonus" 位**，其它记录类型也没有；J0（达标时间）是可选的，我们也不写。
+所以**这份文件无法告诉 Meet Manager 哪几项是 bonus** —— 赛程单里那句「勾 bonus 框」是给
+在 TM 里手工录入的人看的。规避办法是先问 Meet Director：SD3 导入时 bonus 标记由他们那边补，
+还是要我们另附一份标了 BONUS 的 by-name 报告。
+
 
 ### 6.4 工作表 CSV（`toWorksheetCsv`）
 
@@ -486,22 +509,27 @@ meets/{meetId}/relayEntries/{eventCode}__{letter}      例：9A__B
 
 ## 7. 未做 / 下一步
 
-- **导出**:组行 / 成绩重算 / 工作表 CSV 已完成(见 §6)。还差**给家长的确认稿打印页**和
-  **SDIF v3 `.cl2` writer**,路线见 `docs/meet-entry-export-feasibility.md` §7。
-- **`.hy3` 入队文件**:暂不做。格式无公开规范,出错代价是整场报名被拒。
-  ⚠️ 2026-10-29 更正:真正该做的是 **`.cl2`(= SDIF v3,有公开规范、无校验码)**,
-  `.hy3` 才是无规范的那个。评估与证据见 `docs/meet-entry-export-feasibility.md`。
-- **接力**:目前只在家长界面显示"由教练安排",教练端也没有排棒次的界面。
-- **bonus 自动判定**:现在只提示"还能用 N 个 bonus",不校验实际用了几个。
-- **提醒**:没有邮件/站内通知,教练需要自己看 `Submitted` 筛选。
+- **真实导入验证**（唯一没验证的环节）：我们的 `.cl2` 还没被主办方的 Meet Manager 导入过。
+  办法是拿同一批报名，让 TM 也导一份，用 `execution/meet-entry/compare_cl2.mjs`（**还没写**）
+  按 (event code, USA-S ID) 逐条比。计划见 `docs/meet-entry-export-feasibility.md` §7。
+- **bonus 在文件里无法表达**（2026-10-30 查实，见 §6.3.1）：`.cl2` 没有 bonus 字段。
+  导出前的名额校验已经做了，但"哪几项是 bonus"只能靠随邮件附的 by-name 报告或主办方那边补。
+  → 试点前先问 Meet Director。
+- **接力成绩校验**:数据齐全、算法已写(§6.7.1),"做/不做"等教练一句话。
+- **全队报告里的接力**:`group=sex` 目前只列个人项目(§6.8)。
+- **提醒**:没有邮件/站内通知,教练需要自己看 `Submitted` 筛选;meet 卡片上也没有"已提交 N 人"。
 - **`swimmerId` 迁移**:用 USA ID 当键的代价见 §1.2;要根治还是得给每个 swimmer 一个
   稳定 id(`registrations.swimmers[].swimmerId`),那要同时改注册表单和迁移脚本。
+
+> 已经做完、别再来一遍:组行/成绩重算/工作表 CSV(§6)、`validateExport` 五条校验(§6.3)、
+> 家长确认稿 + 全队报告(`meet-print.html`)、SDIF v3 `.cl2` writer 与导出按钮(§6.6)、
+> 接力排棒界面(§6.7)。
 
 ## 8. 测试约定
 
 ```powershell
 npm run test:unit   # verify-meet-eligibility.mjs(106 项,真实 27-41 数据)
-                    # + verify-meet-entry-export.mjs(57 项:成绩重算/挡下原因/CSV)
+                    # + verify-meet-entry-export.mjs(79 项:成绩重算/挡下原因/bonus 名额/CSV)
 npm test            # 含 meet-entries.spec.js(家庭提交 / 手填成绩 / 无 ID / 截止 / 教练确认)
 ```
 

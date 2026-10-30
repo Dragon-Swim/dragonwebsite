@@ -269,6 +269,31 @@ export function evaluateEvent(event, bestIndex) {
 }
 
 /**
+ * The events of this meet one swimmer may enter: their own sex (or a mixed 'X'
+ * row) and inside the age limits.
+ *
+ * Shared by the entry options and by the export's bonus check, so "which events
+ * count" cannot drift between what the family was shown and what we submit.
+ */
+export function enterableMeetEvents(meet, { age, ageGroup, gender } = {}) {
+  return (meet?.events || []).filter((e) => (e.gender === gender || e.gender === 'X')
+    && isEventEnterable(e, { age, ageGroup }));
+}
+
+/**
+ * How many of the meet's individual events this swimmer has a qualifying time
+ * for — the number the bonus ladder is counted from (1-2 qualifying times → 2
+ * bonus events, 3-5 → 1, 6 → none; PVI-27-41, 2026).
+ */
+export function countQualifiedEvents({ meet, age, ageGroup, gender, bestTimes = [] } = {}) {
+  const bestIndex = buildBestTimesIndex(bestTimes, { qualifyingPeriodStart: meet?.qualifyingPeriodStart });
+  return enterableMeetEvents(meet, { age, ageGroup, gender })
+    .filter((e) => !e.relay)
+    .filter((e) => evaluateEvent(e, bestIndex).state === 'qualified')
+    .length;
+}
+
+/**
  * Build everything the entry UI needs for one swimmer at one meet.
  *
  * `bestTimes` is raw `swimResults/{usaId}.bestTimes`. `swimmer` only needs
@@ -294,10 +319,7 @@ export function buildMeetOptions({ meet, swimmer, bestTimes }) {
   if (age == null) blocked.push('no-dob');
   if (!gender) blocked.push('no-gender');
 
-  const rows = meetEvents
-    // 'X' = 混合项目(mixed):男女都能报(27-29 有 32 行这种)
-    .filter((e) => (e.gender === gender || e.gender === 'X')
-      && isEventEnterable(e, { age, ageGroup }))
+  const rows = enterableMeetEvents(meet, { age, ageGroup, gender })
     .map((e) => {
       const session = sessions.get(e.sessionId) || null;
       return {

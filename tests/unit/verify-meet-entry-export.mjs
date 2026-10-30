@@ -13,6 +13,7 @@ import {
   toWorksheetCsv, groupRowsBySwimmer, bestTimeFor, findMeetEvent, csvCell,
   WORKSHEET_COLUMNS,
 } from '../../src/utils/meetEntryExport.js';
+import { bonusAllowance, countQualifiedEvents } from '../../src/utils/meetEligibility.js';
 
 let pass = 0;
 let fail = 0;
@@ -234,5 +235,75 @@ check('finds the best time for an event code', best?.seconds === 61, best);
 check('ignores an unparsable code', bestTimeFor(BEST_TIMES[A_ID], 'nonsense') === null);
 check('ignores swims outside the window', bestTimeFor([{ eventCode: '100 FR SCY', swimTime: '59.00', swimDate: '2019-05-05' }], '100 FR SCY', { qualifyingPeriodStart: '2024-10-01' }) === null);
 
+// ── 9. bonus events ───────────────────────────────────────────────────────
+// PVI-27-41 (Dec 2026), meet sheet p.3: 1-2 qualifying times permit two bonus
+// events, 3-5 permit one, 6 permit none. The host checks this and refuses the
+// file, so the export must refuse first.
+console.log('9. bonus ladder and its use');
+check('no qualifying time -> no bonus', bonusAllowance(0) === 0, bonusAllowance(0));
+check('1 qualifying time -> 2 bonus', bonusAllowance(1) === 2, bonusAllowance(1));
+check('2 qualifying times -> 2 bonus', bonusAllowance(2) === 2, bonusAllowance(2));
+check('3..5 qualifying times -> 1 bonus', bonusAllowance(3) === 1 && bonusAllowance(5) === 1, [bonusAllowance(3), bonusAllowance(5)]);
+check('6 qualifying times -> none', bonusAllowance(6) === 0, bonusAllowance(6));
+
+// A qualifies only in the 100 free (61.00 vs 63.09); the 50 fly at 33.50 is a bonus swim.
+const aQualified = countQualifiedEvents({
+  meet: MEET, age: 12, ageGroup: '11-12', gender: 'F', bestTimes: BEST_TIMES[A_ID],
+});
+check('qualifying count comes from the whole programme', aQualified === 1, aQualified);
+check('…and it is what the bonus allowance is built from', bonusAllowance(aQualified) === 2, bonusAllowance(aQualified));
+
+// A meet with four enterable events for this swimmer, so 3 bonus entries can be built.
+const BONUS_MEET = {
+  ...MEET,
+  limits: { maxEvents: 6, maxPerDay: 6 },
+  events: [
+    ...MEET.events,
+    { eventNo: 48, gender: 'F', ageGroup: '11-12', ageMin: 11, ageMax: 12, openToAll: false,
+      distance: 50, stroke: 'BK', relay: false, sessionId: 'sat-pm', standards: { SCY: 34.19, LCM: 39.19 } },
+    { eventNo: 52, gender: 'F', ageGroup: '11-12', ageMin: 11, ageMax: 12, openToAll: false,
+      distance: 50, stroke: 'BR', relay: false, sessionId: 'sat-pm', standards: { SCY: 38.19, LCM: 43.19 } },
+  ],
+};
+const BONUS_TIMES = {
+  [A_ID]: [
+    ...BEST_TIMES[A_ID],
+    { eventCode: '50 BK SCY', swimTime: '35.00', swimDate: '2026-10-24' },
+    { eventCode: '50 BR SCY', swimTime: '39.00', swimDate: '2026-10-24' },
+  ],
+};
+const bonusEntry = (events) => entry({
+  id: 'fam1__AAAA1111', usaSwimmingId: A_ID, swimmerName: 'Test Swimmer', events,
+});
+const ev = (eventNo, distance, stroke) => ({
+  eventNo, ageGroup: '11-12', distance, stroke, sessionId: 'sat-pm', course: 'SCY',
+  seedTime: '59.99', seedSeconds: 59.99, source: 'db',
+});
+
+const twoBonus = buildExportRows({
+  meet: BONUS_MEET,
+  entries: [bonusEntry([ev(34, 100, 'FR'), ev(46, 50, 'FL'), ev(48, 50, 'BK')])],
+  bestTimesById: BONUS_TIMES,
+});
+const twoBonusCheck = validateExport({ rows: twoBonus.rows, meet: BONUS_MEET });
+check('two bonus rows fit the allowance', !twoBonusCheck.errors.some((e) => e.code === 'bonus-exceeded'), twoBonusCheck.errors);
+check('they are still called out as bonus entries', twoBonusCheck.warnings.some((w) => w.code === 'bonus-rows'), twoBonusCheck.warnings);
+
+const threeBonus = buildExportRows({
+  meet: BONUS_MEET,
+  entries: [bonusEntry([ev(34, 100, 'FR'), ev(46, 50, 'FL'), ev(48, 50, 'BK'), ev(52, 50, 'BR')])],
+  bestTimesById: BONUS_TIMES,
+});
+const threeBonusCheck = validateExport({ rows: threeBonus.rows, meet: BONUS_MEET });
+const exceeded = threeBonusCheck.errors.find((e) => e.code === 'bonus-exceeded');
+check('three bonus rows block the export', threeBonusCheck.ok === false && Boolean(exceeded), threeBonusCheck.errors);
+check('the error says how many are allowed', exceeded?.count === 3 && exceeded?.allowed === 2, exceeded);
+check('the error names the events', (exceeded?.events || []).join() === '50 Fly,50 Back,50 Breast', exceeded?.events);
+check('a blocked swimmer is not also listed as a warning', !threeBonusCheck.warnings.some((w) => w.code === 'bonus-rows'), threeBonusCheck.warnings);
+
+const summaryBonus = summarizeExport({ rows: twoBonus.rows, excluded: [], noId: [] });
+check('the summary counts bonus rows separately', summaryBonus.bonusOnly === 2, summaryBonus.bonusOnly);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
+

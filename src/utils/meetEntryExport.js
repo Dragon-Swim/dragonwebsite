@@ -36,7 +36,7 @@
 
 import {
   buildBestTimesIndex, evaluateEvent, formatSwimSeconds, parseSwimTimeText,
-  parseEventCode, STROKE_NAMES,
+  parseEventCode, STROKE_NAMES, bonusAllowance, countQualifiedEvents,
 } from './meetEligibility.js';
 
 /** Entry statuses that are allowed into an entry file. */
@@ -258,6 +258,14 @@ export function buildExportRows({ meet, entries = [], bestTimesById, statuses = 
     }
 
     const bestTimes = getBestTimes(usaId);
+    // How many of this meet's events the swimmer qualified in. It decides the
+    // bonus ladder, and it is counted from the *whole programme*, not from what
+    // the family happened to enter: 2 qualifying times means 2 bonus events even
+    // if only one of the qualified times was entered.
+    const qualifiedCount = countQualifiedEvents({
+      meet, age: entry.ageAtMeet, ageGroup: entry.ageGroup, gender: entry.gender, bestTimes,
+    });
+    const bonusAllowed = bonusAllowance(qualifiedCount);
     const { last, first } = nameParts(entry);
     for (const entryEvent of entry?.events || []) {
       const resolved = resolveSeedTime({ entryEvent, entry, meet, bestTimes });
@@ -291,6 +299,8 @@ export function buildExportRows({ meet, entries = [], bestTimesById, statuses = 
         day: session?.date || entryEvent?.day || '',
         sessionLabel: session ? `${session.day || ''} ${session.start || ''}`.trim() : '',
         state: resolved.state,
+        qualifiedCount,
+        bonusAllowed,
         seconds: resolved.seconds,
         seedTimeText: resolved.seconds == null ? '' : formatSwimSeconds(resolved.seconds),
         course: resolved.course || '',
@@ -409,13 +419,40 @@ export function validateExport({ rows = [], meet, excluded = [], noId = [] } = {
     });
   }
 
-  const bonusOnly = rows.filter((r) => r.state === 'slower-than-line');
-  if (bonusOnly.length) {
+  // Bonus events: every row slower than the published line is a bonus entry, and
+  // the meet caps how many of those a swimmer may have (1-2 qualifying times → 2,
+  // 3-5 → 1, 6 → none). The host checks this and bounces the file, so it is an
+  // error here rather than a note: an over-entered file is worse than a late one.
+  const bonusRows = rows.filter((r) => !r.relay && r.state === 'slower-than-line');
+  const bonusBySwimmer = new Map();
+  for (const r of bonusRows) {
+    const key = r.usaSwimmingId;
+    const group = bonusBySwimmer.get(key) || { rows: [], allowed: r.bonusAllowed ?? 0, qualifiedCount: r.qualifiedCount ?? 0, swimmer: r.swimmerName };
+    group.rows.push(r);
+    bonusBySwimmer.set(key, group);
+  }
+  for (const [usaId, group] of bonusBySwimmer) {
+    if (group.rows.length <= group.allowed) continue;
+    errors.push({
+      code: 'bonus-exceeded',
+      usaSwimmingId: usaId,
+      swimmer: group.swimmer,
+      count: group.rows.length,
+      allowed: group.allowed,
+      qualifiedCount: group.qualifiedCount,
+      events: group.rows.map((r) => r.eventCode || r.eventLabel || `#${r.eventNo}`),
+      detail: `${group.rows.length} bonus event(s) entered, ${group.allowed} allowed `
+        + `(${group.qualifiedCount} qualifying time(s))`,
+    });
+  }
+
+  const withinAllowance = [...bonusBySwimmer.values()].filter((g) => g.rows.length <= g.allowed);
+  if (withinAllowance.length) {
     warnings.push({
       code: 'bonus-rows',
-      count: bonusOnly.length,
-      swimmers: uniqueNames(bonusOnly),
-      detail: 'slower than the published line: allowed as bonus entries only',
+      count: withinAllowance.reduce((n, g) => n + g.rows.length, 0),
+      swimmers: withinAllowance.map((g) => g.swimmer),
+      detail: 'slower than the published line: these count as bonus entries',
     });
   }
 
