@@ -353,12 +353,132 @@ test("the team report splits FEMALE / MALE and sorts each by surname", async ({ 
   await expect(line.locator(".mp-rep-time")).toHaveText("38.10Y");
 
   // Footer counts, the part parents use to sanity-check "did everyone get in".
+  // Anchored on the label rather than the index: the relay row was added to this
+  // block, and index-based assertions turned that into a silent test edit.
   const totals = sheet.locator(".mp-rep-totals");
   await expect(totals).toContainText("Female IE's");
-  await expect(totals.locator("div").nth(0).locator("span").nth(1)).toHaveText("2");
-  await expect(totals.locator("div").nth(1).locator("span").nth(1)).toHaveText("1");
-  await expect(totals.locator("div").nth(2).locator("span").nth(1)).toHaveText("3");
-  await expect(totals.locator("div").nth(3).locator("span").nth(1)).toHaveText("3");
+  await expect(totals.locator('[data-metric="female-ies"]')).toContainText("2");
+  await expect(totals.locator('[data-metric="male-ies"]')).toContainText("1");
+  await expect(totals.locator('[data-metric="total-ies"]')).toContainText("3");
+  await expect(totals.locator('[data-metric="relay-entries"]')).toContainText("0");
+  await expect(totals.locator('[data-metric="athletes"]')).toContainText("3");
 
   await expect(sheet.locator(".mp-report-note")).toContainText("Sorted by surname");
 });
+
+// ── relays in the team report ────────────────────────────────────────────
+//
+// The host asks for a "report by name"; Team Manager's copy of it lists a
+// swimmer's relay as one more line, naming the leg (stroke for a medley relay,
+// number for a free relay), and prints each squad once with its four legs. A
+// relay-only swimmer has no entry document, so without the line-up they would be
+// missing from the report the host checks the entry file against.
+
+/** The report meet, plus one girls 200 medley relay (#9). */
+async function seedRelayMeet(name) {
+  const meetId = uniqueId("rr");
+  const start = dateInCurrentSeason(30);
+  await seedDocument("meets", meetId, {
+    name,
+    startDate: isoDate(start),
+    endDate: isoDate(start),
+    location: "Germantown Indoor Swim Center",
+    season: currentSeason(),
+    status: "Open",
+    createdAt: new Date(),
+    ageDeterminedOn: isoDate(start),
+    qualifyingPeriodStart: "2024-10-01",
+    entryDeadline: new Date(Date.now() + 20 * 86_400_000).toISOString(),
+    sanction: "PVI-TEST-2",
+    courses: ["SCY"],
+    limits: { maxEvents: 6, maxPerDay: 3 },
+    relayLimitPerClub: 3,
+    sessions: [{ id: "sat-pm", date: isoDate(start), day: "Sat", start: "1:35 PM" }],
+    events: [
+      { eventNo: 9, eventCode: "9", gender: "F", ageGroup: "11-12", distance: 200, stroke: "MED", relay: true, sessionId: "sat-pm", standards: { SCY: 129.99, LCM: null } },
+      { eventNo: 25, eventCode: "25", gender: "F", ageGroup: "11-12", distance: 50, stroke: "BR", relay: false, sessionId: "sat-pm", standards: { SCY: 37.79, LCM: null } },
+    ],
+  });
+  return { meetId, start };
+}
+
+async function seedMedleySquad({ meetId, letter = "A", legs }) {
+  await seedDocument(`meets/${meetId}/relayEntries`, `9__${letter}`, {
+    meetId,
+    eventNo: 9,
+    eventCode: "9",
+    ageGroup: "11-12",
+    gender: "F",
+    distance: 200,
+    stroke: "MED",
+    letter,
+    legs,
+    seedSeconds: 128,
+    courseLetter: "Y",
+  });
+}
+
+test("the team report names each swimmer's relay leg and lists every squad once", async ({ page }) => {
+  const { meetId } = await seedRelayMeet("Print Relay Invitational");
+  const tag = rand().slice(0, 4);
+
+  // Four girls in one medley squad; only the first also has an individual entry,
+  // so the other three can appear in the report only through the line-up.
+  const swimmers = ["Aardvark", "Baker", "Clark", "Davis"].map((surname, i) => ({
+    usaId: newUsaId(),
+    name: `${surname} ${tag}`,
+    age: i < 2 ? 11 : 12,
+  }));
+  await seedTypedEntry({
+    meetId, familyId: uniqueId("f"), usaId: swimmers[0].usaId, swimmerName: swimmers[0].name,
+    gender: "F", age: swimmers[0].age, eventNo: 25, seedTime: "38.10",
+  });
+  await seedMedleySquad({
+    meetId,
+    legs: swimmers.map((s) => ({
+      usaSwimmingId: s.usaId,
+      firstName: s.name.split(" ")[0],
+      lastName: s.name.split(" ")[1],
+      gender: "F",
+      ageAtMeet: s.age,
+    })),
+  });
+
+  const coachEmail = unique("coach");
+  await seedStaffUser(coachEmail, PASSWORD, "coach");
+  await signIn(page, coachEmail);
+  await page.goto(`/meet-print.html?meet=${meetId}&group=sex`);
+
+  const sheet = page.locator(".mp-sheet--report");
+  await expect(sheet).toBeVisible({ timeout: 15000 });
+
+  const female = sheet.locator('.mp-rep-section[data-section="FEMALE"]');
+  // The relay-only girls get a block of their own, sorted with everyone else.
+  await expect(female.locator(".mp-rep-name")).toHaveText([
+    `Aardvark ${tag} (11)`,
+    `Baker ${tag} (11)`,
+    `Clark ${tag} (12)`,
+    `Davis ${tag} (12)`,
+  ]);
+
+  // Each swimmer's block carries the relay line with their leg.
+  const first = female.locator(".mp-rep-swimmer").nth(0);
+  await expect(first.locator(".mp-rep-event--relay")).toHaveCount(1);
+  await expect(first.locator(".mp-rep-event--relay .mp-rep-label")).toHaveText("Female 11-12 200 Medley Relay A");
+  await expect(first.locator(".mp-rep-event--relay .mp-rep-role")).toHaveText("Back");
+  await expect(female.locator(".mp-rep-swimmer").nth(1).locator(".mp-rep-role")).toHaveText("Breast");
+  await expect(female.locator(".mp-rep-swimmer").nth(3).locator(".mp-rep-role")).toHaveText("Free");
+
+  // And the squad is printed once, with time and four ordered legs.
+  const relays = sheet.locator('.mp-rep-section[data-section="RELAYS"]');
+  await expect(relays.locator(".mp-relay")).toHaveCount(1);
+  await expect(relays.locator(".mp-relay-label").first()).toHaveText("Female 11-12 200 Medley Relay A");
+  await expect(relays.locator(".mp-relay-time").first()).toHaveText("2:08.00Y");
+  await expect(relays.locator(".mp-relay-legs li")).toHaveCount(4);
+  await expect(relays.locator(".mp-relay-legs li").last()).toContainText("Free");
+
+  // Relay count sits in the totals next to the individual events it is not part of.
+  await expect(sheet.locator('[data-metric="relay-entries"]')).toContainText("1");
+  await expect(sheet.locator('[data-metric="athletes"]')).toContainText("4");
+});
+
