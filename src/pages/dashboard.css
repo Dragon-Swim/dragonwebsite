@@ -2507,6 +2507,27 @@ input[readonly].profile-edit-field {
   color: var(--text-light, #6b7280);
 }
 
+.mr-time-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.mr-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted, #4b5563);
+}
+
+.mr-hint--ok {
+  color: #15704a;
+}
+
+.mr-hint--warn {
+  color: #b45309;
+}
+
 .mr-errors {
   display: flex;
   flex-direction: column;

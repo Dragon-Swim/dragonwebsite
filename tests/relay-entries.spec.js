@@ -164,6 +164,105 @@ test("a coach builds a relay squad and the leg order is stored", async ({ page }
   expect(doc.legs[0].lastName).toBe(order[0].lastName);
 });
 
+/**
+ * Meet Manager works a relay time out from the sum of the four legs, so the coach
+ * needs to see that number before submitting a different one. Nothing blocks the
+ * save: a relay without a time is legal at some meets.
+ */
+test("the relay time is the sum of four legs, and the coach can accept it", async ({ page }) => {
+  const { meetId } = await seedMeet("Relay Time Invitational");
+  const { boys } = await seedFamilyWithBoys({ count: 4 });
+
+  // Medley order: back / breast / fly / free, 50 each. Sum = 123.00.
+  const legs = [
+    { code: "50 BK SCY", time: "31.00" },
+    { code: "50 BR SCY", time: "35.50" },
+    { code: "50 FL SCY", time: "29.00" },
+    { code: "50 FR SCY", time: "27.50" },
+  ];
+  for (let i = 0; i < 4; i += 1) {
+    await seedDocument("swimResults", boys[i].usaSwimmingId, {
+      memberId: boys[i].usaSwimmingId,
+      bestTimes: [{ eventCode: legs[i].code, swimTime: legs[i].time, swimDate: "2026-10-24" }],
+      lastUpdated: new Date(),
+    });
+  }
+
+  const coachEmail = unique("coach");
+  await seedStaffUser(coachEmail, PASSWORD, "coach");
+  await signIn(page, coachEmail);
+  await openEntriesModal(page, "Relay Time Invitational");
+
+  await page.click('#meet-entries-container [data-action="relays"]');
+  await expect(page.locator("#relay-entries-container .meet-entries-modal")).toBeVisible({ timeout: 15000 });
+  await page.click('#relay-entries-container [data-action="add"][data-code="9A"][data-letter="A"]');
+
+  for (let leg = 0; leg < 4; leg += 1) {
+    await page.selectOption(`#relay-entries-container select[data-leg="${leg}"]`, boys[leg].usaSwimmingId);
+  }
+
+  // The hint arrives after the best times are read, and offers the number.
+  const hint = page.locator("#relay-time-hint");
+  await expect(hint).toContainText("2:03.00 SCY", { timeout: 15000 });
+  await expect(hint.locator('[data-action="use-suggested"]')).toBeVisible();
+
+  // A typed time that disagrees shows both numbers rather than hiding one.
+  await page.fill("#relay-seed", "2:10.00");
+  await expect(hint).toContainText("2:10.00");
+  await expect(hint).toContainText("2:03.00 SCY");
+  await expect(hint).toContainText("+7.00");
+
+  // Accepting the suggestion fills the field and the save keeps that number.
+  await hint.locator('[data-action="use-suggested"]').click();
+  await expect(page.locator("#relay-seed")).toHaveValue("2:03.00");
+  await page.click('#relay-entries-container [data-action="save"]');
+  await expect(page.locator('#relay-entries-container [data-action="edit"][data-letter="A"]')).toBeVisible({ timeout: 15000 });
+
+  const doc = await readDocument(`meets/${meetId}/relayEntries`, "9A__A");
+  expect(doc.seedSeconds).toBeCloseTo(123, 2);
+});
+
+test("a leg without a time is named instead of showing a made-up total", async ({ page }) => {
+  await seedMeet("Relay Time Gap Invitational");
+  const { boys } = await seedFamilyWithBoys({ count: 4 });
+  // Only three of the four have a 50 fly/back/breast/free; the fly leg is missing.
+  await seedDocument("swimResults", boys[0].usaSwimmingId, {
+    memberId: boys[0].usaSwimmingId,
+    bestTimes: [{ eventCode: "50 BK SCY", swimTime: "31.00", swimDate: "2026-10-24" }],
+    lastUpdated: new Date(),
+  });
+  await seedDocument("swimResults", boys[1].usaSwimmingId, {
+    memberId: boys[1].usaSwimmingId,
+    bestTimes: [{ eventCode: "50 BR SCY", swimTime: "35.50", swimDate: "2026-10-24" }],
+    lastUpdated: new Date(),
+  });
+  await seedDocument("swimResults", boys[3].usaSwimmingId, {
+    memberId: boys[3].usaSwimmingId,
+    bestTimes: [{ eventCode: "50 FR SCY", swimTime: "27.50", swimDate: "2026-10-24" }],
+    lastUpdated: new Date(),
+  });
+
+  const coachEmail = unique("coach");
+  await seedStaffUser(coachEmail, PASSWORD, "coach");
+  await signIn(page, coachEmail);
+  await openEntriesModal(page, "Relay Time Gap Invitational");
+  await page.click('#meet-entries-container [data-action="relays"]');
+  await expect(page.locator("#relay-entries-container .meet-entries-modal")).toBeVisible({ timeout: 15000 });
+  await page.click('#relay-entries-container [data-action="add"][data-code="9A"][data-letter="A"]');
+  for (let leg = 0; leg < 4; leg += 1) {
+    await page.selectOption(`#relay-entries-container select[data-leg="${leg}"]`, boys[leg].usaSwimmingId);
+  }
+
+  const hint = page.locator("#relay-time-hint");
+  // Third leg swims fly and has no time: no total, and the leg is named.
+  await expect(hint).toContainText("Leg 3", { timeout: 15000 });
+  await expect(hint).toContainText("50 FL");
+  await expect(hint.locator('[data-action="use-suggested"]')).toHaveCount(0);
+  // Saving is still allowed.
+  await page.click('#relay-entries-container [data-action="save"]');
+  await expect(page.locator('#relay-entries-container [data-action="edit"][data-letter="A"]')).toBeVisible({ timeout: 15000 });
+});
+
 test("an incomplete or duplicated squad cannot be saved", async ({ page }) => {
   const { meetId } = await seedMeet("Relay Validation Invitational");
   const { boys } = await seedFamilyWithBoys({ count: 4 });

@@ -24,10 +24,11 @@
  */
 
 import {
-  db, doc, setDoc, deleteDoc, collection, onSnapshot, serverTimestamp,
+  db, doc, setDoc, deleteDoc, collection, onSnapshot, serverTimestamp, getDoc,
 } from '../utils/firebase.js';
 import { relayEventsOf, relayDocId, validateSquad, LEG_COUNT, RELAY_LETTERS } from '../utils/relayEntry.js';
 import { formatSwimSeconds, parseSwimTimeText } from '../utils/meetEligibility.js';
+import { computeRelaySeedTime, compareRelaySeed } from '../utils/relaySeedTime.js';
 import { t } from '../utils/i18n.js';
 
 const CONTAINER_ID = 'relay-entries-container';
@@ -43,6 +44,8 @@ const state = {
   saving: false,
   error: '',
   actorId: null,
+  bestTimes: new Map(),   // usaId -> swimResults.bestTimes, for the four-leg sum
+  relayTime: null,        // last computeRelaySeedTime() result (for the "use it" action)
 };
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => (
@@ -153,7 +156,11 @@ function paint() {
       </div>
     </div>
   `;
-  if (state.view === 'edit') refreshErrors();
+  if (state.view === 'edit') {
+    refreshErrors();
+    // Re-render (a save failure, a live squad update) must not lose the hint.
+    refreshRelayTime();
+  }
 }
 
 function listHtml() {
@@ -235,6 +242,7 @@ function editHtml() {
         <span>${esc(t('meet_relays_seed'))}</span>
         <input type="text" id="relay-seed" placeholder="1:47.25" value="${esc(state.edit.seedTime || '')}" />
       </label>
+      <div class="mr-time-hint" id="relay-time-hint"></div>
       <div class="mr-errors" id="relay-errors"></div>
       <p class="me-sub">${esc(t('meet_relays_pool_hint').replace('{n}', String(pool.length)))}</p>
     </div>
@@ -259,6 +267,91 @@ function footerHtml() {
 
 // ── validation feedback ──────────────────────────────────────────────────
 
+// ── relay time: what the four legs add up to ─────────────────────────────
+
+/**
+ * Load the four legs' best times (cached per swimmer). Nothing blocks while they
+ * load — the hint appears when they arrive, and a missing read just means "no
+ * time on file" rather than a refusal to save.
+ */
+async function ensureLegTimes() {
+  const ids = currentLegs().filter(Boolean)
+    .map((leg) => String(leg.usaId || leg.usaSwimmingId || '').trim().toUpperCase())
+    .filter(Boolean);
+  const missing = ids.filter((id) => !state.bestTimes.has(id));
+  if (!missing.length) { refreshRelayTime(); return; }
+  await Promise.all(missing.map(async (id) => {
+    try {
+      const snap = await getDoc(doc(db, 'swimResults', id));
+      state.bestTimes.set(id, (snap.exists() ? snap.data().bestTimes : []) || []);
+    } catch {
+      state.bestTimes.set(id, []);
+    }
+  }));
+  refreshRelayTime();
+}
+
+/**
+ * Show what Meet Manager will compute, and how the typed number compares.
+ *
+ * This never blocks saving: a relay entry without a time is legal at some meets,
+ * and a coach who has a reason to submit a different number is allowed to — the
+ * point is that they see both numbers instead of guessing.
+ */
+function refreshRelayTime() {
+  const el = document.getElementById('relay-time-hint');
+  if (!el) return;
+  const event = state.events.find((e) => String(e.eventCode) === String(state.edit?.eventCode));
+  const result = computeRelaySeedTime({
+    event,
+    legs: currentLegs(),
+    bestTimesById: state.bestTimes,
+    qualifyingPeriodStart: state.meet?.qualifyingPeriodStart,
+  });
+  state.relayTime = result;
+
+  if (result.ok) {
+    const sum = `${formatSwimSeconds(result.seconds)} ${result.course}`;
+    const typed = parseSwimTimeText(state.edit?.seedTime || '');
+    const cmp = compareRelaySeed({ typedSeconds: typed, computedSeconds: result.seconds });
+    if (cmp.state === 'no-typed') {
+      el.innerHTML = `<span class="mr-hint">${esc(t('meet_relays_time_suggest').replace('{time}', sum))}</span>
+        <button type="button" class="btn btn-outline btn-sm" data-action="use-suggested">${esc(t('meet_relays_time_use'))}</button>`;
+      return;
+    }
+    if (cmp.state === 'match') {
+      el.innerHTML = `<span class="mr-hint mr-hint--ok">${esc(t('meet_relays_time_match').replace('{time}', sum))}</span>`;
+      return;
+    }
+    el.innerHTML = `<span class="mr-hint mr-hint--warn">${esc(t('meet_relays_time_diff')
+      .replace('{typed}', formatSwimSeconds(typed))
+      .replace('{sum}', sum)
+      .replace('{delta}', `${cmp.deltaSeconds > 0 ? '+' : ''}${cmp.deltaSeconds.toFixed(2)}`))}</span>
+      <button type="button" class="btn btn-outline btn-sm" data-action="use-suggested">${esc(t('meet_relays_time_use'))}</button>`;
+    return;
+  }
+
+  // No total: name the leg that has no time rather than showing a guess.
+  const first = result.parts.find((p) => p.seconds == null);
+  el.innerHTML = first
+    ? `<span class="mr-hint">${esc(t('meet_relays_time_missing')
+      .replace('{leg}', String(first.leg))
+      .replace('{name}', first.name)
+      .replace('{distance}', String(first.distance))
+      .replace('{stroke}', first.stroke))}</span>`
+    : '';
+}
+
+function useSuggestedTime() {
+  const result = state.relayTime;
+  if (!result?.ok) return;
+  const text = formatSwimSeconds(result.seconds);
+  state.edit.seedTime = text;
+  const input = document.getElementById('relay-seed');
+  if (input) input.value = text;
+  refreshRelayTime();
+}
+
 function currentLegs() {
   const event = state.events.find((e) => String(e.eventCode) === String(state.edit?.eventCode));
   return (state.edit?.legs || []).map((leg) => {
@@ -268,8 +361,7 @@ function currentLegs() {
   });
 }
 
-function refreshErrors() {
-  const el = document.getElementById('relay-errors');
+function refreshErrors() {  const el = document.getElementById('relay-errors');
   if (!el) return;
   const event = state.events.find((e) => String(e.eventCode) === String(state.edit?.eventCode));
   const legs = currentLegs();
@@ -317,6 +409,7 @@ document.addEventListener('click', (event) => {
   else if (action === 'back') { state.view = 'list'; state.error = ''; paint(); }
   else if (action === 'save') saveSquad();
   else if (action === 'delete') deleteSquad();
+  else if (action === 'use-suggested') useSuggestedTime();
 });
 
 document.addEventListener('change', (event) => {
@@ -328,11 +421,13 @@ document.addEventListener('change', (event) => {
   const swimmer = state.swimmers.find((s) => String(s.usaId) === usaId) || null;
   state.edit.legs[i] = swimmer ? { usaId: swimmer.usaId, firstName: swimmer.firstName, lastName: swimmer.lastName, dob: swimmer.dob, gender: swimmer.gender, ageAtMeet: swimmer.age } : null;
   refreshErrors();
+  ensureLegTimes();
 });
 
 document.addEventListener('input', (event) => {
   if (event.target.id !== 'relay-seed') return;
   state.edit.seedTime = event.target.value;
+  refreshRelayTime();
 });
 
 function startEdit(code, letter, existing) {
@@ -349,6 +444,9 @@ function startEdit(code, letter, existing) {
   state.error = '';
   state.view = 'edit';
   paint();
+  // The four-leg sum needs each swimmer's best times; nothing is blocked while
+  // they load — the hint simply appears when they arrive.
+  ensureLegTimes();
 }
 
 async function saveSquad() {
