@@ -109,6 +109,11 @@ const STOP = new Set(['2026', '2027', 'meet', 'invitational', 'open', 'annual', 
 const tokens = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g)?.filter((t) => !STOP.has(t)) || [];
 const nameOf = (a) => [a.firstName, a.lastName].filter(Boolean).join(' ').trim();
 /**
+ * 比姓名时忽略大小写、空格和连字符:"Luohan" 与 "Luo-han" 是同一个人,
+ * "Celina" 与 "Shoshana" 不是。用来发现「文件里的 ID 其实是队友的」。
+ */
+const nameKey = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+/**
  * 库里那场属于哪个赛季年(如 "2027")。用来防止「同名 + 同月日、不同年」被当成同一场:
  * 2021 PV Loughmiller 是 Nov 06-07,2026 PV Loughmiller 是 Nov 06-08 —— 只比月日会串场。
  * 优先 seasonYear(两条管线都会写),老数据没有就用 ISO 日期里的年份,都没有则返回 null(不设防)。
@@ -181,8 +186,17 @@ for (const x of roster) {
 
 // ── 匹配:PVS 里的一个运动员 → 注册表里的谁(或谁都不是)──────────────────────
 function matchAthlete(a) {
+  let idOwnerName = null;
   const byId = regById.get(String(a.memberId || '').toUpperCase());
-  if (byId) return { kind: 'reg', target: byId };
+  if (byId) {
+    // ID 命中还不够:TM 名册会把兄弟姐妹的 ID 填到别人身上(2026-11-16 实测:
+    // Loughmiller 包里 Celina Feng 带的是 Shoshana Feng 的有效 ID)。
+    // 姓名对得上才直接写;对不上就丢掉这个 ID,降级按「姓名+性别+年龄」匹配。
+    if (!nameKey(nameOf(a)) || !nameKey(byId.name) || nameKey(nameOf(a)) === nameKey(byId.name)) {
+      return { kind: 'reg', target: byId };
+    }
+    idOwnerName = byId.name;
+  }
 
   const sameName = regByName.get(normalizeSortKey(nameOf(a))) || [];
   if (!sameName.length) return { kind: 'unknown' };
@@ -202,7 +216,7 @@ function matchAthlete(a) {
       return { kind: 'ambiguous', why: `年龄不符:比赛日 ${want} / 文件 ${a.age}` };
     }
   }
-  return { kind: 'mapped', target: t };
+  return { kind: 'mapped', target: t, idOwnerName };
 }
 
 /** 同场成绩交叉验证:目标 ID 名下若已有这一场,要求条数 + 每条时间/名次全同。 */
@@ -336,9 +350,13 @@ for (const pvsDoc of docs) {
         continue;
       }
       // PDF 兜底的文件没有运动员 ID,只能按姓名+性别+年龄唯一匹配;交叉验证结果如实写进备注。
-      mappingNote = a.memberId
-        ? (v.ok === null ? `文件 ID 非会员号,按姓名+年龄映射(${v.why})` : `按姓名+年龄映射,${v.why}`)
-        : `源文件无 ID(PDF),按姓名+性别+年龄唯一匹配;${v.why}`;
+      if (m.idOwnerName) {
+        mappingNote = `文件 ID ${a.memberId} 属于 ${m.idOwnerName},已改按姓名+年龄映射;${v.why}`;
+      } else {
+        mappingNote = a.memberId
+          ? (v.ok === null ? `文件 ID 非会员号,按姓名+年龄映射(${v.why})` : `按姓名+年龄映射,${v.why}`)
+          : `源文件无 ID(PDF),按姓名+性别+年龄唯一匹配;${v.why}`;
+      }
       stat.matchedMapped++;
     } else {
       stat.matchedReg++;

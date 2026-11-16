@@ -181,9 +181,19 @@ for (const x of roster) {
 }
 
 const buckets = { reg: [], noId: [], mismatch: [], unknown: [] };
+// 比姓名忽略大小写/空格/连字符:Luohan 与 Luo-han 是同一人,Celina 与 Shoshana 不是。
+const nameKey = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
 for (const a of pvsAthletes.values()) {
   const direct = regById.get(a.memberId);
-  if (direct) { buckets.reg.push({ ...a, target: direct }); continue; }
+  if (direct) {
+    if (nameKey(a.name) && nameKey(direct.name) && nameKey(a.name) !== nameKey(direct.name)) {
+      // 文件里的 ID 是队友的有效 ID(TM 名册填错)→ 不能当「可写」。
+      buckets.mismatch.push({ ...a, targets: [direct], wrongOwner: direct.name });
+      continue;
+    }
+    buckets.reg.push({ ...a, target: direct });
+    continue;
+  }
   const byName = regByName.get(normalizeSortKey(a.name));
   if (!byName) { buckets.unknown.push(a); continue; }
   const noId = byName.find((x) => !x.id);
@@ -225,7 +235,10 @@ const mergeBy = (list, keyOf) => {
 };
 buckets.reg = mergeBy(buckets.reg, (a) => a.target.id || normalizeSortKey(a.name));
 buckets.noId = mergeBy(buckets.noId, (a) => `${a.target.regId}|${normalizeSortKey(a.target.name)}`);
-buckets.mismatch = mergeBy(buckets.mismatch, (a) => a.targets?.[0]?.id || normalizeSortKey(a.name));
+buckets.mismatch = mergeBy(
+  buckets.mismatch,
+  (a) => (a.wrongOwner ? `wrong:${normalizeSortKey(a.name)}` : (a.targets?.[0]?.id || normalizeSortKey(a.name))),
+);
 buckets.unknown = mergeBy(buckets.unknown, (a) => normalizeSortKey(a.name));
 
 // 对不上的孩子，先在「还没注册」的白名单条目里找可能属于谁 —— 同一个孩子不该被列两遍。
@@ -249,6 +262,7 @@ for (const a of buckets.unknown) {
 for (const a of buckets.mismatch) {
   a.verified = false;
   a.evidence = [];
+  if (a.wrongOwner) continue;                    // 文件 ID 属于别人 → 不去拿那个人的成绩"验证"
   if (a.targets.length !== 1) continue;          // 重名多个人 → 不自动认
   const snap = await db.collection('swimResults').doc(a.targets[0].id).get();
   if (!snap.exists) continue;
@@ -344,9 +358,11 @@ ${bcc([...pending, ...noForm])}
 
 补上 ID 就能立刻写入。
 
-| 孩子 | 家长 |
-|---|---|
-${urgentKids.map((a) => `| ${a.name} | ${familyLabel(a.target.reg)} |`).join('\n')}
+| 孩子 | 文件里的 ID | 家长 |
+|---|---|---|
+${urgentKids.map((a) => `| ${a.name} | ${a.memberId || '—'} | ${familyLabel(a.target.reg)} |`).join('\n')}
+
+> 这一列是比赛文件里带的 ID。家长把 ID 填进注册资料后,重跑 import_pvs_results.mjs 就能写入。
 
 \`\`\`
 ${bcc(missUrgent)}
@@ -356,11 +372,13 @@ ${bcc(missUrgent)}
 
 | 孩子 | 正确（注册表 / USA Swimming） | 错误（TM 名册里） |
 |---|---|---|
-${buckets.mismatch.map((a) => `| ${a.name} | \`${a.targets.map((t) => t.id).join(' / ')}\` | \`${a.memberId}\` |`).join('\n')}
+${buckets.mismatch.map((a) => (a.wrongOwner
+  ? `| ${a.name} | —（需人工确认） | \`${a.memberId}\`（属于 ${a.wrongOwner}） |`
+  : `| ${a.name} | \`${a.targets.map((t) => t.id).join(' / ')}\` | \`${a.memberId}\` |`)).join('\n')}
 
-> 右列这三个 ID 在 USA Swimming 里**查不到**（\`No records returned\`）。USA-S 收成绩时按姓名+生日认人，
-> 所以成绩没丢；但每场比赛的文件都会带着错的 ID 过来，网站这边只能靠姓名兜底匹配。
-> **在 Team Manager 里把 ID 改成左列**，以后就干净了。${unverifiedMismatch.length ? `
+> 右列的 ID 要么在 USA Swimming 里**查不到**（\`No records returned\`），要么根本属于**别人**。
+> USA-S 收成绩时按姓名+生日认人，所以成绩没丢；但每场比赛的文件都会带着错的 ID 过来，
+> 网站这边只能靠姓名兜底匹配。**在 Team Manager 里把 ID 改成左列**，以后就干净了。${unverifiedMismatch.length ? `
 >
 > ⚠ 其中 ${unverifiedMismatch.map((a) => a.name).join('、')} 没能用同场成绩验证，先别当同一人处理。` : ''}
 
