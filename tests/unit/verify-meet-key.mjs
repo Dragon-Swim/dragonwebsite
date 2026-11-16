@@ -9,7 +9,7 @@
 // Part of `npm run test:unit`. Deliberately not named *.spec.js so Playwright
 // cannot collect it.
 import {
-  meetNameTokens, parseMeetDay, resolveMeetKey, mergeSwimLists,
+  meetNameTokens, parseMeetDay, meetYear, resolveMeetKey, mergeSwimLists,
 } from '../../src/utils/meetKey.js';
 
 let pass = 0;
@@ -66,6 +66,29 @@ check('an unknown meet creates its own key', resolveMeetKey(
 const exact = resolveMeetKey({ meetId: '289349', meetName: '2026 PV October Open - Claude Moore', meetDates: 'Oct 09 - Oct 11' }, stored);
 check('a key that is already right is left alone', exact.key === '289349' && exact.dropKey === null && exact.existing === stored['289349'], exact.dropKey);
 check('no stored meets → nothing to merge', resolveMeetKey(usasMako, undefined).existing === null);
+
+// ── 3b. the same name on the same month/day, five years apart ─────────────
+// 2021 PV Loughmiller was Nov 06-07; 2026 PV Loughmiller is Nov 06-08. Month+day
+// alone would merge them and USAS would overwrite a 2026 meet with 2021 data.
+console.log('3b. same name and month/day but a different season year');
+const LOUGH_2021 = {
+  meetName: '2021 PV Loughmiller Memorial Meet', meetDates: 'Nov 06 - Nov 07',
+  season: '2021/2022', seasonYear: '2022', status: 'ok',
+  swims: [{ eventCode: '50 FR SCY', swimTime: '31.00' }],
+};
+const loughStored = { 18659: LOUGH_2021 };
+const lough2026 = { meetId: '300000', meetName: '2026 PV Loughmiller Memorial Invitational', meetDates: 'Nov 06 - Nov 08', seasonYear: '2027' };
+check('meetYear prefers seasonYear', meetYear(LOUGH_2021) === '2022', meetYear(LOUGH_2021));
+check('meetYear falls back to an ISO date', meetYear({ meetDates: '2026-11-06' }) === '2026', meetYear({ meetDates: '2026-11-06' }));
+check('a meet five years later is not the same meet', resolveMeetKey(lough2026, loughStored).existing === null);
+check('…the same season still merges', resolveMeetKey(
+  { meetId: '300001', meetName: '2026 PV Loughmiller Memorial Invitational', meetDates: 'Nov 06 - Nov 08', seasonYear: '2027' },
+  { 'pvs-27-21': { meetName: 'FXFX Loughmiller Memorial', meetDates: 'Nov 06 - Nov 08', seasonYear: '2027', swims: [] } },
+).dropKey === 'pvs-27-21');
+check('a stored record with no year keeps today’s behaviour', resolveMeetKey(
+  { meetId: '300002', meetName: '2026 PV Loughmiller Memorial Invitational', meetDates: 'Nov 06 - Nov 08', seasonYear: '2027' },
+  { old: { meetName: 'Loughmiller Memorial', meetDates: 'Nov 06 - Nov 07', swims: [] } },
+).dropKey === 'old');
 
 // ── 4. merging the swims ──────────────────────────────────────────────────
 console.log('4. merging fetched and stored swims');

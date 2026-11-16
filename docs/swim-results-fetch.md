@@ -1,9 +1,13 @@
 # 游泳成绩抓取(USA Swimming Data Hub)工作流说明
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
-> 最后更新:2026-10-30(新增 §13.7:PVS 成绩**写库**落地 —— `import_pvs_results.mjs` 默认
-> dry-run,写库键永远是注册 ID;第一次实写只净增 1 条 DQ,44 条成绩仍在等家长补 ID。
-> §13.8:USAS 重复场次的守卫 —— PVS 导入的 `pvs-xx` 场次会被 USAS 的抓取合并进数字键,不再出现两遍)。
+> 最后更新:2026-11-16(新增 §13.10:11 月两场入库 —— November Open 走 zip 正常;
+> **Loughmiller 的 TM 包被 PVS 错传成另一场**,改用官方成绩 PDF 兜底,新增
+> `parse_pvs_results_pdf.py`;同时修掉「同名+同月日、不同年」会串场的年份闸门。)
+> 此前 2026-10-30:§13.7 PVS 成绩**写库**落地(默认 dry-run,写库键永远是注册 ID;
+> 第一次实写只净增 1 条 DQ,44 条成绩仍在等家长补 ID);§13.8 USAS 重复场次的守卫
+> (PVS 导入的 `pvs-xx` 场次会被 USAS 抓取合并进数字键,不再出现两遍);
+> §13.9 成绩 ≠ 报名 —— check-in 规则(长距离没 check in 连 `NS` 都没有;接力可改人改棒次)。
 > 此前 2026-10-29 新增 §13:PVS 官方成绩包路线,只读解析 + 与 USAS 逐条对账 193/193 一致。
 > 此前 2026-10-28 新增 §12.8/§12.9:界面改成
 > 「Data Hub Session」面板;Worker 已写好并有 33 项本机测试,待部署。此前 2026-10-27 新增第 12 节:Data Hub 改版,旧 `times-api` host 整站 403,
@@ -657,3 +661,140 @@ DQ 存活、不重复插、非 PVS 旧行被替换。
 1. **`bestTimes` 不动**。PVS 新场次不会进 Best Times 表;要做得先解决"重算会把 PVS
    覆盖不到的历史场次弄丢"这个问题,建议改成"只在更快时替换"而不是整体重算。
 2. 合并只在同一名队员的 `meets` 里判断;**跨队员**没有一致性要求(每人的场次集合本来就不同)。
+
+### 13.9 2026-10-30:成绩 ≠ 报名 —— check-in 规则
+
+`.hy3` / `.cl2` 只记录**实际发生**的事,不记录"报了但没发生"的条目。读成绩、或拿成绩反推报名时,
+先按这张表判断:
+
+| 类型 | 报名后没发生 / 变了,成绩里长什么样 |
+|---|---|
+| **400 码及以上的个人项目**(500 / 1000 / 1650 自、400 IM) | 要 positive check-in;**没 check in 就整行消失,连 `NS` 都没有** |
+| **接力** | 人不够 / 没 check in → **整队消失**;check-in(本场:混合接力 + 13-14 800 自接)可换人,棒次在交棒次单时也能改 → **成绩里的名单和顺序 ≠ entry file** |
+| **短距离个人项目** | 不需要 check-in;人没来 → 显示 `NS` |
+
+推论:
+
+- **"成绩里没有" ≠ "没报名"**。用成绩反推报名,会漏掉所有"报了没游"的条目。
+- **"成绩里的接力名单和报名不同" ≠ "报名文件被改过"**。接力本来就允许赛场上改人改棒次。
+- 要核对**报名**,看**心理表**(psyche sheet,由 entry file 生成,早于 check-in)或 entry file 本身;
+  成绩只回答"实际发生了什么"。
+- 注意本队 `swimResults` 里这些"报了没游"的场次本来就不存在 —— 不是抓取漏了。
+
+实例:`2026 PV SC 14&U Champs`(PVS **26-88**,3/12–15)。一份 2/27 的 TM name-entry 报告
+与 3/9 心理表在 20 人 / 72 项 / 11 个接力队上**逐条相同**,但报告里多一支 event 16
+(mixed 11-12 400 FR) —— 心理表上没有 = **没报**,所以那份 2/27 的 PDF **不是最终报名**,
+只是截止前的工作版。**2026-10-30 拿到了 3/2 22:16 的最终报名件,证实:11 队、无 event 16,
+`RE 46 → 43`**(见 `.tmp/meet-entry/samples/exports/sc-14u-2026/`)。成绩里少 1 条 500 自
+(Luohan Chen,没 check in)、2 个接力的棒次/人员被改(86、90),则都是 check-in 造成的,
+与报名无关。
+核对过程与证据:`.tmp/meet-entry/samples/reports/sc-14u-2026/README.md`。
+
+## 14. 2026-11-16:11 月两场入库,以及 `27-21` 的 TM 包错传
+
+**触发**:Loughmiller Memorial Invitational(11/6–8)和 PVS November Open(11/13–15)
+成绩都上线了,要更新网站。
+
+### 14.1 November Open(`27-29-ncap`)——zip 路线正常
+
+本队全部报在 **NCAP / Dulles South** 这一个包;同场的 FISH / OCCS / PAC 三个包本队 0 人
+(本队没去那几个池子,不是漏抓)。数据:28 人 / 146 条记录(133 ok、12 `NS`、1 DQ)。
+
+```powershell
+python execution/swim-results/sync_pvs_results.py            # 顺带抓到 27-29-fish/ncap/occs/pac
+node execution/swim-results/import_pvs_results.mjs --only 27-29-ncap          # dry-run
+node execution/swim-results/import_pvs_results.mjs --only 27-29-ncap --commit
+```
+
+写库 20 人次(19 直接 ID + 1 姓名映射 Jonathan Wu),**新增 95 条**(94 ok + 1 DQ `3L`),
+19 份文档,键 `pvs-27-29-ncap`。按官方 `27-29-ncap-results.pdf` 抽查(Aden Kim 8 条、
+Nathan Zhang 3 条、Jonathan Wu 的 DQ),时间/名次逐条一致。
+
+8 人次没写:7 个没填 USA ID(Gowtham Narra 4、Liam Norcross 4、Logan Norcross 4、
+Priya Patel 6、Vaibhav Putta 3、Liam Toner 6、Daniel Xiao 6 = 33 条)+
+Gabriel Martin del Campo(名册里没有,6 条)。Ellora Patel 8 项全 `NS`,按规则不入库。
+
+### 14.2 Loughmiller(`27-21`)——PVS 把 TM 包传错了
+
+`https://www.files.pvswim.org/2627tm/MeetResults27-21.zip` 的内容是
+**`2026 Autumn Mini Meet`**:sha256 与 `MeetResults27-24.zip` **逐字节相同**,里面只有
+5 支队伍(ASA / QOSA / RMSC / SA / FISH),**没有 DRAG**。同目录的
+`2627meet/27-21-results.pdf` 却是正确的 Loughmiller(58 页,`Dragon Swim Team-PV` 136 行)。
+重新下载仍是同一份 → 不是本地缓存,是上游传错。
+
+所以走 §13.5 预留的 PDF 兜底:新增 **`execution/swim-results/parse_pvs_results_pdf.py`**,
+把官方成绩 PDF 解析成与 `sync_pvs_results.py` **同形状**的 JSON,再交给同一个导入脚本。
+
+```powershell
+python execution/swim-results/parse_pvs_results_pdf.py `
+  --pdf .tmp/swim-results/2627/27-21-results.pdf `
+  --key 27-21 --name "2026 FXFX Loughmiller Memorial Invitational" `
+  --start 2026-11-06 --end 2026-11-08 `
+  --alias "Willy Ye=William Ye" `
+  --out .tmp/swim-results/pvs/meets/27-21.json
+node execution/swim-results/import_pvs_results.mjs --only 27-21          # dry-run
+node execution/swim-results/import_pvs_results.mjs --only 27-21 --commit
+```
+
+**PDF 与 `.hy3` 的差别(写库必须知道)**:
+
+| 项 | `.hy3` | 成绩 PDF |
+|---|---|---|
+| USA-S ID | 有(`D1` 70–83 位) | **没有** |
+| 分段 `splits` | 有 | 没有(`--splits` 无意义) |
+| DQ 代码 | 有(`3L` 等) | 只有 `DQ` 两个字 |
+| 接力 | 有 | 本场 PDF 里没有接力条目 |
+| 名次 / 成绩 / 报名成绩(`NT`) | 有 | 有 |
+
+因为没有 ID,只能由导入脚本按「姓名 + 性别 + 比赛日年龄」**唯一**命中注册表;
+命中不到(缺 ID / 名册里没有 / 同名多人)一律不写,并在报告里列出来。写进去的记录
+`sourceId: null`,备注写「源文件无 ID(PDF),按姓名+性别+年龄唯一匹配」。
+
+解析结果:25 人 / 136 条,与 PDF 中本队行数**完全一致**;脚本自检还会拦「同一人同一项目
+出现两次」(事件头跟丢时会触发)。写库 16 人 / **84 条**,16 份文档,键 `pvs-27-21`。
+9 人没写:8 人缺 ID(Rachel Kamil 6、Priya Patel 6、Liam Toner 6、Jayanth Narra 5、
+Gowtham Narra 5、Luke Kamil 6、Logan Norcross 5、Liam Norcross 6 = 45 条)+
+Gabriel Martin del Campo(名册里没有,7 条)。
+
+**`--alias` 只做显式昵称映射**,不做模糊匹配:PDF 写 `Willy Ye`,注册名 `William Ye`
+(同姓、同为 M、比赛日 14 岁)。不加这个参数他会被跳过;加了之后仍要过导入脚本的
+姓名+性别+年龄唯一性检查。
+
+### 14.3 修掉一个会串场的 bug:同名 + 同月日、不同年
+
+2021 PV Loughmiller 是 `Nov 06 - Nov 07`,2026 那场是 `Nov 06 - Nov 08`。原来
+`import_pvs_results.mjs` 的 `findMeetKey` / `verifyAgainstUsas`、以及前端
+`src/utils/meetKey.js` 的 `resolveMeetKey` **只比月+日**,于是:
+
+- Aiden Pan、Celina Feng 的 2026 成绩被拿去和 **2021** 同场比对 → 误报
+  「与 USAS 同场不一致」而**拒写**(修之前 25 人里只写 13 人、69 条);
+- 更危险的是反方向:USAS 发布 2026 那场时,`resolveMeetKey` 会把它并进 2021 的记录,
+  **覆盖掉 2021 的数据**。
+
+现在三处都加了**赛季年闸门**:优先 `seasonYear`,没有就从 ISO `meetDates` 取;两边都有
+年份且不同 → 判定为不是同一场。老记录没有年份时保持原行为(向后兼容)。
+
+测试:`tests/unit/verify-meet-key.mjs` 新增 5 项(同名差 5 年不合并、同赛季仍合并、
+无年份保持原行为),`node tests/unit/verify-meet-key.mjs` 29 项全过。落库后复核:
+Aiden Pan / Celina Feng 的 2021 与 2026 两场**并存**,互不覆盖。
+
+### 14.4 这次净结果与仍未写的内容
+
+| 场次 | 本队记录 | 写入 | 文档 | 没写 |
+|---|---|---|---|---|
+| Loughmiller `pvs-27-21` | 25 人 / 136 条 | **84 条** | 16 | 52 条(45 缺 ID + 7 名册外) |
+| November Open `pvs-27-29-ncap` | 28 人 / 146 条 | **95 条** | 19 | 39 条(33 缺 ID + 6 名册外) |
+| 合计 | — | **179 条** | 35 | 91 条 |
+
+- 重跑同一条命令 **0 新增**(幂等,已实测)。
+- **补 ID 后重跑即可**,不用改代码:`import_pvs_results.mjs --only <key> --commit`。
+  缺 ID 清单可由 `attention_list.mjs` 重新生成。
+- Gabriel Martin del Campo 仍不在 `registrations` 里(§13.4 已记录),不写。
+- **如果 PVS 以后把 27-21 的 zip 改对**:`sync_pvs_results.py --force --only 27-21`
+  会因 mtime/size 变化重新下载,覆盖掉 PDF 生成的 JSON(hy3 多了 DQ 代码/NS/分段),
+  再跑一次 `import --only 27-21` 即可;幂等,不会重复插。
+- `bestTimes` 仍未动(§13.8 末尾的老问题),所以 Best Times 表里看不到这两场。
+- 顺带修了 `attention_list.mjs` 的两个问题:PDF 行没有 `memberId` 时所有孩子会折叠成一条
+  (Rachel/Luke Kamil 因此被漏掉);同一个孩子在多场出现时会重复列出。现在按「人」合并,
+  清单重新生成为 `.tmp/deliverables/dragon-needs-attention-2026-11-16.md`(自校验 6 项全过)。
+

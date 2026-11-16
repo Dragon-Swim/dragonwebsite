@@ -108,6 +108,24 @@ const seasonOf = (iso) => {
 const STOP = new Set(['2026', '2027', 'meet', 'invitational', 'open', 'annual', 'site', 'copied', 'the', 'pv', 'pvs']);
 const tokens = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g)?.filter((t) => !STOP.has(t)) || [];
 const nameOf = (a) => [a.firstName, a.lastName].filter(Boolean).join(' ').trim();
+/**
+ * 库里那场属于哪个赛季年(如 "2027")。用来防止「同名 + 同月日、不同年」被当成同一场:
+ * 2021 PV Loughmiller 是 Nov 06-07,2026 PV Loughmiller 是 Nov 06-08 —— 只比月日会串场。
+ * 优先 seasonYear(两条管线都会写),老数据没有就用 ISO 日期里的年份,都没有则返回 null(不设防)。
+ */
+const meetYear = (m) => {
+  const sy = String(m?.seasonYear || '').trim();
+  if (/^\d{4}$/.test(sy)) return sy;
+  const iso = /^(\d{4})-\d{2}-\d{2}/.exec(String(m?.meetDates || ''));
+  return iso ? iso[1] : null;
+};
+/** 同一场?月份+日相同,且(双方都有年份时)赛季年相同。 */
+const sameMeetDay = (stored, p, year) => {
+  const dm = String(stored?.meetDates || '').match(/^([A-Z][a-z]{2})\s+(\d{1,2})/);
+  if (!dm || dm[1] !== p.mon || Number(dm[2]) !== p.day) return false;
+  const a = meetYear(stored);
+  return !a || !year || a === String(year);
+};
 const ageOn = (dob, iso) => {
   const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dob || ''));
   const p = parseIso(iso);
@@ -193,14 +211,16 @@ function verifyAgainstUsas(target, pvsDoc, a) {
     .map((s) => `${normCode(s.eventCode)}|${csOf(s.seconds) ?? '-'}|${s.place ?? '-'}`);
   if (!mine.length) return { ok: false, why: '同场没有可比的 ok 成绩' };
   const p = parseIso(pvsDoc.meet.startDate);
+  const year = seasonOf(pvsDoc.meet.startDate).seasonYear;
   const ev = cachedDocs.get(target.id);
   const meets = ev?.meets || {};
-  const hit = Object.entries(meets).find(([, m]) => {
-    const dm = String(m.meetDates || '').match(/^([A-Z][a-z]{2})\s+(\d{1,2})/);
-    return dm && dm[1] === p.mon && Number(dm[2]) === p.day;
-  });
+  const hit = Object.entries(meets).find(([, m]) => sameMeetDay(m, p, year));
   if (!hit) return { ok: null, why: '该场 USAS 侧没有数据,无法交叉验证' };
-  const usas = new Set((hit[1].swims || []).map((s) => `${normCode(s.eventCode)}|${csOf(s.swimTime) ?? '-'}|${s.finishPosition ?? '-'}`));
+  // 只比「有成绩的 ok 行」:PVS 自己写进去的 DQ(swimTime null、status dq)必须排除,
+  // 否则第二次运行会把 5 条 ok 和 6 条(含 DQ)比成「不一致」而误拒写。
+  const usas = new Set((hit[1].swims || [])
+    .filter((s) => s && s.status !== 'dq' && s.swimTime != null)
+    .map((s) => `${normCode(s.eventCode)}|${csOf(s.swimTime) ?? '-'}|${s.finishPosition ?? '-'}`));
   const equal = mine.length === usas.size && mine.every((k) => usas.has(k));
   return { ok: equal, why: equal ? `与 USAS 同场 ${mine.length} 条全同` : `与 USAS 同场不一致(PVS ${mine.length} / USAS ${usas.size})` };
 }
@@ -209,11 +229,11 @@ function verifyAgainstUsas(target, pvsDoc, a) {
 function findMeetKey(pvsDoc, meets) {
   const p = parseIso(pvsDoc.meet.startDate);
   if (!p) return null;
+  const year = seasonOf(pvsDoc.meet.startDate).seasonYear;
   const want = new Set(tokens(pvsDoc.meet.name));
   const hits = [];
   for (const [id, m] of Object.entries(meets || {})) {
-    const dm = String(m.meetDates || '').match(/^([A-Z][a-z]{2})\s+(\d{1,2})/);
-    if (!dm || dm[1] !== p.mon || Number(dm[2]) !== p.day) continue;
+    if (!sameMeetDay(m, p, year)) continue;
     const shared = tokens(m.meetName).filter((t) => want.has(t));
     if (!shared.length) continue;
     hits.push({ id, shared });
@@ -244,7 +264,7 @@ function toStoredSwim(swim, { athlete, target, meetKey, pvsKey }) {
     finishPosition: swim.place ?? null,
     source: 'pvs',
     sourceMeet: pvsKey,
-    sourceId: athlete.memberId,       // 文件里那串(可能是 TM 残留的旧号),备查
+    sourceId: athlete.memberId || null,  // 文件里那串(可能是 TM 残留的旧号);PDF 兜底时没有 ID
   };
   if (swim.status === 'DQ') {
     return {
@@ -315,7 +335,10 @@ for (const pvsDoc of docs) {
         console.log(`  ⏭  ${who.padEnd(28)} ${v.why} → 不写`);
         continue;
       }
-      mappingNote = v.ok === null ? `文件 ID 非会员号,按姓名+年龄映射(${v.why})` : `按姓名+年龄映射,${v.why}`;
+      // PDF 兜底的文件没有运动员 ID,只能按姓名+性别+年龄唯一匹配;交叉验证结果如实写进备注。
+      mappingNote = a.memberId
+        ? (v.ok === null ? `文件 ID 非会员号,按姓名+年龄映射(${v.why})` : `按姓名+年龄映射,${v.why}`)
+        : `源文件无 ID(PDF),按姓名+性别+年龄唯一匹配;${v.why}`;
       stat.matchedMapped++;
     } else {
       stat.matchedReg++;

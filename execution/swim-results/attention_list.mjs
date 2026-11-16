@@ -153,9 +153,12 @@ if (existsSync(meetsDir)) {
     const doc = JSON.parse(readFileSync(resolve(meetsDir, f), 'utf8'));
     if (!doc.hasOurTeam) continue;
     for (const a of doc.athletes) {
-      const cur = pvsAthletes.get(a.memberId) || {
+      // PDF 兜底的文件没有运动员 ID:全队都是 "",不能拿它当 key(会把所有人并成一条)。
+      const mapKey = a.memberId || `pdf:${normalizeSortKey(`${a.firstName} ${a.lastName}`)}:${a.age ?? ''}`;
+      const cur = pvsAthletes.get(mapKey) || {
         memberId: a.memberId, name: `${a.firstName} ${a.lastName}`.trim(),
         idKind: a.idKind, age: a.age, meets: new Set(), byMeet: {}, swims: 0, dq: 0,
+        nameOnly: !a.memberId,
       };
       cur.meets.add(`${doc.meet.key} ${doc.meet.startDate}`);
       // 按场存「项目|时间|名次」,用来和 USAS 的同场成绩逐条比对
@@ -163,7 +166,7 @@ if (existsSync(meetsDir)) {
         a.swims.filter((s) => s.status === 'ok').map((s) => swimKey(s.eventCode, csOf(s.seconds), s.place)));
       cur.swims += a.swims.filter((s) => s.status === 'ok').length;
       cur.dq += a.swims.filter((s) => s.status === 'DQ').length;
-      pvsAthletes.set(a.memberId, cur);
+      pvsAthletes.set(mapKey, cur);
     }
   }
 }
@@ -185,8 +188,45 @@ for (const a of pvsAthletes.values()) {
   if (!byName) { buckets.unknown.push(a); continue; }
   const noId = byName.find((x) => !x.id);
   if (noId) { buckets.noId.push({ ...a, target: noId }); continue; }
+  // PDF 兜底没有 ID:只是「按名字唯一命中一个已填 ID 的注册」,不是 ID 填错,单独标注。
+  if (a.nameOnly) {
+    if (byName.filter((x) => x.id).length === 1) buckets.reg.push({ ...a, target: byName[0], nameOnly: true });
+    else buckets.mismatch.push({ ...a, targets: byName });
+    continue;
+  }
   buckets.mismatch.push({ ...a, targets: byName });
 }
+
+// 同一个孩子会在多场出现(hy3 用 ID、PDF 兜底用姓名),各成一条;按「人」合并,
+// 否则 §2/§3 会把同一个孩子列两遍。合并只累加场次/成绩,不改变判定。
+const pvsAthleteCount = pvsAthletes.size;
+const rawBucketCount = {
+  reg: buckets.reg.length, noId: buckets.noId.length,
+  mismatch: buckets.mismatch.length, unknown: buckets.unknown.length,
+};
+const mergeBy = (list, keyOf) => {
+  const merged = new Map();
+  for (const a of list) {
+    const k = keyOf(a);
+    const cur = merged.get(k);
+    if (!cur) {
+      merged.set(k, { ...a, meets: new Set(a.meets), byMeet: { ...a.byMeet } });
+      continue;
+    }
+    for (const m of a.meets) cur.meets.add(m);
+    for (const [iso, keys] of Object.entries(a.byMeet || {})) {
+      cur.byMeet[iso] = (cur.byMeet[iso] || []).concat(keys);
+    }
+    cur.swims += a.swims;
+    cur.dq += a.dq;
+    if (a.verified) cur.verified = true;
+  }
+  return [...merged.values()];
+};
+buckets.reg = mergeBy(buckets.reg, (a) => a.target.id || normalizeSortKey(a.name));
+buckets.noId = mergeBy(buckets.noId, (a) => `${a.target.regId}|${normalizeSortKey(a.target.name)}`);
+buckets.mismatch = mergeBy(buckets.mismatch, (a) => a.targets?.[0]?.id || normalizeSortKey(a.name));
+buckets.unknown = mergeBy(buckets.unknown, (a) => normalizeSortKey(a.name));
 
 // 对不上的孩子，先在「还没注册」的白名单条目里找可能属于谁 —— 同一个孩子不该被列两遍。
 const nameTokens = (s) => String(s || '').toLowerCase().match(/[a-z]{3,}/g) || [];
@@ -214,10 +254,14 @@ for (const a of buckets.mismatch) {
   if (!snap.exists) continue;
   const doc = snap.data();
   for (const [iso, mine] of Object.entries(a.byMeet || {})) {
-    const [, mm, dd] = iso.split('-').map(Number);
+    const [yy, mm, dd] = iso.split('-').map(Number);
     const hit = Object.entries(doc.meets || {}).map(([id, m]) => ({ id, ...m })).find((m) => {
       const dm = String(m.meetDates || '').match(/^([A-Z][a-z]{2})\s+(\d{1,2})/);
-      return dm && dm[1] === MON_NAMES[mm - 1] && Number(dm[2]) === dd;
+      if (!dm || dm[1] !== MON_NAMES[mm - 1] || Number(dm[2]) !== dd) return false;
+      // 同月同日不同年(2021 vs 2026 Loughmiller)不是同一场:有 seasonYear 就比一下。
+      const sy = String(m.seasonYear || '').trim();
+      const want = yy + (mm >= 9 ? 1 : 0);
+      return !/^\d{4}$/.test(sy) || sy === String(want);
     });
     if (!hit) continue;
     const usas = new Set((hit.swims || []).map((s) => swimKey(s.eventCode, csOf(s.swimTime), s.finishPosition)));
@@ -258,8 +302,8 @@ const bcc = (list) => list.map((x) => x.email).filter(Boolean).join('; ');
 // ── 自校验:只在控制台报警,不占文档篇幅 ──────────────────────────────────────
 const sendList = [...new Set([...pending, ...noForm, ...missUrgent, ...missLater].map((x) => x.email).filter(Boolean))];
 const checks = [
-  [`PVS 队员 ${pvsAthletes.size} = 一致 ${buckets.reg.length} + 缺 ID ${buckets.noId.length} + ID 不一致 ${buckets.mismatch.length} + 对不上 ${buckets.unknown.length}`,
-    pvsAthletes.size === buckets.reg.length + buckets.noId.length + buckets.mismatch.length + buckets.unknown.length],
+  [`PVS 队员 ${pvsAthleteCount} = 一致 ${rawBucketCount.reg} + 缺 ID ${rawBucketCount.noId} + ID 不一致 ${rawBucketCount.mismatch} + 对不上 ${rawBucketCount.unknown}`,
+    pvsAthleteCount === rawBucketCount.reg + rawBucketCount.noId + rawBucketCount.mismatch + rawBucketCount.unknown],
   [`白名单 ${families.length} = 已注册 ${wl.filter((w) => w.ownReg).length} + 未注册 ${pending.length} + 建号未交表 ${noForm.length} + 配偶 ${spouse.length} + 重复 ${dup.length}`,
     families.length === wl.filter((w) => w.ownReg).length + pending.length + noForm.length + spouse.length + dup.length],
   [`收件人无重复（${sendList.length} 个）`, new Set(sendList).size === sendList.length],

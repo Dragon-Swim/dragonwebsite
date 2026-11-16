@@ -58,9 +58,24 @@ export function parseMeetDay(dates) {
 }
 
 /**
+ * Which season does this meet belong to, as a 4-digit year (`"2027"`)?
+ *
+ * Both pipelines store `seasonYear`; older records may only have an ISO
+ * `meetDates`. Same month+day is not enough on its own: 2021 PV Loughmiller was
+ * Nov 06-07 and 2026 PV Loughmiller is Nov 06-08, so an unguarded comparison
+ * merges two different meets five years apart.
+ */
+export function meetYear(meet) {
+  const sy = String(meet?.seasonYear || '').trim();
+  if (/^\d{4}$/.test(sy)) return sy;
+  const iso = /^(\d{4})-\d{2}-\d{2}/.exec(String(meet?.meetDates || ''));
+  return iso ? iso[1] : null;
+}
+
+/**
  * Where should this meet's data be written?
  *
- * @param {{meetId: string, meetName?: string, meetDates?: string}} meet
+ * @param {{meetId: string, meetName?: string, meetDates?: string, seasonYear?: string}} meet
  * @param {Object<string, object>} existingMeets  `swimResults/{id}.meets`
  * @returns {{key: string, existing: object|null, dropKey: string|null}}
  *   `key` is always the incoming `meetId`; `existing` is the record it collides
@@ -77,11 +92,14 @@ export function resolveMeetKey(meet, existingMeets) {
   const want = new Set(meetNameTokens(meet?.meetName));
   if (!day || !want.size) return { key: meetId, existing: null, dropKey: null };
 
+  const year = meetYear(meet);
   let best = null;
   for (const [key, stored] of Object.entries(map)) {
     if (!stored || typeof stored !== 'object') continue;
     const storedDay = parseMeetDay(stored.meetDates);
     if (!storedDay || storedDay.month !== day.month || storedDay.day !== day.day) continue;
+    const storedYear = meetYear(stored);
+    if (year && storedYear && year !== storedYear) continue;
     const shared = meetNameTokens(stored.meetName).filter((t) => want.has(t));
     if (!shared.length) continue;
     if (!best || shared.length > best.shared) best = { key, stored, shared: shared.length };
