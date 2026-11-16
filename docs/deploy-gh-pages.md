@@ -2,7 +2,10 @@
 
 > 站点 `dragonswim.org` 由 **GitHub Pages** 提供，前面挂 **Cloudflare 橙云代理 + SSL `Full`**。
 > Cloudflare Pages 迁移**尚未实施**（见 `docs/cloudflare-pages-migration.md`），所以现在只有这一条路。
-> 最近一次实测：**2026-10-30 傍晚**（部署「接力进报告 + 四棒之和 + bonus 名额校验 + USAS 去重」，
+> 最近一次实测：**2026-11-16 傍晚**（部署「同名同月日不同年不合并」的年份闸门修复，
+> Pages 构建约 1 分钟；部署后 `dashboard.html` 已指向 `assets/dashboard-CIAiLcOL.js`，
+> 带 `?cb=` 请求 200）。
+> 此前 **2026-10-30 傍晚**（部署「接力进报告 + 四棒之和 + bonus 名额校验 + USAS 去重」，
 > Pages 构建 45 秒完成；当天早些时候有一次 Actions/Pages 的 degraded performance 事件，
 > 构建排队约 **11 分钟**才完成 —— 不是推送问题，卡住时先用
 > `gh api repos/Dragon-Swim/dragonwebsite/pages/builds/latest --jq .status` 看
@@ -12,6 +15,7 @@
 
 | 时间 | 内容 | 规则 | gh-pages | main |
 |---|---|---|---|---|
+| 11-16 傍晚 | 同名同月日不同年不合并（2021/2026 Loughmiller） | 无变更 | `cb2a2a2` | `27a895d` |
 | 10-30 傍晚 | 接力进报告 + 四棒之和 + bonus 名额 + USAS 去重 | 无变更 | `8c269b2` | `b14208a` |
 | 10-30 下午 | Results 页 DQ 徽章 | 无变更 | `fa18539` | `044e70f` |
 | 10-29 下午 | 教练端接力选人 | ✅ 新增 `relayEntries` | `8ebf014` | `4c4d8b2` |
