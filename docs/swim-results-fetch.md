@@ -4,8 +4,9 @@
 > 最后更新:2026-11-16(新增 §14:11 月两场入库 —— November Open 走 zip 正常;
 > **Loughmiller 的 TM 包被 PVS 错传成另一场**,改用官方成绩 PDF 兜底,新增
 > `parse_pvs_results_pdf.py`;同时修掉「同名+同月日、不同年」会串场的年份闸门。
-> §14.5 补记:教练转来正确的 TM 包,与 PDF **136/136 全同**;该包暴露
-> **Celina Feng 带着 Shoshana 的 ID**,导入脚本因此加了「ID + 姓名双校验」;§14.6 是待办。)
+> §14.5 补记:教练转来正确的 TM 包,与 PDF **136/136 全同**;该包牵出
+> **Shoshana / Celina 的 USA-S ID 在注册表里被对调**(已对调修复),导入脚本因此加了
+> 「ID + 姓名双校验」;§14.6 是残留待办。)
 > 此前 2026-10-30:§13.7 PVS 成绩**写库**落地(默认 dry-run,写库键永远是注册 ID;
 > 第一次实写只净增 1 条 DQ,44 条成绩仍在等家长补 ID);§13.8 USAS 重复场次的守卫
 > (PVS 导入的 `pvs-xx` 场次会被 USAS 抓取合并进数字键,不再出现两遍);
@@ -800,7 +801,7 @@ Aiden Pan / Celina Feng 的 2021 与 2026 两场**并存**,互不覆盖。
   (Rachel/Luke Kamil 因此被漏掉);同一个孩子在多场出现时会重复列出。现在按「人」合并,
   清单重新生成为 `.tmp/deliverables/dragon-needs-attention-2026-11-16.md`(自校验 6 项全过)。
 
-### 14.5 补记:教练转来的原包(2026-11-16 晚)
+### 14.5 补记:教练转来的原包与「ID 对调」事故(2026-11-16 晚)
 
 教练转发了 **Team Manager 原始包**:
 `Meet Results-2026 FXFX Loughmiller Memorial Invitational-06Nov2026-001.zip`
@@ -813,32 +814,44 @@ Aiden Pan / Celina Feng 的 2021 与 2026 两场**并存**,互不覆盖。
 解析产物已换成 hy3 版本(带 ID):`.tmp/swim-results/pvs/meets/27-21.json`;
 PDF 版留档 `.tmp/swim-results/2627/27-21-from-pdf.json`。
 
-**但这份包暴露了一个更严重的名册错位:Celina Feng 的 D1 记录带的是妹妹 Shoshana 的 ID。**
+**这份包还牵出一件更大的事:Shoshana 与 Celina 的 USA-S ID 在注册表里被对调了。**
 
-- D1 里:Celina Feng、dob `2016-05-14`、9–10 组、ID `6768255F553048` —— 而
-  `6768255F553048` 在注册表里是 **Shoshana Feng**(dob 2010)。
-- 成绩是 9–10 组的(200 FL 2:58.77、50 FR 28.98、200 FR 2:21.04、500 FR 5:59.44),
-  所以人确实是 Celina,ID 是错的。
-- 导入脚本原来**ID 命中就信 ID**,会把 Celina 的成绩写进 Shoshana 的档。现在 ID 命中后
-  还要**姓名一致**(忽略大小写/空格/连字符,`Luohan` = `Luo-han`);不一致就丢掉这个 ID,
-  降级按「姓名+性别+年龄」唯一匹配 —— 写对人,而不是写错人也不丢成绩。
-- **上游已经被污染**:Shoshana 的 `288848`(Pink Ribbon)与 `289349`(October Open)
-  各 6 条,时间/项目与 PVS 文件里 **Celina** 的完全相同。也就是说那 12 条实际是 Celina 的,
-  USAS 按 ID 记到了 Shoshana 名下。**这次没有动这两份文档**(见 §14.6 待办)。
+一开始以为「TM 名册把 Celina 的 ID 填成了 Shoshana 的」,继续查下去发现反过来:
+
+| 证据 | 结论 |
+|---|---|
+| PVS `26-88`(2026-03)成绩包:Celina Feng、dob `2016-05-14`、ID `6768255F553048`,8 条成绩与库里 `6768…` 档 `281527` 场**逐条相同** | `6768255F553048` 是 **Celina** 的 |
+| `4B4940FBD26548` 名下有 2019 年起的比赛、2024-03 的 50 自 25.12、2026 年弗州高中赛 | 2016 年出生的孩子不可能;这是 **Shoshana** 的 |
+| 注册表恰好是 Shoshana→`6768…`、Celina→`4B49…` | **两个 ID 被填反了** |
+
+因此两份 `swimResults` 的内容其实是**对的**(`6768` 一直是 Celina 的成绩、`4B49` 是 Shoshana 的),
+错的只有「注册表指向」和两份档的 `swimmerName`;两姐妹的页面一直在看对方的成绩。
+
+**已修(2026-11-16 晚,备份 `.tmp/backups/feng-id-swap-2026-11-17T00-46-21-727Z.json`)**:
+
+1. `registrations/G2HGp1SCsMRAQwXUOGJXu5i09Jh1` 的 `swimmers[]`:Shoshana → `4B49…`,
+   Celina → `6768…`(只改 `usaSwimmingId`,其余字段原样)。
+2. `swimResults/6768…`:`swimmerName` 改成 Celina Feng;接收本场 `pvs-27-21` 的 4 条。
+3. `swimResults/4B49…`:`swimmerName` 改成 Shoshana Feng;删除误写的 `pvs-27-21`。
+4. 复核:注册表两人 ID 正确;`6768` 有 Oct/Nov/Loughmiller,`4B49` 只有 Shoshana 的历史。
+
+⚠ **那次误写是怎么来的**:导入脚本原来的规则是「文件 ID 命中注册表就写」。当时 Celina 的
+注册 ID 是 `4B49`(Shoshana 的),而文件里是 `6768`(Celina 的),两个 ID 都在注册表里 ——
+于是 `6768` 命中 Shoshana,但姓名是 Celina。**现在 ID 命中后还要姓名一致**
+(忽略大小写/空格/连字符,`Luohan` = `Luo-han`);不一致就丢掉这个 ID,降级按
+「姓名+性别+年龄」唯一匹配。这样既不会写错人,也不会因为一个错 ID 把成绩整条丢掉。
 
 这份包还给出了 8 个缺 ID 孩子的 ID(已带进 attention 清单 §2):Gowtham `C611D482CF1A4A`、
 Jayanth `63322E26BA4342`、Liam Norcross `A47A4CBABBCA06`、Logan `CF544E3CB3081A`、
 Priya `8F6CC940510C42`、Liam Toner `F64D7BA6C2AB42`、Luke Kamil `A082DA9D331F4C`、
 Rachel Kamil `B8E3A40BADE04C`。前 6 个与 27-07/27-26 包里一致;Kamil 姐弟只在这份包出现。
 
-### 14.6 待办(与 Celina/Shoshana 有关)
+### 14.6 残留待办
 
-1. **教练改 Team Manager 名册**:把 Celina 的 ID 改成 `4B4940FBD26548`(注册表里的值),
-   否则每场比赛都会继续带错 ID。
-2. Shoshana 名下 `288848` / `289349` 那 12 条要挪给 Celina;但**先改名册**再动数据 ——
-   否则下一次 USAS 抓取(按 Shoshana 的 ID 查)会把它们再加回 Shoshana。
-   USAS 里已按错 ID 归档,必要时让 USA Swimming 修。
-3. **USAS 发布 Loughmiller 时**,同样可能把这些成绩记到 Shoshana 的 ID 下;
-   抓取后若 Shoshana 多出一场 `Nov 06 - Nov 08`,就是它 —— 不要直接接受。
-4. 8 个缺 ID 的孩子把 ID 填进注册资料后,重跑 `--only 27-21` / `--only 27-29-ncap` 即可。
+1. 8 个缺 ID 的孩子把 ID 填进注册资料后,重跑 `--only 27-21` / `--only 27-29-ncap` 即可。
+   attention 清单 §2 已列出每个孩子的 ID。
+2. 三个 TM 名册错 ID 仍待教练改(attention 清单 §3):Anthony Wang、Isabella Ye、Jonathan Wu。
+3. `bestTimes` 仍未重算(§13.8 末尾),Loughmiller 的新成绩不会出现在 Best Times 表。
+4. USAS 发布 Loughmiller 后跑一次 `Fetch All`:两姐妹的 ID 已对调修好,正常情况下不会
+   再互相串档;若 Celina 名下多出重复场次,按 §14.3 的年份/名字合并规则处理。
 
