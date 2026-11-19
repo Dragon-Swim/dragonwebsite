@@ -1,7 +1,9 @@
 # 游泳成绩抓取(USA Swimming Data Hub)工作流说明
 
 > 目的:说明教练端三个按钮的真实行为、新 meet 数据如何入库、错误如何持久化,以及日常操作流程。
-> 最后更新:2026-11-16(新增 §14:11 月两场入库 —— November Open 走 zip 正常;
+> 最后更新:2026-11-18(新增 §15:**bestTimes 可以本地重算**,不必再调 USAS API ——
+> 全库没有一条「比库里 meet 更快」的 bestTime,增量合并 91 条更新 + 13 条新增)。
+> 2026-11-16(新增 §14:11 月两场入库 —— November Open 走 zip 正常;
 > **Loughmiller 的 TM 包被 PVS 错传成另一场**,改用官方成绩 PDF 兜底,新增
 > `parse_pvs_results_pdf.py`;同时修掉「同名+同月日、不同年」会串场的年份闸门。
 > §14.5 补记:教练转来正确的 TM 包,与 PDF **136/136 全同**;该包牵出
@@ -661,8 +663,9 @@ DQ 存活、不重复插、非 PVS 旧行被替换。
 
 **还剩没做**:
 
-1. **`bestTimes` 不动**。PVS 新场次不会进 Best Times 表;要做得先解决"重算会把 PVS
-   覆盖不到的历史场次弄丢"这个问题,建议改成"只在更快时替换"而不是整体重算。
+1. ~~**`bestTimes` 不动**~~ → **2026-11-18 已补**:见 §15,
+   `recompute_best_times.mjs` 按「只在更快时替换 / 不删条目」增量合并。
+   当初担心的"重算会把 PVS 覆盖不到的历史场次弄丢",实测并不存在(0 条)。
 2. 合并只在同一名队员的 `meets` 里判断;**跨队员**没有一致性要求(每人的场次集合本来就不同)。
 
 ### 13.9 2026-10-30:成绩 ≠ 报名 —— check-in 规则
@@ -851,7 +854,53 @@ Rachel Kamil `B8E3A40BADE04C`。前 6 个与 27-07/27-26 包里一致;Kamil 姐�
 1. 8 个缺 ID 的孩子把 ID 填进注册资料后,重跑 `--only 27-21` / `--only 27-29-ncap` 即可。
    attention 清单 §2 已列出每个孩子的 ID。
 2. 三个 TM 名册错 ID 仍待教练改(attention 清单 §3):Anthony Wang、Isabella Ye、Jonathan Wu。
-3. `bestTimes` 仍未重算(§13.8 末尾),Loughmiller 的新成绩不会出现在 Best Times 表。
-4. USAS 发布 Loughmiller 后跑一次 `Fetch All`:两姐妹的 ID 已对调修好,正常情况下不会
+3. USAS 发布 Loughmiller 后跑一次 `Fetch All`:两姐妹的 ID 已对调修好,正常情况下不会
    再互相串档;若 Celina 名下多出重复场次,按 §14.3 的年份/名字合并规则处理。
+
+## 15. 2026-11-18:bestTimes 可以本地重算(不必再调 USAS API)
+
+**问题**:11 月两场写进 `meets` 后,Best Times 表里还是旧的 —— 因为 `bestTimes` 一直由
+USAS 的 `GetBestTimesForMember` 写入,而 PVS 导入刻意不动它。要不要为了它继续用 USAS?
+
+**先量了一遍(2026-11-18,全库 32 份有 bestTimes 的文档 / 696 条)**
+
+| 检查 | 结果 |
+|---|---|
+| bestTimes 里是否存在「比库里任何 meet 都更快」的时间(重算会丢的那种) | **0 条** |
+| 库里 meet 有更快成绩、但 bestTimes 没更新 | **91 条**,全部来自 11 月两场 |
+| 库里出现、但 bestTimes 完全没有的项目 | **13 个** |
+| bestTimes 的项目 / 时间能否由 meet 反推 | 每一条都能 |
+
+所以当初「整体重算会丢历史」的担心现在不成立 —— 库里没有任何一条外部来源的 bestTime。
+**结论:bestTimes 可以本地算,不需要为了它调 USAS API。**
+
+**工具**:`execution/swim-results/recompute_best_times.mjs`(默认 dry-run)
+
+```powershell
+node execution/swim-results/recompute_best_times.mjs            # 先看要改什么
+node execution/swim-results/recompute_best_times.mjs --commit   # 先备份,再写
+```
+
+口径(故意的保守设计):
+
+- **只增量合并,绝不删除条目**:已有项目只有出现更快成绩才替换;新项目才新增。
+- 只算 `status: 'ok'`、时间可解析的成绩;DQ / NS / 退赛不算。
+- **接力第一棒(`30.08r`)算合法成绩**——USAS 自己的 bestTime 里也有带 `r` 的;比较时按
+  去掉 `r` 的秒数算,替换时才写成不带 `r` 的规范时间。
+- 替换时保留条目原有字段(项目、泳姿名等),`swimTimeRecognitionId` 置空(它指向旧时间);
+  新增条目的字段尽量与 USAS 同形。
+- `swimDate` 用**比赛开始日**:`meetDates` 只有月日,年份由 `seasonYear` 推
+  (9–12 月属于上一自然年)。推不出来就沿用原日期。
+- 幂等:第二次跑 0 改动(已实测)。
+
+**这次实际执行(2026-11-18)**:26 份文档,**91 条更新 + 13 条新增**;
+备份 `.tmp/backups/bestTimes-2026-11-18T*.json`。更新全部来自
+`pvs-27-21`(34 条)和 `pvs-27-29-ncap`(57 条);第二次 dry-run 0。
+
+**以后的标准流程**:PVS 导入 `--commit` 之后,跑一次
+`recompute_best_times.mjs`(dry-run → `--commit`)。USAS API 仍然用于:
+新队员的首次全量、以及和外部数据对账;但 Best Times 的日常维护不必再依赖它。
+
+注意:`bestTimes` 现在包含 11 月两场,所以「报名资格 / 种子时间」也会用上新成绩
+(`src/utils/meetEligibility.js` 的 `buildBestTimesIndex` 读的就是这份数据)。
 
