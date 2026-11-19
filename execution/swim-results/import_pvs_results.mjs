@@ -38,7 +38,8 @@
  * ------------
  * · 默认 dry-run;`--commit` 前先把受影响的整份文档备份到 `.tmp/backups/swimResults-<时间>.json`。
  * · 幂等:第二次跑会认出已经写过的成绩(同项目 + 同时间 / 同 DQ),不会重复插入。
- * · 不触碰 `bestTimes`(库里还有 PVS 覆盖不到的历史场次,重算会丢;等专门做)。
+ * · 不触碰 `bestTimes`。导入完成后跑 `recompute_best_times.mjs` 做增量合并
+ *   (只在更快时替换,不删条目;见 docs/swim-results-fetch.md §15)。
  * · 只写 `status: ok` 的场次;失败的 meet(USAS 侧 `status: failed/empty`)不会被这里「洗白」。
  *
  * 退出码:0 = 正常;1 = 有运动员被跳过(仅在 --commit 时不影响退出码)或运行出错。
